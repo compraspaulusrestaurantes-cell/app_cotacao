@@ -2089,6 +2089,8 @@ html, body {
 
 </div>
 
+<div id="public-root" style="display:none;"></div>
+
 <script>
 
 /* QRCode for JavaScript — Kazuhiko Arase, MIT License. Embedded so the QR codes work fully offline. */
@@ -2718,8 +2720,7 @@ var QRCode;
   var SUPABASE_URL = 'https://lrdsuxxnzbwpgxhcxliz.supabase.co';
   var SUPABASE_KEY = 'sb_publishable_9LVR19deIA76DXrywUde9g_IpoY0WR4';
   var db = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-
-  var DEFAULT_SUPPLIER_NAME = 'Distribuidora Bom Preço';
+  var APP_BASE_URL = 'https://compraspaulusrestaurantes-cell.github.io/app_cotacao/';
   var SUPPLIERS_SEED = [
     { name:'Distribuidora Bom Preço', categories:['Mercearia','Carnes','Limpeza','Frango'] },
     { name:'Aves & Cia Distribuidora', categories:['Carnes','Frango'] },
@@ -3862,11 +3863,13 @@ var QRCode;
     document.getElementById('nota-fornecedor').textContent = order ? order.supplier_name : '—';
     document.getElementById('nota-data-pedido').textContent = order ? fmtDateStr(order.order_date) : '—';
     document.getElementById('nota-data-entrega').textContent = order ? fmtDateStr(order.delivery_date) : '—';
-    var qrText = 'Paulu\'s - Nota ' + (order ? order.code : '') + '\n' +
-      'Fornecedor: ' + (order ? order.supplier_name : '') + '\n' +
-      'Pedido: ' + (order ? fmtDateStr(order.order_date) : '—') + '\n' +
-      'Entrega: ' + (order ? fmtDateStr(order.delivery_date) : '—') + '\n' +
-      'Total: ' + money(total);
+    var qrText = (order && order.id)
+      ? (APP_BASE_URL + '?pedido=' + order.id)
+      : ('Paulu\'s - Nota ' + (order ? order.code : '') + '\n' +
+         'Fornecedor: ' + (order ? order.supplier_name : '') + '\n' +
+         'Pedido: ' + (order ? fmtDateStr(order.order_date) : '—') + '\n' +
+         'Entrega: ' + (order ? fmtDateStr(order.delivery_date) : '—') + '\n' +
+         'Total: ' + money(total));
     buildQr(document.getElementById('qr-nota'), qrText);
   }
   document.getElementById('imprimir-btn').addEventListener('click', function(){ window.print(); });
@@ -4573,5 +4576,178 @@ var QRCode;
     document.getElementById('buyer-root').style.display = 'block';
   }
 </script>
+
+<script>
+(function(){
+  "use strict";
+  var params = new URLSearchParams(window.location.search);
+  var pedidoId = params.get('pedido');
+  if(!pedidoId) return;
+
+  document.getElementById('buyer-root').style.display = 'none';
+  document.getElementById('supplier-root').style.display = 'none';
+  var root = document.getElementById('public-root');
+  root.style.display = 'block';
+  root.style.cssText += 'min-height:100vh; background:#FBFAF7; font-family:\'IBM Plex Sans\',sans-serif; color:#1B2420;';
+
+  var SUPABASE_URL = 'https://lrdsuxxnzbwpgxhcxliz.supabase.co';
+  var SUPABASE_KEY = 'sb_publishable_9LVR19deIA76DXrywUde9g_IpoY0WR4';
+  var db = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+  var GREEN = '#146C4E', AMBER = '#C97A2B', RED = '#C43D3D', LINE = '#E1E4DF', SOFT = '#5B6A62';
+  var order = null;
+  var items = [];
+
+  function money(v){ return 'R$ ' + Number(v || 0).toLocaleString('pt-BR', {minimumFractionDigits:2, maximumFractionDigits:2}); }
+  function fmtDateStr(s){
+    if(!s) return '—';
+    var p = String(s).slice(0,10).split('-');
+    return p.length === 3 ? (p[2] + '/' + p[1] + '/' + p[0]) : s;
+  }
+
+  function showMessage(text){
+    root.innerHTML = '<div style="max-width:420px; margin:0 auto; padding:60px 24px; text-align:center;">' +
+      '<div style="font-family:Georgia,serif; font-weight:700; font-size:20px; color:' + GREEN + '; margin-bottom:16px;">PAULU&#39;S</div>' +
+      '<div style="font-size:14px; color:' + SOFT + ';">' + text + '</div>' +
+    '</div>';
+  }
+
+  async function load(){
+    showMessage('Carregando pedido...');
+    try{
+      var orderRes = await db.from('orders').select('id,code,supplier_id,status,order_date,delivery_date,total,confirmed,receiver_note,suppliers(name)').eq('id', pedidoId).single();
+      if(!orderRes.data){ showMessage('Pedido não encontrado. Confira o link do QR code.'); return; }
+      order = orderRes.data;
+      order.supplier_name = order.suppliers ? order.suppliers.name : '—';
+
+      var itemsRes = await db.from('order_items').select('id,product_id,qty,price,receive_status,received_qty,products(name)').eq('order_id', pedidoId);
+      items = (itemsRes.data || []).map(function(row){
+        return {
+          itemId: row.id, name: row.products ? row.products.name : 'Produto',
+          qty: row.qty, price: Number(row.price),
+          receiveStatus: row.receive_status || 'pendente', receivedQty: row.received_qty
+        };
+      });
+      render();
+    } catch(err){
+      console.error('Erro ao carregar pedido', err);
+      showMessage('Não foi possível carregar esse pedido agora. Verifique sua internet e tente de novo.');
+    }
+  }
+
+  function chip(item, status, label, color){
+    var active = item.receiveStatus === status;
+    return '<button type="button" data-item="' + item.itemId + '" data-status="' + status + '" style="flex:1; padding:10px 4px; border-radius:8px; border:1px solid ' + (active ? color : LINE) + '; background:' + (active ? color : '#fff') + '; color:' + (active ? '#fff' : '#1B2420') + '; font-size:12px; font-weight:600;">' + label + '</button>';
+  }
+
+  function itemRow(item){
+    var extra = '';
+    if(item.receiveStatus === 'parcial'){
+      extra = '<div style="display:flex; justify-content:space-between; align-items:center; margin-top:10px; padding-top:10px; border-top:1px solid ' + LINE + ';">' +
+        '<span style="font-size:12px; color:' + SOFT + ';">Quantidade recebida</span>' +
+        '<div style="display:flex; align-items:center; gap:10px;">' +
+          '<button type="button" data-item="' + item.itemId + '" data-delta="-1" style="width:26px; height:26px; border-radius:6px; border:1px solid ' + LINE + '; background:#fff; font-size:15px;">–</button>' +
+          '<span style="font-weight:600; min-width:44px; text-align:center;">' + item.receivedQty + ' / ' + item.qty + '</span>' +
+          '<button type="button" data-item="' + item.itemId + '" data-delta="1" style="width:26px; height:26px; border-radius:6px; border:1px solid ' + LINE + '; background:#fff; font-size:15px;">+</button>' +
+        '</div></div>';
+    }
+    return '<div style="background:#fff; border:1px solid ' + LINE + '; border-radius:12px; padding:14px;">' +
+      '<div style="display:flex; justify-content:space-between; margin-bottom:10px;"><span style="font-weight:600; font-size:14px;">' + item.name + '</span><span style="font-size:12px; color:' + SOFT + ';">esperado: ' + item.qty + '</span></div>' +
+      '<div style="display:flex; gap:8px;">' + chip(item,'recebido','Recebido',GREEN) + chip(item,'parcial','Parcial',AMBER) + chip(item,'devolvido','Devolvido',RED) + '</div>' +
+      extra +
+    '</div>';
+  }
+
+  function renderItems(){
+    document.getElementById('pub-items-list').innerHTML = items.map(itemRow).join('');
+    updateProgress();
+  }
+
+  function updateProgress(){
+    var total = items.length;
+    var decided = items.filter(function(i){ return i.receiveStatus && i.receiveStatus !== 'pendente'; }).length;
+    document.getElementById('pub-progress').textContent = decided + ' de ' + total + ' itens conferidos';
+    var btn = document.getElementById('pub-armazenar');
+    btn.disabled = decided < total || !!order.confirmed;
+  }
+
+  async function save(){
+    var note = document.getElementById('pub-nota').value.trim();
+    var btn = document.getElementById('pub-armazenar');
+    btn.disabled = true; btn.textContent = 'Salvando...';
+    try{
+      for(var i=0;i<items.length;i++){
+        var it = items[i];
+        await db.from('order_items').update({ receive_status:it.receiveStatus, received_qty:it.receivedQty }).eq('id', it.itemId);
+      }
+      await db.from('orders').update({ receiver_note:note, confirmed:true, status:'entregue' }).eq('id', order.id);
+      order.confirmed = true;
+      btn.textContent = 'Estoque atualizado';
+      document.getElementById('pub-done-banner').style.display = 'block';
+    } catch(err){
+      console.error('Erro ao salvar conferência', err);
+      btn.disabled = false; btn.textContent = 'Armazenar produtos';
+      alert('Não foi possível salvar. Verifique sua internet e tente de novo.');
+    }
+  }
+
+  function render(){
+    root.innerHTML =
+      '<div style="max-width:480px; margin:0 auto; padding:28px 20px 48px 20px;">' +
+        '<div style="text-align:center; margin-bottom:24px;">' +
+          '<div style="font-family:Georgia,serif; font-weight:700; font-size:20px; color:' + GREEN + ';">PAULU&#39;S</div>' +
+          '<div style="font-size:11px; color:#8B9A92; letter-spacing:1px;">CONFERÊNCIA DE ENTREGA</div>' +
+        '</div>' +
+        '<div style="background:#fff; border:1px solid ' + LINE + '; border-radius:14px; padding:16px; margin-bottom:20px;">' +
+          '<div style="display:flex; justify-content:space-between; margin-bottom:8px;"><span style="color:' + SOFT + '; font-size:13px;">Pedido</span><span style="font-weight:600;">' + order.code + '</span></div>' +
+          '<div style="display:flex; justify-content:space-between; margin-bottom:8px;"><span style="color:' + SOFT + '; font-size:13px;">Fornecedor</span><span style="font-weight:600;">' + order.supplier_name + '</span></div>' +
+          '<div style="display:flex; justify-content:space-between;"><span style="color:' + SOFT + '; font-size:13px;">Entrega prevista</span><span style="font-weight:600;">' + fmtDateStr(order.delivery_date) + '</span></div>' +
+        '</div>' +
+        '<div id="pub-items-list" style="display:flex; flex-direction:column; gap:10px; margin-bottom:16px;"></div>' +
+        '<label style="font-size:12px; color:' + SOFT + '; display:block; margin-bottom:6px;">Observação de quem recebeu (opcional)</label>' +
+        '<textarea id="pub-nota" rows="3" placeholder="Ex.: chegou 1 caixa amassada, avisar o fornecedor." style="width:100%; box-sizing:border-box; border:1px solid ' + LINE + '; border-radius:8px; padding:10px; font-size:13px; margin-bottom:16px; font-family:inherit;"></textarea>' +
+        '<div id="pub-progress" style="font-size:12px; color:' + SOFT + '; margin-bottom:12px;">0 de 0 itens conferidos</div>' +
+        '<button id="pub-armazenar" style="width:100%; background:' + GREEN + '; color:#fff; border:none; border-radius:12px; padding:15px; font-size:15px; font-weight:600;">Armazenar produtos</button>' +
+        '<div id="pub-done-banner" style="display:none; margin-top:16px; background:#E3F0E9; color:' + GREEN + '; border-radius:10px; padding:12px; font-size:13px; text-align:center;">Recebimento registrado com sucesso.</div>' +
+      '</div>';
+
+    document.getElementById('pub-nota').value = order.receiver_note || '';
+    document.getElementById('pub-armazenar').addEventListener('click', save);
+    if(order.confirmed){
+      var btn = document.getElementById('pub-armazenar');
+      btn.disabled = true; btn.textContent = 'Já conferido';
+      document.getElementById('pub-done-banner').style.display = 'block';
+    }
+    renderItems();
+  }
+
+  root.addEventListener('click', function(e){
+    var chipBtn = e.target.closest('[data-status]');
+    if(chipBtn){
+      var item = items.filter(function(i){ return String(i.itemId) === chipBtn.dataset.item; })[0];
+      if(item){
+        item.receiveStatus = chipBtn.dataset.status;
+        if(item.receiveStatus === 'recebido') item.receivedQty = item.qty;
+        if(item.receiveStatus === 'devolvido') item.receivedQty = 0;
+        if(item.receiveStatus === 'parcial' && (item.receivedQty === null || item.receivedQty === item.qty)) item.receivedQty = Math.max(0, item.qty - 1);
+        renderItems();
+      }
+      return;
+    }
+    var deltaBtn = e.target.closest('[data-delta]');
+    if(deltaBtn){
+      var item2 = items.filter(function(i){ return String(i.itemId) === deltaBtn.dataset.item; })[0];
+      if(item2){
+        var d = parseInt(deltaBtn.dataset.delta, 10);
+        item2.receivedQty = Math.min(item2.qty, Math.max(0, item2.receivedQty + d));
+        renderItems();
+      }
+    }
+  });
+
+  load();
+})();
+</script>
+
 </body>
 </html>
