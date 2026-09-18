@@ -1394,11 +1394,11 @@ html, body {
     <div class="login-error" id="login-error">E-mail ou senha incorretos. Tente novamente.</div>
     <div class="login-field">
       <label for="login-email">E-mail</label>
-      <input id="login-email" type="email" value="murillo@paulus.com.br">
+      <input id="login-email" type="email" placeholder="seu@email.com.br" autocomplete="off">
     </div>
     <div class="login-field">
       <label for="login-senha">Senha</label>
-      <input id="login-senha" type="password" value="paulus123">
+      <input id="login-senha" type="password" placeholder="••••••••" autocomplete="off">
     </div>
     <button class="login-forgot" type="button">Esqueci minha senha</button>
     <button class="btn btn-primary btn-block" id="login-btn">Entrar</button>
@@ -2717,10 +2717,11 @@ var QRCode;
   "use strict";
   var buyerRoot = document.getElementById('buyer-root');
 
-  var SUPABASE_URL = 'https://lrdsuxxnzbwpgxhcxliz.supabase.co';
-  var SUPABASE_KEY = 'sb_publishable_9LVR19deIA76DXrywUde9g_IpoY0WR4';
+  var SUPABASE_URL = 'https://dqghwfrmodulnevzpgbw.supabase.co';
+  var SUPABASE_KEY = 'sb_publishable_nNk6sJNE-7NzraHnjXliLQ_nRfeWtZb';
   var db = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
   var APP_BASE_URL = 'https://compraspaulusrestaurantes-cell.github.io/app_cotacao/';
+  var DEFAULT_SUPPLIER_NAME = 'Distribuidora Bom Preço';
   var SUPPLIERS_SEED = [
     { name:'Distribuidora Bom Preço', categories:['Mercearia','Carnes','Limpeza','Frango'] },
     { name:'Aves & Cia Distribuidora', categories:['Carnes','Frango'] },
@@ -2776,13 +2777,18 @@ var QRCode;
   /* ---------- Supabase bootstrap ---------- */
   var SUPPLIERS = [];
 
+  function check(res, label){
+    if(res && res.error){ throw new Error(label + ': ' + res.error.message); }
+    return res;
+  }
+
   async function ensureSuppliers(){
-    var res = await db.from('suppliers').select('id,name,email,phone,address,categories,brands');
+    var res = check(await db.from('suppliers').select('id,name,email,phone,address,categories,brands'), 'Ler fornecedores');
     var rows = res.data || [];
     if(rows.length === 0){
-      var insertRes = await db.from('suppliers').insert(SUPPLIERS_SEED.map(function(s){
+      var insertRes = check(await db.from('suppliers').insert(SUPPLIERS_SEED.map(function(s){
         return { name:s.name, categories:s.categories };
-      })).select('id,name,email,phone,address,categories,brands');
+      })).select('id,name,email,phone,address,categories,brands'), 'Criar fornecedores iniciais');
       rows = insertRes.data || [];
     }
     rows.forEach(function(r){ supplierIdByName[r.name] = r.id; supplierNameById[r.id] = r.name; });
@@ -2791,12 +2797,12 @@ var QRCode;
   }
 
   async function ensureProducts(){
-    var res = await db.from('products').select('id,name,category,unit');
+    var res = check(await db.from('products').select('id,name,category,unit'), 'Ler produtos');
     var rows = res.data || [];
     if(rows.length === 0){
-      var insertRes = await db.from('products').insert(PRODUCTS.map(function(p){
+      var insertRes = check(await db.from('products').insert(PRODUCTS.map(function(p){
         return { name:p.name, category:p.category, unit:p.unit };
-      })).select('id,name,category,unit');
+      })).select('id,name,category,unit'), 'Criar produtos iniciais');
       rows = insertRes.data || [];
     }
     var byName = {};
@@ -2819,13 +2825,13 @@ var QRCode;
 
   async function ensureSupplierProducts(){
     if(!defaultSupplierId) return;
-    var res = await db.from('supplier_products').select('product_id,brand,price,observacao,available').eq('supplier_id', defaultSupplierId);
+    var res = check(await db.from('supplier_products').select('product_id,brand,price,observacao,available').eq('supplier_id', defaultSupplierId), 'Ler catálogo do fornecedor padrão');
     var rows = res.data || [];
     if(rows.length === 0){
       var insertRows = PRODUCTS.filter(function(p){ return p.dbId; }).map(function(p){
         return { supplier_id:defaultSupplierId, product_id:p.dbId, brand:p.brand, price:p.price, observacao:p.obs, available:p.available };
       });
-      if(insertRows.length) await db.from('supplier_products').insert(insertRows);
+      if(insertRows.length) check(await db.from('supplier_products').insert(insertRows), 'Criar catálogo inicial do fornecedor');
     } else {
       var byProduct = {};
       rows.forEach(function(r){ byProduct[r.product_id] = r; });
@@ -2837,25 +2843,25 @@ var QRCode;
   }
 
   async function ensureQuotations(){
-    var res = await db.from('quotations').select('id,category,title,deadline,status,winner_supplier_id, quotation_bids(id,supplier_id,brand,price,observacao)');
+    var res = check(await db.from('quotations').select('id,category,title,deadline,status,winner_supplier_id, quotation_bids(id,supplier_id,brand,price,observacao)'), 'Ler cotações');
     var rows = res.data || [];
     if(rows.length === 0){
       for(var i=0;i<QUOTATIONS.length;i++){
         var q = QUOTATIONS[i];
-        var qIns = await db.from('quotations').insert({
+        var qIns = check(await db.from('quotations').insert({
           category:q.category, title:q.title, deadline:q.deadline.toISOString(), status:q.status,
           winner_supplier_id: q.winner ? (supplierIdByName[q.winner] || null) : null
-        }).select('id').single();
+        }).select('id').single(), 'Criar cotação inicial');
         var qId = qIns.data ? qIns.data.id : null;
         if(qId && q.bids.length){
           var bidRows = q.bids.map(function(b){
             return { quotation_id:qId, supplier_id:supplierIdByName[b.supplier] || null, brand:b.brand, price:b.price, observacao:b.obs };
           }).filter(function(b){ return b.supplier_id; });
-          if(bidRows.length) await db.from('quotation_bids').insert(bidRows);
+          if(bidRows.length) check(await db.from('quotation_bids').insert(bidRows), 'Criar propostas iniciais');
         }
       }
       // Re-read after seeding so QUOTATIONS reflects real db ids
-      res = await db.from('quotations').select('id,category,title,deadline,status,winner_supplier_id, quotation_bids(id,supplier_id,brand,price,observacao)');
+      res = check(await db.from('quotations').select('id,category,title,deadline,status,winner_supplier_id, quotation_bids(id,supplier_id,brand,price,observacao)'), 'Reler cotações');
       rows = res.data || [];
     }
     QUOTATIONS = rows.map(function(r){
@@ -2876,7 +2882,7 @@ var QRCode;
   var ORDERS = [];
 
   async function ensureOrdersList(){
-    var res = await db.from('orders').select('id,code,supplier_id,status,order_date,delivery_date,total,confirmed,receiver_note');
+    var res = check(await db.from('orders').select('id,code,supplier_id,status,order_date,delivery_date,total,confirmed,receiver_note'), 'Ler pedidos');
     ORDERS = (res.data || []).map(function(o){
       return Object.assign({}, o, { supplier_name: supplierNameById[o.supplier_id] || '—' });
     }).sort(function(a,b){ return (b.order_date || '').localeCompare(a.order_date || ''); });
@@ -2892,6 +2898,8 @@ var QRCode;
       dbReady = true;
     } catch(err){
       console.error('Falha ao conectar no Supabase, usando dados locais.', err);
+      dbReady = false;
+      alert('Não foi possível conectar ao banco de dados. Nada será salvo até isso ser corrigido.\n\nDetalhe técnico: ' + (err && err.message ? err.message : err));
     }
   }
 
@@ -3257,15 +3265,19 @@ var QRCode;
     };
     try{
       if(editingSupplierId){
-        await db.from('suppliers').update(payload).eq('id', editingSupplierId);
+        check(await db.from('suppliers').update(payload).eq('id', editingSupplierId), 'Editar fornecedor');
         var idx = SUPPLIERS.findIndex(function(s){ return s.id === editingSupplierId; });
         if(idx > -1) SUPPLIERS[idx] = Object.assign({}, SUPPLIERS[idx], payload);
       } else {
-        var ins = await db.from('suppliers').insert(payload).select('id,name,email,phone,address,categories,brands').single();
+        var ins = check(await db.from('suppliers').insert(payload).select('id,name,email,phone,address,categories,brands').single(), 'Criar fornecedor');
         if(ins.data) SUPPLIERS.push(ins.data);
       }
       supplierIdByName[nome] = editingSupplierId || (SUPPLIERS[SUPPLIERS.length-1] && SUPPLIERS[SUPPLIERS.length-1].id);
-    } catch(err){ console.error('Erro ao salvar fornecedor', err); }
+    } catch(err){
+      console.error('Erro ao salvar fornecedor', err);
+      alert('Não foi possível salvar o fornecedor.\n\nDetalhe técnico: ' + (err && err.message ? err.message : err));
+      return;
+    }
     closeSupplierForm();
     renderFornecedoresCadastro();
   });
@@ -3286,13 +3298,17 @@ var QRCode;
         : 'Excluir "' + target.name + '"? Isso também remove o catálogo de preços dele.';
       if(!confirm(warn)) return;
       try{
-        await db.from('supplier_products').delete().eq('supplier_id', target.id);
-        await db.from('quotation_bids').delete().eq('supplier_id', target.id);
-        await db.from('suppliers').delete().eq('id', target.id);
+        check(await db.from('supplier_products').delete().eq('supplier_id', target.id), 'Excluir catálogo do fornecedor');
+        check(await db.from('quotation_bids').delete().eq('supplier_id', target.id), 'Excluir propostas do fornecedor');
+        check(await db.from('suppliers').delete().eq('id', target.id), 'Excluir fornecedor');
         SUPPLIERS = SUPPLIERS.filter(function(x){ return x.id !== target.id; });
         delete supplierIdByName[target.name];
         delete supplierNameById[target.id];
-      } catch(err){ console.error('Erro ao excluir fornecedor', err); }
+      } catch(err){
+        console.error('Erro ao excluir fornecedor', err);
+        alert('Não foi possível excluir o fornecedor.\n\nDetalhe técnico: ' + (err && err.message ? err.message : err));
+        return;
+      }
       renderFornecedoresCadastro();
     }
   });
@@ -3386,8 +3402,8 @@ var QRCode;
           existing.unitLabel = UNIT_LABELS[unidade] || 'un'; existing.packageSize = packageSize;
           existing.recQty = recQty; if(preco !== null) existing.price = preco;
           if(dbReady && existing.dbId){
-            await db.from('products').update({ name:nome, category:categoria, unit:unidade }).eq('id', existing.dbId);
-            if(preco !== null) await saveSupplierProduct(existing);
+            check(await db.from('products').update({ name:nome, category:categoria, unit:unidade }).eq('id', existing.dbId), 'Editar produto');
+            if(preco !== null) saveSupplierProduct(existing);
           }
         }
       } else {
@@ -3398,17 +3414,21 @@ var QRCode;
           receiveStatus:'pendente', receivedQty:null
         };
         if(dbReady){
-          var ins = await db.from('products').insert({ name:nome, category:categoria, unit:unidade }).select('id').single();
+          var ins = check(await db.from('products').insert({ name:nome, category:categoria, unit:unidade }).select('id').single(), 'Criar produto');
           if(ins.data){
             newProduct.id = ins.data.id; newProduct.dbId = ins.data.id;
             if(defaultSupplierId){
-              await db.from('supplier_products').insert({ supplier_id:defaultSupplierId, product_id:ins.data.id, price:newProduct.price, observacao:'', available:true });
+              check(await db.from('supplier_products').insert({ supplier_id:defaultSupplierId, product_id:ins.data.id, price:newProduct.price, observacao:'', available:true }), 'Adicionar produto ao catálogo do fornecedor padrão');
             }
           }
         }
         PRODUCTS.push(newProduct);
       }
-    } catch(err){ console.error('Erro ao salvar produto', err); }
+    } catch(err){
+      console.error('Erro ao salvar produto', err);
+      alert('Não foi possível salvar o produto.\n\nDetalhe técnico: ' + (err && err.message ? err.message : err));
+      return;
+    }
     closeProductForm();
     renderProdutos();
   });
@@ -3427,13 +3447,14 @@ var QRCode;
       if(!confirm('Excluir "' + target.name + '"? Isso remove o produto de todos os catálogos de fornecedor.')) return;
       try{
         if(dbReady && target.dbId){
-          await db.from('supplier_products').delete().eq('product_id', target.dbId);
-          await db.from('products').delete().eq('id', target.dbId);
+          check(await db.from('supplier_products').delete().eq('product_id', target.dbId), 'Excluir produto do catálogo');
+          check(await db.from('products').delete().eq('id', target.dbId), 'Excluir produto');
         }
         PRODUCTS = PRODUCTS.filter(function(x){ return x.id !== target.id; });
       } catch(err){
         console.error('Erro ao excluir produto', err);
-        alert('Não foi possível excluir: esse produto já aparece em algum pedido ou cotação.');
+        alert('Não foi possível excluir. Provavelmente esse produto já aparece em algum pedido ou cotação.\n\nDetalhe técnico: ' + (err && err.message ? err.message : err));
+        return;
       }
       renderProdutos();
     }
@@ -3491,11 +3512,15 @@ var QRCode;
     };
     if(dbReady){
       try{
-        var ins = await db.from('quotations').insert({
+        var ins = check(await db.from('quotations').insert({
           category:categoria, title:q.title, deadline:deadline.toISOString(), status:'aberta'
-        }).select('id').single();
+        }).select('id').single(), 'Criar cotação');
         if(ins.data) q.id = ins.data.id;
-      } catch(err){ console.error('Erro ao criar cotação no Supabase', err); }
+      } catch(err){
+        console.error('Erro ao criar cotação no Supabase', err);
+        alert('Não foi possível criar a cotação.\n\nDetalhe técnico: ' + (err && err.message ? err.message : err));
+        return;
+      }
     }
     QUOTATIONS.unshift(q);
     document.getElementById('nc-titulo').value = '';
@@ -3592,7 +3617,9 @@ var QRCode;
         q.status = 'encerrada'; q.winner = escolherBtn.dataset.supplier;
         if(dbReady && String(q.id).indexOf('local_') !== 0){
           db.from('quotations').update({ status:'encerrada', winner_supplier_id: supplierIdByName[q.winner] || null }).eq('id', q.id)
-            .then(function(){}, function(err){ console.error('Erro ao encerrar cotação', err); });
+            .then(function(res){
+              if(res.error){ console.error('Erro ao encerrar cotação', res.error); alert('A escolha do fornecedor não foi salva no banco.\n\nDetalhe técnico: ' + res.error.message); }
+            });
         }
         renderCotacaoDetail(q.id);
       }
@@ -3669,8 +3696,9 @@ var QRCode;
 
   document.getElementById('confirmar-pedido-btn').addEventListener('click', async function(){
     var items = selectedProducts();
-    if(items.length === 0) return;
+    if(items.length === 0){ alert('Selecione ao menos um produto antes de fechar o pedido.'); return; }
     var supplierId = state.selectedSupplierId || defaultSupplierId;
+    if(!supplierId){ alert('Nenhum fornecedor disponível. Cadastre um fornecedor em Fornecedores > Fornecedores cadastrados antes de fechar o pedido.'); return; }
     var supplier = SUPPLIERS.filter(function(s){ return s.id === supplierId; })[0];
     var orderDatePedido = new Date();
     var d = new Date(); d.setDate(d.getDate() + 2);
@@ -3683,21 +3711,35 @@ var QRCode;
       total: cartTotal(), confirmed: false, receiver_note: null
     };
 
-    if(dbReady && supplierId){
-      try{
-        var orderIns = await db.from('orders').insert({
-          code: code, supplier_id: supplierId, status: 'enviado',
-          order_date: newOrder.order_date, delivery_date: newOrder.delivery_date, total: newOrder.total
-        }).select('id').single();
-        newOrder.id = orderIns.data ? orderIns.data.id : null;
-        if(newOrder.id){
-          var rows = items.filter(function(p){ return p.dbId; }).map(function(p){
-            return { order_id:newOrder.id, product_id:p.dbId, qty:p.qty, price:p.price, receive_status:'pendente' };
-          });
-          if(rows.length) await db.from('order_items').insert(rows);
-        }
-      } catch(err){ console.error('Erro ao salvar pedido no Supabase', err); }
+    if(!dbReady){
+      alert('Sem conexão com o banco de dados agora. O pedido não foi salvo — verifique sua internet e tente de novo.');
+      return;
     }
+
+    var btn = document.getElementById('confirmar-pedido-btn');
+    btn.disabled = true; var originalLabel = btn.textContent; btn.textContent = 'Salvando...';
+    try{
+      var orderIns = check(await db.from('orders').insert({
+        code: code, supplier_id: supplierId, status: 'enviado',
+        order_date: newOrder.order_date, delivery_date: newOrder.delivery_date, total: newOrder.total
+      }).select('id').single(), 'Criar pedido');
+      if(!orderIns.data || !orderIns.data.id) throw new Error('O pedido não retornou um id — verifique as permissões (RLS) da tabela orders.');
+      newOrder.id = orderIns.data.id;
+
+      var rows = items.filter(function(p){ return p.dbId; }).map(function(p){
+        return { order_id:newOrder.id, product_id:p.dbId, qty:p.qty, price:p.price, receive_status:'pendente' };
+      });
+      if(rows.length !== items.length){
+        console.warn('Alguns produtos selecionados não têm dbId (não foram sincronizados com o Supabase) e não entraram no pedido.', items.filter(function(p){ return !p.dbId; }));
+      }
+      if(rows.length) check(await db.from('order_items').insert(rows), 'Salvar itens do pedido');
+    } catch(err){
+      console.error('Erro ao salvar pedido no Supabase', err);
+      btn.disabled = false; btn.textContent = originalLabel;
+      alert('Não foi possível salvar o pedido. Nada foi criado.\n\nDetalhe técnico: ' + (err && err.message ? err.message : err));
+      return;
+    }
+    btn.disabled = false; btn.textContent = originalLabel;
 
     ORDERS.unshift(newOrder);
     await openOrder(newOrder);
@@ -3805,10 +3847,14 @@ var QRCode;
       total: parseFloat(String(document.getElementById('pe-total').value).replace(',', '.')) || 0
     };
     try{
-      if(dbReady) await db.from('orders').update(payload).eq('id', editingOrderId);
+      if(dbReady) check(await db.from('orders').update(payload).eq('id', editingOrderId), 'Editar pedido');
       var idx = ORDERS.findIndex(function(o){ return o.id === editingOrderId; });
       if(idx > -1) ORDERS[idx] = Object.assign({}, ORDERS[idx], payload);
-    } catch(err){ console.error('Erro ao salvar pedido', err); }
+    } catch(err){
+      console.error('Erro ao salvar pedido', err);
+      alert('Não foi possível salvar as alterações.\n\nDetalhe técnico: ' + (err && err.message ? err.message : err));
+      return;
+    }
     closeOrderEditForm();
     renderPedidosList();
     renderResumoMes();
@@ -3834,10 +3880,14 @@ var QRCode;
       if(!confirm('Excluir o pedido ' + order3.code + '? Essa ação não pode ser desfeita.')) return;
       try{
         if(dbReady){
-          await db.from('order_items').delete().eq('order_id', order3.id);
-          await db.from('orders').delete().eq('id', order3.id);
+          check(await db.from('order_items').delete().eq('order_id', order3.id), 'Excluir itens do pedido');
+          check(await db.from('orders').delete().eq('id', order3.id), 'Excluir pedido');
         }
-      } catch(err){ console.error('Erro ao excluir pedido', err); }
+      } catch(err){
+        console.error('Erro ao excluir pedido', err);
+        alert('Não foi possível excluir o pedido.\n\nDetalhe técnico: ' + (err && err.message ? err.message : err));
+        return;
+      }
       ORDERS = ORDERS.filter(function(o){ return o.id !== order3.id; });
       if(state.viewingOrder && state.viewingOrder.id === order3.id) state.viewingOrder = null;
       renderPedidosList();
@@ -3975,14 +4025,25 @@ var QRCode;
     if(!order) return;
     var note = document.getElementById('conferencia-nota').value.trim();
 
-    if(dbReady){
-      try{
-        for(var i=0;i<state.currentOrderItems.length;i++){
-          var item = state.currentOrderItems[i];
-          await db.from('order_items').update({ receive_status:item.receiveStatus, received_qty:item.receivedQty }).eq('id', item.itemId);
-        }
-        await db.from('orders').update({ receiver_note:note, confirmed:true, status:'entregue' }).eq('id', order.id);
-      } catch(err){ console.error('Erro ao salvar conferência no Supabase', err); }
+    if(!dbReady){
+      alert('Sem conexão com o banco de dados agora. A conferência não foi salva — verifique sua internet e tente de novo.');
+      return;
+    }
+
+    var btn = document.getElementById('armazenar-btn');
+    var originalLabel = btn.textContent;
+    btn.disabled = true; btn.textContent = 'Salvando...';
+    try{
+      for(var i=0;i<state.currentOrderItems.length;i++){
+        var item = state.currentOrderItems[i];
+        check(await db.from('order_items').update({ receive_status:item.receiveStatus, received_qty:item.receivedQty }).eq('id', item.itemId), 'Salvar item conferido');
+      }
+      check(await db.from('orders').update({ receiver_note:note, confirmed:true, status:'entregue' }).eq('id', order.id), 'Atualizar pedido');
+    } catch(err){
+      console.error('Erro ao salvar conferência no Supabase', err);
+      btn.disabled = false; btn.textContent = originalLabel;
+      alert('Não foi possível salvar a conferência.\n\nDetalhe técnico: ' + (err && err.message ? err.message : err));
+      return;
     }
 
     order.status = 'entregue';
@@ -4032,10 +4093,14 @@ var QRCode;
   }
 
   /* ---------- Login ---------- */
+  var BUYER_EMAIL = 'compras@paulusrestaurantes.com.br';
+  var BUYER_SENHA = 'paulus2026';
+
   document.getElementById('login-btn').addEventListener('click', async function(){
     var email = document.getElementById('login-email').value.trim();
     var senha = document.getElementById('login-senha').value.trim();
-    if(!email || !senha){
+    if(email.toLowerCase() !== BUYER_EMAIL || senha !== BUYER_SENHA){
+      document.getElementById('login-error').textContent = 'E-mail ou senha incorretos. Tente novamente.';
       document.getElementById('login-error').classList.add('show');
       return;
     }
@@ -4061,8 +4126,8 @@ var QRCode;
   "use strict";
   var supplierRoot = document.getElementById('supplier-root');
 
-  var SUPABASE_URL = 'https://lrdsuxxnzbwpgxhcxliz.supabase.co';
-  var SUPABASE_KEY = 'sb_publishable_9LVR19deIA76DXrywUde9g_IpoY0WR4';
+  var SUPABASE_URL = 'https://dqghwfrmodulnevzpgbw.supabase.co';
+  var SUPABASE_KEY = 'sb_publishable_nNk6sJNE-7NzraHnjXliLQ_nRfeWtZb';
   var db = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
   var SUPPLIERS_SEED = [
@@ -4123,13 +4188,18 @@ var QRCode;
   }
 
   /* ---------- Supabase bootstrap ---------- */
+  function check(res, label){
+    if(res && res.error){ throw new Error(label + ': ' + res.error.message); }
+    return res;
+  }
+
   async function ensureSuppliers(){
-    var res = await db.from('suppliers').select('id,name,email,categories');
+    var res = check(await db.from('suppliers').select('id,name,email,categories'), 'Ler fornecedores');
     var rows = res.data || [];
     if(rows.length === 0){
-      var insertRes = await db.from('suppliers').insert(SUPPLIERS_SEED.map(function(s){
+      var insertRes = check(await db.from('suppliers').insert(SUPPLIERS_SEED.map(function(s){
         return { name:s.name, categories:s.categories };
-      })).select('id,name,email,categories');
+      })).select('id,name,email,categories'), 'Criar fornecedores iniciais');
       rows = insertRes.data || [];
     }
     rows.forEach(function(r){ supplierIdByName[r.name] = r.id; supplierNameById[r.id] = r.name; });
@@ -4137,12 +4207,12 @@ var QRCode;
   }
 
   async function ensureProducts(){
-    var res = await db.from('products').select('id,name,category');
+    var res = check(await db.from('products').select('id,name,category'), 'Ler produtos');
     var rows = res.data || [];
     if(rows.length === 0){
-      var insertRes = await db.from('products').insert(PRODUCTS.map(function(p){
+      var insertRes = check(await db.from('products').insert(PRODUCTS.map(function(p){
         return { name:p.name, category:p.category };
-      })).select('id,name');
+      })).select('id,name'), 'Criar produtos iniciais');
       rows = insertRes.data || [];
     }
     var byName = {};
@@ -4152,13 +4222,13 @@ var QRCode;
 
   async function ensureMySupplierProducts(){
     if(!myId) return;
-    var res = await db.from('supplier_products').select('product_id,brand,price,observacao,available').eq('supplier_id', myId);
+    var res = check(await db.from('supplier_products').select('product_id,brand,price,observacao,available').eq('supplier_id', myId), 'Ler meu catálogo');
     var rows = res.data || [];
     if(rows.length === 0){
       var insertRows = PRODUCTS.filter(function(p){ return p.dbId; }).map(function(p){
         return { supplier_id:myId, product_id:p.dbId, brand:p.brand, price:parsePrice(p.price), observacao:p.obs, available:p.available };
       });
-      if(insertRows.length) await db.from('supplier_products').insert(insertRows);
+      if(insertRows.length) check(await db.from('supplier_products').insert(insertRows), 'Criar catálogo inicial');
     } else {
       var byProduct = {};
       rows.forEach(function(r){ byProduct[r.product_id] = r; });
@@ -4170,24 +4240,24 @@ var QRCode;
   }
 
   async function ensureQuotations(){
-    var res = await db.from('quotations').select('id,category,title,deadline,status,winner_supplier_id, quotation_bids(id,supplier_id,brand,price,observacao)');
+    var res = check(await db.from('quotations').select('id,category,title,deadline,status,winner_supplier_id, quotation_bids(id,supplier_id,brand,price,observacao)'), 'Ler cotações');
     var rows = res.data || [];
     if(rows.length === 0){
       for(var i=0;i<QUOTATIONS.length;i++){
         var q = QUOTATIONS[i];
-        var qIns = await db.from('quotations').insert({
+        var qIns = check(await db.from('quotations').insert({
           category:q.category, title:q.title, deadline:q.deadline.toISOString(), status:q.status,
           winner_supplier_id: q.winner ? (supplierIdByName[q.winner] || null) : null
-        }).select('id').single();
+        }).select('id').single(), 'Criar cotação inicial');
         var qId = qIns.data ? qIns.data.id : null;
         if(qId && q.bids.length){
           var bidRows = q.bids.map(function(b){
             return { quotation_id:qId, supplier_id:supplierIdByName[b.supplier] || null, brand:b.brand, price:b.price, observacao:b.obs };
           }).filter(function(b){ return b.supplier_id; });
-          if(bidRows.length) await db.from('quotation_bids').insert(bidRows);
+          if(bidRows.length) check(await db.from('quotation_bids').insert(bidRows), 'Criar propostas iniciais');
         }
       }
-      res = await db.from('quotations').select('id,category,title,deadline,status,winner_supplier_id, quotation_bids(id,supplier_id,brand,price,observacao)');
+      res = check(await db.from('quotations').select('id,category,title,deadline,status,winner_supplier_id, quotation_bids(id,supplier_id,brand,price,observacao)'), 'Reler cotações');
       rows = res.data || [];
     }
     QUOTATIONS = rows.map(function(r){
@@ -4210,7 +4280,7 @@ var QRCode;
       var suppliers = await ensureSuppliers();
       var match = suppliers.filter(function(s){ return s.email && s.email.toLowerCase() === email.toLowerCase(); })[0];
       if(!match) match = suppliers.filter(function(s){ return s.name === MY_NAME; })[0];
-      if(!match) return false;
+      if(!match){ alert('Não encontramos um fornecedor com esse e-mail cadastrado no painel do comprador.'); return false; }
       myId = match.id;
       MY_NAME = match.name;
       if(match.categories && match.categories.length){
@@ -4223,7 +4293,8 @@ var QRCode;
       dbReady = true;
       return true;
     } catch(err){
-      console.error('Falha ao conectar no Supabase, usando dados locais.', err);
+      console.error('Falha ao conectar no Supabase.', err);
+      alert('Não foi possível conectar ao banco de dados.\n\nDetalhe técnico: ' + (err && err.message ? err.message : err));
       return false;
     }
   }
@@ -4272,7 +4343,7 @@ var QRCode;
   /* ---------- Navigation ---------- */
   function goTo(page){
     supplierRoot.querySelectorAll('.page').forEach(function(el){ el.classList.remove('active'); });
-    document.getElementById('page-' + page).classList.add('active');
+    document.getElementById('f-page-' + page).classList.add('active');
     supplierRoot.querySelectorAll('[data-nav]').forEach(function(el){ el.classList.toggle('active', el.dataset.nav === page); });
     var meta = PAGE_META[page];
     document.getElementById('f-topbar-title').textContent = meta.title;
@@ -4494,25 +4565,36 @@ var QRCode;
     var marca = document.getElementById('f-cotacao-marca').value.trim();
     var preco = parsePrice(document.getElementById('f-cotacao-preco').value);
     var obs = document.getElementById('f-cotacao-obs').value.trim();
-    if(!marca || preco === null){ return; }
+    if(!marca || preco === null){ alert('Preencha a marca e um preço válido antes de enviar.'); return; }
     var myBid = q.bids.filter(function(b){ return b.supplier === MY_NAME; })[0];
+    var previousBrand = myBid ? myBid.brand : null;
+    var previousPrice = myBid ? myBid.price : null;
+    var previousObs = myBid ? myBid.obs : null;
     if(myBid){ myBid.brand = marca; myBid.price = preco; myBid.obs = obs; }
     else { q.bids.push({ supplier:MY_NAME, brand:marca, price:preco, obs:obs }); }
 
     if(dbReady && myId && String(q.id).indexOf('local_') !== 0){
       try{
         if(myBid && myBid.bidId){
-          await db.from('quotation_bids').update({ brand:marca, price:preco, observacao:obs }).eq('id', myBid.bidId);
+          check(await db.from('quotation_bids').update({ brand:marca, price:preco, observacao:obs }).eq('id', myBid.bidId), 'Atualizar proposta');
         } else {
           var existing = await db.from('quotation_bids').select('id').eq('quotation_id', q.id).eq('supplier_id', myId).maybeSingle();
+          check(existing, 'Verificar proposta existente');
           if(existing.data){
-            await db.from('quotation_bids').update({ brand:marca, price:preco, observacao:obs }).eq('id', existing.data.id);
+            check(await db.from('quotation_bids').update({ brand:marca, price:preco, observacao:obs }).eq('id', existing.data.id), 'Atualizar proposta');
           } else {
-            var ins = await db.from('quotation_bids').insert({ quotation_id:q.id, supplier_id:myId, brand:marca, price:preco, observacao:obs }).select('id').single();
+            var ins = check(await db.from('quotation_bids').insert({ quotation_id:q.id, supplier_id:myId, brand:marca, price:preco, observacao:obs }).select('id').single(), 'Enviar proposta');
             if(myBid && ins.data) myBid.bidId = ins.data.id;
           }
         }
-      } catch(err){ console.error('Erro ao salvar proposta', err); }
+      } catch(err){
+        console.error('Erro ao salvar proposta', err);
+        if(myBid){ myBid.brand = previousBrand; myBid.price = previousPrice; myBid.obs = previousObs; }
+        else { q.bids = q.bids.filter(function(b){ return b !== q.bids[q.bids.length-1]; }); }
+        alert('Não foi possível enviar sua proposta.\n\nDetalhe técnico: ' + (err && err.message ? err.message : err));
+        renderCotacaoDetail(q.id);
+        return;
+      }
     }
 
     renderCotacaoDetail(q.id);
@@ -4554,8 +4636,8 @@ var QRCode;
   }
 
   function renderPerfil(){
-    renderTagList('categorias-list', CATEGORIES, 'tag-amber', 'Nova categoria');
-    renderTagList('marcas-list', BRANDS, 'tag-amber', 'Nova marca');
+    renderTagList('f-categorias-list', CATEGORIES, 'tag-amber', 'Nova categoria');
+    renderTagList('f-marcas-list', BRANDS, 'tag-amber', 'Nova marca');
     document.getElementById('f-perfil-saved-banner').classList.remove('show');
   }
 
@@ -4590,8 +4672,8 @@ var QRCode;
   root.style.display = 'block';
   root.style.cssText += 'min-height:100vh; background:#FBFAF7; font-family:\'IBM Plex Sans\',sans-serif; color:#1B2420;';
 
-  var SUPABASE_URL = 'https://lrdsuxxnzbwpgxhcxliz.supabase.co';
-  var SUPABASE_KEY = 'sb_publishable_9LVR19deIA76DXrywUde9g_IpoY0WR4';
+  var SUPABASE_URL = 'https://dqghwfrmodulnevzpgbw.supabase.co';
+  var SUPABASE_KEY = 'sb_publishable_nNk6sJNE-7NzraHnjXliLQ_nRfeWtZb';
   var db = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
   var GREEN = '#146C4E', AMBER = '#C97A2B', RED = '#C43D3D', LINE = '#E1E4DF', SOFT = '#5B6A62';
