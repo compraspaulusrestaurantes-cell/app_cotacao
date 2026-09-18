@@ -1431,7 +1431,7 @@ html, body {
     <button class="navlink" data-nav="home"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 11l9-7 9 7"/><path d="M5 10v9h14v-9"/></svg>Início</button>
     <button class="navlink" data-nav="dashboard"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"/><path d="M8 17V10"/><path d="M13 17V6"/><path d="M18 17v-4"/></svg>Dashboard</button>
     <button class="navlink" data-nav="lista"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7l9-4 9 4v10l-9 4-9-4V7z"/><path d="M3 7l9 4 9-4"/><path d="M12 11v10"/></svg>Lista de compras</button>
-    <button class="navlink" data-nav="fornecedores"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="7" width="18" height="13" rx="2"/><path d="M8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>Fornecedores</button>
+    <button class="navlink" data-nav="fornecedores"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="7" width="18" height="13" rx="2"/><path d="M8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>Cadastros</button>
     <button class="navlink" data-nav="cotacoes"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v20"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>Cotação</button>
     <button class="navlink" data-nav="pedidos"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="9" width="13" height="9" rx="1"/><path d="M16 13h3l2 2v3h-5z"/><circle cx="7.5" cy="19" r="1.5"/><circle cx="17.5" cy="19" r="1.5"/></svg>Pedidos</button>
     <div class="sidebar-spacer"></div>
@@ -1711,7 +1711,7 @@ html, body {
         <!-- List view -->
         <div id="cotacoes-list-view">
           <div class="banner banner-amber" style="margin-bottom:16px;">
-            Abra uma cotação por categoria e defina um prazo — só os fornecedores cadastrados naquela categoria conseguem responder.
+            Abra uma cotação com um ou mais produtos e defina um prazo — os fornecedores respondem cada item, ou marcam que não trabalham com ele.
           </div>
 
           <button class="btn btn-primary" id="nova-cotacao-toggle" style="margin-bottom:16px;">
@@ -1720,21 +1720,23 @@ html, body {
           </button>
 
           <div class="card" id="nova-cotacao-form" style="display:none; margin-bottom:20px;">
-            <div style="display:flex; gap:14px; flex-wrap:wrap; margin-bottom:14px;">
-              <div class="field" style="flex:1 1 180px;">
-                <label for="nc-categoria">Categoria</label>
-                <select id="nc-categoria" style="width:100%; border:1px solid var(--line); border-radius:8px; padding:10px 12px; font-size:13px;">
-                  <option>Frango</option><option>Arroz</option><option>Óleo</option><option>Detergente</option><option>Carnes</option><option>Limpeza</option><option>Mercearia</option>
-                </select>
+            <div class="field" style="margin-bottom:14px;">
+              <label for="nc-item-input">Itens desta cotação</label>
+              <div id="nc-itens-tags" style="display:flex; flex-wrap:wrap; gap:8px; margin-bottom:10px;"></div>
+              <div style="display:flex; gap:8px;">
+                <input id="nc-item-input" type="text" placeholder="Ex.: Frango" style="flex:1; border:1px solid var(--line); border-radius:8px; padding:10px 12px; font-size:13px;">
+                <button class="btn btn-ghost" type="button" id="nc-item-add">+ Adicionar item</button>
               </div>
-              <div class="field" style="flex:1 1 180px;">
+            </div>
+            <div style="display:flex; gap:14px; flex-wrap:wrap; margin-bottom:14px;">
+              <div class="field" style="flex:1 1 200px;">
                 <label for="nc-prazo">Prazo para os fornecedores responderem</label>
                 <input id="nc-prazo" type="date">
               </div>
-            </div>
-            <div class="field" style="margin-bottom:14px;">
-              <label for="nc-titulo">Título (opcional)</label>
-              <input id="nc-titulo" type="text" placeholder="Ex.: Cotação de frango - semana 39">
+              <div class="field" style="flex:1 1 200px;">
+                <label for="nc-titulo">Título (opcional)</label>
+                <input id="nc-titulo" type="text" placeholder="Ex.: Cotação da semana 39">
+              </div>
             </div>
             <button class="btn btn-primary" id="nc-criar">Abrir cotação</button>
             <button class="btn btn-ghost" id="nc-cancelar" style="margin-left:8px;">Cancelar</button>
@@ -1748,31 +1750,11 @@ html, body {
           <button class="btn btn-ghost" id="cotacao-voltar" style="margin-bottom:16px;">&larr; Todas as cotações</button>
 
           <div class="card" style="margin-bottom:20px;">
-            <div class="row" style="justify-content:space-between; align-items:flex-start;">
-              <div>
-                <span class="badge badge-amber" id="cotacao-detail-badge">Frango</span>
-                <h2 id="cotacao-detail-title" style="font-size:19px; margin-top:8px;">—</h2>
-                <div class="row-sub" id="cotacao-detail-sub">—</div>
-              </div>
-            </div>
+            <h2 id="cotacao-detail-title" style="font-size:19px;">—</h2>
+            <div class="row-sub" id="cotacao-detail-sub">—</div>
           </div>
 
-          <div style="display:flex; gap:16px; flex-wrap:wrap; margin-bottom:20px;">
-            <div class="card" style="flex:1 1 200px;">
-              <div style="font-size:12px; color:var(--ink-soft); margin-bottom:6px;">Menor preço</div>
-              <div id="cotacao-menor" style="font-size:22px; font-weight:700; font-family:'Fraunces',serif; color:var(--green);">—</div>
-            </div>
-            <div class="card" style="flex:1 1 200px;">
-              <div style="font-size:12px; color:var(--ink-soft); margin-bottom:6px;">Maior preço</div>
-              <div id="cotacao-maior" style="font-size:22px; font-weight:700; font-family:'Fraunces',serif;">—</div>
-            </div>
-            <div class="card" style="flex:1 1 200px;">
-              <div style="font-size:12px; color:var(--ink-soft); margin-bottom:6px;">Sua economia escolhendo o menor</div>
-              <div id="cotacao-economia" style="font-size:22px; font-weight:700; font-family:'Fraunces',serif; color:var(--green);">—</div>
-            </div>
-          </div>
-
-          <div class="list" id="cotacao-bids-list"></div>
+          <div id="cotacao-itens-list" style="display:flex; flex-direction:column; gap:20px;"></div>
         </div>
 
       </section>
@@ -2022,7 +2004,7 @@ html, body {
 
         <div id="f-cotacoes-list-view">
           <div class="banner banner-amber" style="margin-bottom:16px;">
-            Aqui aparecem as cotações abertas pela Paulu&#39;s nas categorias que você atende.
+            Aqui aparecem as cotações abertas pela Paulu&#39;s. Você vê todos os itens pedidos — responda os que você atende e marque os que não trabalha.
           </div>
           <div class="list" id="f-cotacoes-list"></div>
         </div>
@@ -2031,24 +2013,11 @@ html, body {
           <button class="btn btn-ghost" id="f-cotacao-voltar" style="margin-bottom:16px;">&larr; Todas as cotações</button>
 
           <div class="card" style="margin-bottom:20px;">
-            <span class="badge badge-amber" id="f-cotacao-detail-badge">—</span>
-            <h2 id="f-cotacao-detail-title" style="font-size:19px; margin-top:8px;">—</h2>
+            <h2 id="f-cotacao-detail-title" style="font-size:19px;">—</h2>
             <div class="row-sub" id="f-cotacao-detail-sub">—</div>
           </div>
 
-          <div class="card" style="margin-bottom:20px; background:var(--ink-dark); color:#fff;">
-            <div style="font-size:13px; color:var(--ink-muted); margin-bottom:12px;">Sua proposta</div>
-            <div style="display:flex; gap:12px; flex-wrap:wrap; margin-bottom:12px;">
-              <div class="field" style="flex:1 1 140px;"><label style="color:var(--ink-muted);">Marca</label><input id="f-cotacao-marca" type="text" placeholder="Ex.: Sadia" style="background:rgba(255,255,255,.08); border-color:rgba(255,255,255,.2); color:#fff;"></div>
-              <div class="field" style="flex:1 1 140px;"><label style="color:var(--ink-muted);">Seu preço</label><input id="f-cotacao-preco" type="text" placeholder="R$ 0,00" style="background:rgba(255,255,255,.08); border-color:rgba(255,255,255,.2); color:#fff;"></div>
-            </div>
-            <div class="field" style="margin-bottom:14px;"><label style="color:var(--ink-muted);">Observação</label><textarea id="f-cotacao-obs" rows="2" placeholder="Ex.: acima de 20 cx o preço muda" style="background:rgba(255,255,255,.08); border-color:rgba(255,255,255,.2); color:#fff;"></textarea></div>
-            <button class="btn" id="f-cotacao-enviar" style="background:var(--amber); color:#fff;">Enviar proposta</button>
-            <div id="f-cotacao-posicao" style="font-size:12px; color:var(--ink-muted); margin-top:10px;"></div>
-          </div>
-
-          <div style="font-size:13px; font-weight:600; margin-bottom:10px;">Propostas dos concorrentes</div>
-          <div class="list" id="f-cotacao-bids-list"></div>
+          <div id="f-cotacao-itens-list" style="display:flex; flex-direction:column; gap:20px;"></div>
         </div>
 
       </section>
@@ -2768,27 +2737,37 @@ var QRCode;
 
   var QUOTATIONS = [
     {
-      id:'q1', category:'Frango',
-      title:"Cotação de frango - semana 38",
+      id:'q1',
+      title:"Cotação da semana 38",
       deadline: (function(){ var d = new Date(); d.setDate(d.getDate() + 3); return d; })(),
       status:'aberta',
-      bids:[
-        { supplier:'Distribuidora Bom Preço', brand:'Sadia', price:15.99, obs:'Comprando 20 cx ou mais, sai por R$ 13,99 a caixa.' },
-        { supplier:'Aves & Cia Distribuidora', brand:'Perdigão', price:16.50, obs:'' },
-        { supplier:'Central de Carnes SP', brand:'Sadia', price:14.80, obs:'Frete grátis acima de 15 caixas.' }
-      ],
-      winner:null
-    },
-    {
-      id:'q2', category:'Arroz',
-      title:"Cotação de arroz - semana 37",
-      deadline: (function(){ var d = new Date(); d.setDate(d.getDate() - 4); return d; })(),
-      status:'encerrada',
-      bids:[
-        { supplier:'Distribuidora Bom Preço', brand:'Camil', price:26.50, obs:'' },
-        { supplier:'Grãos do Sul', brand:'Tio João', price:28.90, obs:'' }
-      ],
-      winner:'Distribuidora Bom Preço'
+      items:[
+        {
+          id:'item_frango', name:'Frango', status:'aberta', winner:null,
+          bids:[
+            { supplier:'Distribuidora Bom Preço', brand:'Sadia', price:15.99, obs:'Comprando 20 cx ou mais, sai por R$ 13,99 a caixa.', notAvailable:false },
+            { supplier:'Distribuidora Bom Preço', brand:'Perdigão', price:17.50, obs:'Opção premium', notAvailable:false },
+            { supplier:'Aves & Cia Distribuidora', brand:'Perdigão', price:16.50, obs:'', notAvailable:false },
+            { supplier:'Central de Carnes SP', brand:null, price:null, obs:'', notAvailable:true }
+          ]
+        },
+        {
+          id:'item_oleo', name:'Óleo', status:'aberta', winner:null,
+          bids:[
+            { supplier:'Distribuidora Bom Preço', brand:'Liza', price:7.10, obs:'', notAvailable:false }
+          ]
+        },
+        {
+          id:'item_arroz', name:'Arroz', status:'encerrada', winner:'Distribuidora Bom Preço',
+          bids:[
+            { supplier:'Distribuidora Bom Preço', brand:'Camil', price:26.50, obs:'', notAvailable:false },
+            { supplier:'Grãos do Sul', brand:'Tio João', price:28.90, obs:'', notAvailable:false }
+          ]
+        },
+        {
+          id:'item_feijao', name:'Feijão', status:'aberta', winner:null, bids:[]
+        }
+      ]
     }
   ];
   var currentQuotationId = null;
@@ -2862,40 +2841,62 @@ var QRCode;
   }
 
   async function ensureQuotations(){
-    var res = check(await db.from('quotations').select('id,category,title,deadline,status,winner_supplier_id, quotation_bids(id,supplier_id,brand,price,observacao)'), 'Ler cotações');
+    var selectStr = 'id,title,deadline,status, quotation_items(id,product_name,status,winner_bid_id, quotation_bids(id,supplier_id,brand,price,observacao,not_available))';
+    var res = check(await db.from('quotations').select(selectStr), 'Ler cotações');
     var rows = res.data || [];
     if(rows.length === 0){
       for(var i=0;i<QUOTATIONS.length;i++){
         var q = QUOTATIONS[i];
         var qIns = check(await db.from('quotations').insert({
-          category:q.category, title:q.title, deadline:q.deadline.toISOString(), status:q.status,
-          winner_supplier_id: q.winner ? (supplierIdByName[q.winner] || null) : null
+          title:q.title, deadline:q.deadline.toISOString(), status:q.status
         }).select('id').single(), 'Criar cotação inicial');
         var qId = qIns.data ? qIns.data.id : null;
-        if(qId && q.bids.length){
-          var bidRows = q.bids.map(function(b){
-            return { quotation_id:qId, supplier_id:supplierIdByName[b.supplier] || null, brand:b.brand, price:b.price, observacao:b.obs };
-          }).filter(function(b){ return b.supplier_id; });
-          if(bidRows.length) check(await db.from('quotation_bids').insert(bidRows), 'Criar propostas iniciais');
+        if(!qId) continue;
+        for(var j=0;j<q.items.length;j++){
+          var item = q.items[j];
+          var itemIns = check(await db.from('quotation_items').insert({
+            quotation_id:qId, product_name:item.name, status:item.status
+          }).select('id').single(), 'Criar item da cotação');
+          var itemId = itemIns.data ? itemIns.data.id : null;
+          if(!itemId) continue;
+          if(item.bids.length){
+            var bidRows = item.bids.map(function(b){
+              return { quotation_item_id:itemId, supplier_id:supplierIdByName[b.supplier] || null, brand:b.brand, price:b.price, observacao:b.obs, not_available:!!b.notAvailable };
+            }).filter(function(b){ return b.supplier_id; });
+            if(bidRows.length) check(await db.from('quotation_bids').insert(bidRows), 'Criar propostas iniciais');
+          }
+          if(item.winner){
+            var wonRes = await db.from('quotation_bids').select('id,supplier_id').eq('quotation_item_id', itemId);
+            var wonBid = (wonRes.data || []).filter(function(b){ return b.supplier_id === supplierIdByName[item.winner]; })[0];
+            if(wonBid) check(await db.from('quotation_items').update({ winner_bid_id: wonBid.id }).eq('id', itemId), 'Definir vencedor inicial');
+          }
         }
       }
-      // Re-read after seeding so QUOTATIONS reflects real db ids
-      res = check(await db.from('quotations').select('id,category,title,deadline,status,winner_supplier_id, quotation_bids(id,supplier_id,brand,price,observacao)'), 'Reler cotações');
+      res = check(await db.from('quotations').select(selectStr), 'Reler cotações');
       rows = res.data || [];
     }
     QUOTATIONS = rows.map(function(r){
-      return {
-        id: r.id,
-        category: r.category,
-        title: r.title,
-        deadline: new Date(r.deadline),
-        status: r.status,
-        winner: r.winner_supplier_id ? (supplierNameById[r.winner_supplier_id] || null) : null,
-        bids: (r.quotation_bids || []).map(function(b){
-          return { bidId:b.id, supplier: supplierNameById[b.supplier_id] || 'Fornecedor', brand:b.brand, price:Number(b.price), obs:b.observacao || '' };
-        })
-      };
+      var items = (r.quotation_items || []).map(function(it){
+        var bids = (it.quotation_bids || []).map(function(b){
+          return {
+            bidId:b.id, supplier: supplierNameById[b.supplier_id] || 'Fornecedor',
+            brand:b.brand, price: b.price != null ? Number(b.price) : null,
+            obs:b.observacao || '', notAvailable: !!b.not_available
+          };
+        });
+        var winnerBid = it.winner_bid_id ? bids.filter(function(b){ return b.bidId === it.winner_bid_id; })[0] : null;
+        return { id: it.id, name: it.product_name, status: it.status, winnerBidId: it.winner_bid_id || null, winner: winnerBid ? winnerBid.supplier : null, bids: bids };
+      });
+      return { id: r.id, title: r.title, deadline: new Date(r.deadline), status: r.status, items: items };
     }).sort(function(a,b){ return b.deadline - a.deadline; });
+  }
+
+  function quotationOverallStatus(q){
+    return (q.items && q.items.length && q.items.every(function(it){ return it.status === 'encerrada'; })) ? 'encerrada' : 'aberta';
+  }
+
+  function quotationTotalBids(q){
+    return (q.items || []).reduce(function(sum, it){ return sum + it.bids.length; }, 0);
   }
 
   var ORDERS = [];
@@ -2941,7 +2942,7 @@ var QRCode;
     home:{ title:'Início', eyebrow:'Semana de compras' },
     dashboard:{ title:'Dashboard', eyebrow:'Visão geral das compras e cotações' },
     lista:{ title:'Lista de compras', eyebrow:'Marque os produtos e ajuste as quantidades' },
-    fornecedores:{ title:'Fornecedores', eyebrow:'Preços e condições' },
+    fornecedores:{ title:'Cadastros', eyebrow:'Fornecedores, produtos e condições' },
     cotacoes:{ title:'Cotação', eyebrow:'Compare preços por categoria e defina o vencedor' },
     fechar:{ title:'Fechar pedido', eyebrow:'Distribuidora Bom Preço' },
     pedidos:{ title:'Pedidos', eyebrow:'Acompanhamento' },
@@ -3044,7 +3045,7 @@ var QRCode;
 
     var homeList = document.getElementById('home-cotacoes-list');
     homeList.innerHTML = '';
-    var abertas = QUOTATIONS.filter(function(q){ return q.status === 'aberta'; });
+    var abertas = QUOTATIONS.filter(function(q){ return quotationOverallStatus(q) === 'aberta'; });
     if(abertas.length === 0){
       homeList.innerHTML = '<div class="card" style="text-align:center; color:var(--ink-soft); font-size:13px;">Nenhuma cotação aberta no momento.</div>';
     } else {
@@ -3052,16 +3053,20 @@ var QRCode;
     }
   }
 
-  function quotationSavings(q){
-    if(!q.bids.length) return 0;
-    var prices = q.bids.map(function(b){ return b.price; });
+  function itemSavings(item){
+    var prices = item.bids.filter(function(b){ return !b.notAvailable && b.price != null; }).map(function(b){ return b.price; });
+    if(!prices.length) return 0;
     return Math.max.apply(null, prices) - Math.min.apply(null, prices);
+  }
+
+  function quotationSavings(q){
+    return (q.items || []).reduce(function(sum, it){ return sum + itemSavings(it); }, 0);
   }
 
   function renderResumoMes(){
     var totalComprado = ORDERS.reduce(function(sum, o){ return sum + (Number(o.total) || 0); }, 0);
     var pedidosFechados = ORDERS.filter(function(o){ return o.status === 'entregue'; }).length;
-    var economiaNegociando = QUOTATIONS.filter(function(q){ return q.status === 'encerrada'; })
+    var economiaNegociando = QUOTATIONS.filter(function(q){ return quotationOverallStatus(q) === 'encerrada'; })
       .reduce(function(sum, q){ return sum + quotationSavings(q); }, 0);
 
     var homeTotal = document.getElementById('home-total-comprado');
@@ -3079,8 +3084,8 @@ var QRCode;
 
   function renderDashboard(){
     renderResumoMes();
-    var abertas = QUOTATIONS.filter(function(q){ return q.status === 'aberta'; });
-    var encerradas = QUOTATIONS.filter(function(q){ return q.status === 'encerrada'; });
+    var abertas = QUOTATIONS.filter(function(q){ return quotationOverallStatus(q) === 'aberta'; });
+    var encerradas = QUOTATIONS.filter(function(q){ return quotationOverallStatus(q) === 'encerrada'; });
     document.getElementById('dash-cotacoes-abertas').textContent = abertas.length;
     var economiaTotal = encerradas.reduce(function(sum, q){ return sum + quotationSavings(q); }, 0);
     document.getElementById('dash-economia-total').textContent = money(economiaTotal);
@@ -3101,11 +3106,12 @@ var QRCode;
       encerradas.forEach(function(q){
         var card = document.createElement('div');
         card.className = 'card';
+        var vencedores = q.items.filter(function(it){ return it.winner; }).map(function(it){ return it.name + ': ' + it.winner; }).join(' · ');
         card.innerHTML =
           '<div class="row" style="justify-content:space-between; align-items:flex-start; margin-bottom:6px;">' +
-            '<div><span class="badge badge-amber">' + q.category + '</span>' +
+            '<div><span class="badge badge-amber">' + q.items.length + ' item(ns)</span>' +
             '<div class="row-title" style="margin-top:8px;">' + q.title + '</div>' +
-            '<div class="row-sub">Vencedor: ' + (q.winner || '—') + '</div></div>' +
+            '<div class="row-sub">' + (vencedores || 'Sem vencedor definido') + '</div></div>' +
             '<div style="text-align:right;"><div style="font-size:12px; color:var(--ink-soft);">Economia</div>' +
             '<div style="font-size:16px; font-weight:700; font-family:\'Fraunces\',serif; color:var(--green);">' + money(quotationSavings(q)) + '</div></div>' +
           '</div>' +
@@ -3499,14 +3505,18 @@ var QRCode;
   function quotationCard(q){
     var card = document.createElement('div');
     card.className = 'card';
-    var statusBadge = q.status === 'aberta'
+    var overallStatus = quotationOverallStatus(q);
+    var totalBids = quotationTotalBids(q);
+    var statusBadge = overallStatus === 'aberta'
       ? '<span class="badge badge-green">Aberta · até ' + fmtDate(q.deadline) + '</span>'
       : '<span class="badge badge-gray">Encerrada</span>';
+    var itemNames = q.items.map(function(it){ return it.name; }).join(', ');
     card.innerHTML =
       '<div class="row" style="justify-content:space-between; align-items:flex-start; margin-bottom:8px;">' +
-        '<div><span class="badge badge-amber">' + q.category + '</span>' +
+        '<div><span class="badge badge-amber">' + q.items.length + ' item(ns)</span>' +
         '<div class="row-title" style="margin-top:8px;">' + q.title + '</div>' +
-        '<div class="row-sub">' + q.bids.length + (q.bids.length === 1 ? ' fornecedor respondeu' : ' fornecedores responderam') + (q.winner ? ' · vencedor: ' + q.winner : '') + '</div></div>' +
+        '<div class="row-sub">' + itemNames + '</div>' +
+        '<div class="row-sub">' + totalBids + (totalBids === 1 ? ' resposta recebida' : ' respostas recebidas') + '</div></div>' +
         statusBadge +
       '</div>' +
       '<button class="btn btn-ghost" data-action="ver-cotacao" data-id="' + q.id + '">Ver respostas</button>';
@@ -3529,26 +3539,58 @@ var QRCode;
   document.getElementById('nc-cancelar').addEventListener('click', function(){
     document.getElementById('nova-cotacao-form').style.display = 'none';
   });
+  var pendingQuotationItems = [];
+
+  function renderPendingItemsTags(){
+    var container = document.getElementById('nc-itens-tags');
+    container.innerHTML = pendingQuotationItems.map(function(name, i){
+      return '<span class="badge badge-green" style="cursor:pointer;" data-action="remove-pending-item" data-index="' + i + '">' + name + ' ×</span>';
+    }).join('');
+  }
+  document.getElementById('nc-item-add').addEventListener('click', function(){
+    var input = document.getElementById('nc-item-input');
+    var v = input.value.trim();
+    if(v && pendingQuotationItems.indexOf(v) === -1){ pendingQuotationItems.push(v); renderPendingItemsTags(); }
+    input.value = '';
+    input.focus();
+  });
+  document.getElementById('nc-item-input').addEventListener('keydown', function(e){
+    if(e.key === 'Enter'){ e.preventDefault(); document.getElementById('nc-item-add').click(); }
+  });
+  buyerRoot.addEventListener('click', function(e){
+    var removeBtn = e.target.closest('[data-action="remove-pending-item"]');
+    if(removeBtn){
+      pendingQuotationItems.splice(Number(removeBtn.dataset.index), 1);
+      renderPendingItemsTags();
+    }
+  });
+
   document.getElementById('nc-criar').addEventListener('click', async function(){
-    var categoria = document.getElementById('nc-categoria').value;
+    if(pendingQuotationItems.length === 0){ alert('Adicione ao menos um item antes de abrir a cotação.'); return; }
     var prazoVal = document.getElementById('nc-prazo').value;
     var titulo = document.getElementById('nc-titulo').value.trim();
     var deadline = prazoVal ? new Date(prazoVal + 'T23:59:59') : (function(){ var d = new Date(); d.setDate(d.getDate()+3); return d; })();
+    var itemNames = pendingQuotationItems.slice();
     var q = {
       id: 'local_' + Date.now(),
-      category: categoria,
-      title: titulo || ('Cotação de ' + categoria.toLowerCase()),
+      title: titulo || ('Cotação de ' + itemNames.length + ' item(ns)'),
       deadline: deadline,
       status: 'aberta',
-      bids: [],
-      winner: null
+      items: itemNames.map(function(name, i){ return { id:'local_item_' + i + '_' + Date.now(), name:name, status:'aberta', winner:null, winnerBidId:null, bids:[] }; })
     };
     if(dbReady){
       try{
         var ins = check(await db.from('quotations').insert({
-          category:categoria, title:q.title, deadline:deadline.toISOString(), status:'aberta'
+          title:q.title, deadline:deadline.toISOString(), status:'aberta'
         }).select('id').single(), 'Criar cotação');
-        if(ins.data) q.id = ins.data.id;
+        if(!ins.data) throw new Error('A cotação não retornou id.');
+        q.id = ins.data.id;
+        for(var i=0;i<q.items.length;i++){
+          var itemIns = check(await db.from('quotation_items').insert({
+            quotation_id: q.id, product_name: q.items[i].name, status:'aberta'
+          }).select('id').single(), 'Criar item da cotação');
+          if(itemIns.data) q.items[i].id = itemIns.data.id;
+        }
       } catch(err){
         console.error('Erro ao criar cotação no Supabase', err);
         alert('Não foi possível criar a cotação.\n\nDetalhe técnico: ' + (err && err.message ? err.message : err));
@@ -3556,25 +3598,76 @@ var QRCode;
       }
     }
     QUOTATIONS.unshift(q);
+    pendingQuotationItems = [];
+    renderPendingItemsTags();
     document.getElementById('nc-titulo').value = '';
+    document.getElementById('nc-prazo').value = '';
+    document.getElementById('nova-cotacao-form').style.display = 'none';
     renderCotacoesList();
   });
 
-  function bidRow(q, bid){
-    var prices = q.bids.map(function(b){ return b.price; });
-    var lowest = Math.min.apply(null, prices);
+  function bidRow(item, bid){
+    var activeBids = item.bids.filter(function(b){ return !b.notAvailable && b.price != null; });
+    var lowest = activeBids.length ? Math.min.apply(null, activeBids.map(function(b){ return b.price; })) : null;
     var row = document.createElement('div');
     row.className = 'card';
+    if(bid.notAvailable){
+      row.innerHTML =
+        '<div class="row-title" style="color:var(--ink-faint);">' + bid.supplier + '</div>' +
+        '<div class="row-sub">Não trabalha com este produto.</div>';
+      return row;
+    }
     var isBest = bid.price === lowest;
+    var isWinner = item.winnerBidId === bid.bidId;
     row.innerHTML =
       '<div class="row" style="justify-content:space-between; align-items:flex-start; margin-bottom:6px;">' +
-        '<div><div class="row-title">' + bid.supplier + (isBest ? ' <span class="badge badge-green">MELHOR PREÇO</span>' : '') + '</div>' +
-        '<div class="row-sub">Marca: ' + bid.brand + '</div></div>' +
+        '<div><div class="row-title">' + bid.supplier + (isBest ? ' <span class="badge badge-green">MELHOR PREÇO</span>' : '') + (isWinner ? ' <span class="badge badge-amber">ESCOLHIDO</span>' : '') + '</div>' +
+        '<div class="row-sub">Marca: ' + (bid.brand || '—') + '</div></div>' +
         '<div style="font-size:18px; font-weight:700; font-family:\'Fraunces\',serif; color:' + (isBest ? 'var(--green)' : 'var(--ink)') + ';">' + money(bid.price) + '</div>' +
       '</div>' +
       (bid.obs ? '<div style="font-size:12px; color:var(--ink-soft); margin-bottom:10px;">' + bid.obs + '</div>' : '') +
-      (q.status === 'aberta' ? '<button class="btn btn-primary" data-action="escolher-fornecedor" data-id="' + q.id + '" data-supplier="' + bid.supplier + '">Fechar cotação com este fornecedor</button>' : (q.winner === bid.supplier ? '<span class="badge badge-green">Escolhido</span>' : ''));
+      (item.status === 'aberta' ? '<button class="btn btn-primary" data-action="escolher-fornecedor" data-item-id="' + item.id + '" data-bid-id="' + bid.bidId + '" data-supplier="' + bid.supplier + '">Fechar item com este fornecedor</button>' : '');
     return row;
+  }
+
+  function itemBlock(q, item){
+    var wrap = document.createElement('div');
+    var activeBids = item.bids.filter(function(b){ return !b.notAvailable && b.price != null; });
+    var statusBadge = item.status === 'aberta'
+      ? '<span class="badge badge-green">Aberta</span>'
+      : '<span class="badge badge-gray">Encerrada' + (item.winner ? ' · vencedor: ' + item.winner : '') + '</span>';
+    var statsHtml = '';
+    if(activeBids.length){
+      var prices = activeBids.map(function(b){ return b.price; });
+      var lowest = Math.min.apply(null, prices);
+      var highest = Math.max.apply(null, prices);
+      var economia = highest - lowest;
+      statsHtml =
+        '<div style="display:flex; gap:12px; flex-wrap:wrap; margin:10px 0;">' +
+          '<div style="font-size:12px; color:var(--ink-soft);">Menor: <strong style="color:var(--green);">' + money(lowest) + '</strong></div>' +
+          '<div style="font-size:12px; color:var(--ink-soft);">Maior: <strong>' + money(highest) + '</strong></div>' +
+          '<div style="font-size:12px; color:var(--ink-soft);">Economia: <strong style="color:var(--green);">' + money(economia) + '</strong></div>' +
+        '</div>';
+    }
+    var header = document.createElement('div');
+    header.style.cssText = 'display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;';
+    header.innerHTML = '<h3 style="font-size:16px;">' + item.name + '</h3>' + statusBadge;
+    wrap.appendChild(header);
+    if(statsHtml){ var statsEl = document.createElement('div'); statsEl.innerHTML = statsHtml; wrap.appendChild(statsEl); }
+
+    var list = document.createElement('div');
+    list.className = 'list';
+    if(item.bids.length === 0){
+      list.innerHTML = '<div class="card" style="text-align:center; color:var(--ink-soft); font-size:13px;">Nenhum fornecedor respondeu este item ainda.</div>';
+    } else {
+      var sorted = item.bids.slice().sort(function(a,b){
+        if(a.notAvailable !== b.notAvailable) return a.notAvailable ? 1 : -1;
+        return (a.price||0) - (b.price||0);
+      });
+      sorted.forEach(function(bid){ list.appendChild(bidRow(item, bid)); });
+    }
+    wrap.appendChild(list);
+    return wrap;
   }
 
   function renderCotacaoDetail(id){
@@ -3584,40 +3677,32 @@ var QRCode;
     document.getElementById('cotacoes-list-view').style.display = 'none';
     document.getElementById('cotacoes-detail-view').style.display = 'block';
 
-    document.getElementById('cotacao-detail-badge').textContent = q.category;
     document.getElementById('cotacao-detail-title').textContent = q.title;
-    document.getElementById('cotacao-detail-sub').textContent = (q.status === 'aberta' ? 'Aberta até ' + fmtDate(q.deadline) : 'Encerrada') + ' · ' + q.bids.length + ' resposta(s)';
+    document.getElementById('cotacao-detail-sub').textContent = (quotationOverallStatus(q) === 'aberta' ? 'Aberta até ' + fmtDate(q.deadline) : 'Encerrada') + ' · ' + q.items.length + ' item(ns) · ' + quotationTotalBids(q) + ' resposta(s) no total';
 
-    var bidsList = document.getElementById('cotacao-bids-list');
-    bidsList.innerHTML = '';
-    if(q.bids.length === 0){
-      bidsList.innerHTML = '<div class="card" style="text-align:center; color:var(--ink-soft); font-size:13px;">Nenhum fornecedor respondeu ainda.</div>';
-      document.getElementById('cotacao-menor').textContent = '—';
-      document.getElementById('cotacao-maior').textContent = '—';
-      document.getElementById('cotacao-economia').textContent = '—';
-      return;
-    }
-    var sorted = q.bids.slice().sort(function(a,b){ return a.price - b.price; });
-    sorted.forEach(function(bid){ bidsList.appendChild(bidRow(q, bid)); });
-
-    var prices = q.bids.map(function(b){ return b.price; });
-    var lowest = Math.min.apply(null, prices);
-    var highest = Math.max.apply(null, prices);
-    document.getElementById('cotacao-menor').textContent = money(lowest);
-    document.getElementById('cotacao-maior').textContent = money(highest);
-    var economia = highest - lowest;
-    var economiaPct = highest > 0 ? Math.round((economia / highest) * 100) : 0;
-    document.getElementById('cotacao-economia').textContent = money(economia) + (economiaPct ? ' (' + economiaPct + '%)' : '');
+    var itensList = document.getElementById('cotacao-itens-list');
+    itensList.innerHTML = '';
+    q.items.forEach(function(item){ itensList.appendChild(itemBlock(q, item)); });
   }
 
   async function refreshQuotationBids(qId){
-    var res = await db.from('quotation_bids').select('id,supplier_id,brand,price,observacao').eq('quotation_id', qId);
-    var q = QUOTATIONS.filter(function(x){ return x.id === qId; })[0];
-    if(q && res.data){
-      q.bids = res.data.map(function(b){
-        return { bidId:b.id, supplier: supplierNameById[b.supplier_id] || 'Fornecedor', brand:b.brand, price:Number(b.price), obs:b.observacao || '' };
+    var selectStr = 'id,title,deadline,status, quotation_items(id,product_name,status,winner_bid_id, quotation_bids(id,supplier_id,brand,price,observacao,not_available))';
+    var res = await db.from('quotations').select(selectStr).eq('id', qId).maybeSingle();
+    if(!res.data) return;
+    var r = res.data;
+    var items = (r.quotation_items || []).map(function(it){
+      var bids = (it.quotation_bids || []).map(function(b){
+        return {
+          bidId:b.id, supplier: supplierNameById[b.supplier_id] || 'Fornecedor',
+          brand:b.brand, price: b.price != null ? Number(b.price) : null,
+          obs:b.observacao || '', notAvailable: !!b.not_available
+        };
       });
-    }
+      var winnerBid = it.winner_bid_id ? bids.filter(function(b){ return b.bidId === it.winner_bid_id; })[0] : null;
+      return { id: it.id, name: it.product_name, status: it.status, winnerBidId: it.winner_bid_id || null, winner: winnerBid ? winnerBid.supplier : null, bids: bids };
+    });
+    var idx = QUOTATIONS.findIndex(function(x){ return x.id === qId; });
+    if(idx > -1) QUOTATIONS[idx] = { id: r.id, title: r.title, deadline: new Date(r.deadline), status: r.status, items: items };
   }
 
   function unsubscribeQuotation(){
@@ -3627,8 +3712,11 @@ var QRCode;
   function subscribeToQuotation(qId){
     unsubscribeQuotation();
     if(!dbReady || String(qId).indexOf('local_') === 0) return;
+    var q = QUOTATIONS.filter(function(x){ return x.id === qId; })[0];
+    var itemIds = q ? q.items.map(function(it){ return it.id; }) : [];
+    if(itemIds.length === 0) return;
     quotationChannel = db.channel('quotation_bids_' + qId)
-      .on('postgres_changes', { event:'*', schema:'public', table:'quotation_bids', filter:'quotation_id=eq.' + qId }, async function(){
+      .on('postgres_changes', { event:'*', schema:'public', table:'quotation_bids', filter:'quotation_item_id=in.(' + itemIds.join(',') + ')' }, async function(){
         await refreshQuotationBids(qId);
         if(currentQuotationId === qId) renderCotacaoDetail(qId);
       })
@@ -3645,13 +3733,15 @@ var QRCode;
     }
     var escolherBtn = e.target.closest('[data-action="escolher-fornecedor"]');
     if(escolherBtn){
-      var q = QUOTATIONS.filter(function(x){ return x.id === escolherBtn.dataset.id; })[0];
-      if(q){
-        q.status = 'encerrada'; q.winner = escolherBtn.dataset.supplier;
-        if(dbReady && String(q.id).indexOf('local_') !== 0){
-          db.from('quotations').update({ status:'encerrada', winner_supplier_id: supplierIdByName[q.winner] || null }).eq('id', q.id)
+      var q = QUOTATIONS.filter(function(x){ return x.id === currentQuotationId; })[0];
+      if(!q) return;
+      var item = q.items.filter(function(it){ return it.id === escolherBtn.dataset.itemId; })[0];
+      if(item){
+        item.status = 'encerrada'; item.winner = escolherBtn.dataset.supplier; item.winnerBidId = escolherBtn.dataset.bidId;
+        if(dbReady && String(item.id).indexOf('local_') !== 0){
+          db.from('quotation_items').update({ status:'encerrada', winner_bid_id: escolherBtn.dataset.bidId }).eq('id', item.id)
             .then(function(res){
-              if(res.error){ console.error('Erro ao encerrar cotação', res.error); alert('A escolha do fornecedor não foi salva no banco.\n\nDetalhe técnico: ' + res.error.message); }
+              if(res.error){ console.error('Erro ao encerrar item da cotação', res.error); alert('A escolha do fornecedor não foi salva no banco.\n\nDetalhe técnico: ' + res.error.message); }
             });
         }
         renderCotacaoDetail(q.id);
@@ -4198,26 +4288,35 @@ var QRCode;
 
   var QUOTATIONS = [
     {
-      id:'q1', category:'Frango',
-      title:"Cotação de frango - semana 38",
+      id:'q1',
+      title:"Cotação da semana 38",
       deadline: (function(){ var d = new Date(); d.setDate(d.getDate() + 3); return d; })(),
       status:'aberta',
-      bids:[
-        { supplier:MY_NAME, brand:'Sadia', price:15.99, obs:'Comprando 20 cx ou mais, sai por R$ 13,99 a caixa.' },
-        { supplier:'Aves & Cia Distribuidora', brand:'Perdigão', price:16.50, obs:'' },
-        { supplier:'Central de Carnes SP', brand:'Sadia', price:14.80, obs:'Frete grátis acima de 15 caixas.' }
+      items:[
+        {
+          id:'item_frango', name:'Frango', status:'aberta', winner:null,
+          bids:[
+            { supplier:MY_NAME, brand:'Sadia', price:15.99, obs:'Comprando 20 cx ou mais, sai por R$ 13,99 a caixa.', notAvailable:false },
+            { supplier:MY_NAME, brand:'Perdigão', price:17.50, obs:'Opção premium', notAvailable:false },
+            { supplier:'Aves & Cia Distribuidora', brand:'Perdigão', price:16.50, obs:'', notAvailable:false },
+            { supplier:'Central de Carnes SP', brand:null, price:null, obs:'', notAvailable:true }
+          ]
+        },
+        {
+          id:'item_oleo', name:'Óleo', status:'aberta', winner:null,
+          bids:[
+            { supplier:MY_NAME, brand:'Liza', price:7.10, obs:'', notAvailable:false }
+          ]
+        },
+        {
+          id:'item_arroz', name:'Arroz', status:'encerrada', winner:MY_NAME,
+          bids:[
+            { supplier:MY_NAME, brand:'Camil', price:26.50, obs:'', notAvailable:false },
+            { supplier:'Grãos do Sul', brand:'Tio João', price:28.90, obs:'', notAvailable:false }
+          ]
+        },
+        { id:'item_feijao', name:'Feijão', status:'aberta', winner:null, bids:[] }
       ]
-    },
-    {
-      id:'q2', category:'Arroz',
-      title:"Cotação de arroz - semana 37",
-      deadline: (function(){ var d = new Date(); d.setDate(d.getDate() - 4); return d; })(),
-      status:'encerrada',
-      bids:[
-        { supplier:MY_NAME, brand:'Camil', price:26.50, obs:'' },
-        { supplier:'Grãos do Sul', brand:'Tio João', price:28.90, obs:'' }
-      ],
-      winner: MY_NAME
     }
   ];
   var currentQuotationId = null;
@@ -4282,38 +4381,53 @@ var QRCode;
   }
 
   async function ensureQuotations(){
-    var res = check(await db.from('quotations').select('id,category,title,deadline,status,winner_supplier_id, quotation_bids(id,supplier_id,brand,price,observacao)'), 'Ler cotações');
+    var selectStr = 'id,title,deadline,status, quotation_items(id,product_name,status,winner_bid_id, quotation_bids(id,supplier_id,brand,price,observacao,not_available))';
+    var res = check(await db.from('quotations').select(selectStr), 'Ler cotações');
     var rows = res.data || [];
     if(rows.length === 0){
       for(var i=0;i<QUOTATIONS.length;i++){
         var q = QUOTATIONS[i];
         var qIns = check(await db.from('quotations').insert({
-          category:q.category, title:q.title, deadline:q.deadline.toISOString(), status:q.status,
-          winner_supplier_id: q.winner ? (supplierIdByName[q.winner] || null) : null
+          title:q.title, deadline:q.deadline.toISOString(), status:q.status
         }).select('id').single(), 'Criar cotação inicial');
         var qId = qIns.data ? qIns.data.id : null;
-        if(qId && q.bids.length){
-          var bidRows = q.bids.map(function(b){
-            return { quotation_id:qId, supplier_id:supplierIdByName[b.supplier] || null, brand:b.brand, price:b.price, observacao:b.obs };
-          }).filter(function(b){ return b.supplier_id; });
-          if(bidRows.length) check(await db.from('quotation_bids').insert(bidRows), 'Criar propostas iniciais');
+        if(!qId) continue;
+        for(var j=0;j<q.items.length;j++){
+          var item = q.items[j];
+          var itemIns = check(await db.from('quotation_items').insert({
+            quotation_id:qId, product_name:item.name, status:item.status
+          }).select('id').single(), 'Criar item da cotação');
+          var itemId = itemIns.data ? itemIns.data.id : null;
+          if(!itemId) continue;
+          if(item.bids.length){
+            var bidRows = item.bids.map(function(b){
+              return { quotation_item_id:itemId, supplier_id:supplierIdByName[b.supplier] || null, brand:b.brand, price:b.price, observacao:b.obs, not_available:!!b.notAvailable };
+            }).filter(function(b){ return b.supplier_id; });
+            if(bidRows.length) check(await db.from('quotation_bids').insert(bidRows), 'Criar propostas iniciais');
+          }
+          if(item.winner){
+            var wonRes = await db.from('quotation_bids').select('id,supplier_id').eq('quotation_item_id', itemId);
+            var wonBid = (wonRes.data || []).filter(function(b){ return b.supplier_id === supplierIdByName[item.winner]; })[0];
+            if(wonBid) check(await db.from('quotation_items').update({ winner_bid_id: wonBid.id }).eq('id', itemId), 'Definir vencedor inicial');
+          }
         }
       }
-      res = check(await db.from('quotations').select('id,category,title,deadline,status,winner_supplier_id, quotation_bids(id,supplier_id,brand,price,observacao)'), 'Reler cotações');
+      res = check(await db.from('quotations').select(selectStr), 'Reler cotações');
       rows = res.data || [];
     }
     QUOTATIONS = rows.map(function(r){
-      return {
-        id: r.id,
-        category: r.category,
-        title: r.title,
-        deadline: new Date(r.deadline),
-        status: r.status,
-        winner: r.winner_supplier_id ? (supplierNameById[r.winner_supplier_id] || null) : null,
-        bids: (r.quotation_bids || []).map(function(b){
-          return { bidId:b.id, supplier: supplierNameById[b.supplier_id] || 'Fornecedor', brand:b.brand, price:Number(b.price), obs:b.observacao || '' };
-        })
-      };
+      var items = (r.quotation_items || []).map(function(it){
+        var bids = (it.quotation_bids || []).map(function(b){
+          return {
+            bidId:b.id, supplier: supplierNameById[b.supplier_id] || 'Fornecedor',
+            brand:b.brand, price: b.price != null ? Number(b.price) : null,
+            obs:b.observacao || '', notAvailable: !!b.not_available
+          };
+        });
+        var winnerBid = it.winner_bid_id ? bids.filter(function(b){ return b.bidId === it.winner_bid_id; })[0] : null;
+        return { id: it.id, name: it.product_name, status: it.status, winnerBidId: it.winner_bid_id || null, winner: winnerBid ? winnerBid.supplier : null, bids: bids };
+      });
+      return { id: r.id, title: r.title, deadline: new Date(r.deadline), status: r.status, items: items };
     }).sort(function(a,b){ return b.deadline - a.deadline; });
   }
 
@@ -4478,24 +4592,29 @@ var QRCode;
   });
 
   /* ---------- Cotações ---------- */
-  function myCategories(){ return CATEGORIES; }
-
   function quotationCardForSupplier(q){
     var card = document.createElement('div');
     card.className = 'card';
-    var myBid = q.bids.filter(function(b){ return b.supplier === MY_NAME; })[0];
-    var statusBadge = q.status === 'aberta'
+    var overallStatus = quotationOverallStatus(q);
+    var totalBids = q.items.reduce(function(sum, it){ return sum + it.bids.length; }, 0);
+    var itemNames = q.items.map(function(it){ return it.name; }).join(', ');
+    var statusBadge = overallStatus === 'aberta'
       ? '<span class="badge badge-green">Aberta · até ' + fmtDate(q.deadline) + '</span>'
-      : '<span class="badge badge-gray">Encerrada' + (q.winner ? (q.winner === MY_NAME ? ' · você venceu!' : '') : '') + '</span>';
+      : '<span class="badge badge-gray">Encerrada</span>';
     card.innerHTML =
       '<div class="row" style="justify-content:space-between; align-items:flex-start; margin-bottom:8px;">' +
-        '<div><span class="badge badge-amber">' + q.category + '</span>' +
+        '<div><span class="badge badge-amber">' + q.items.length + ' item(ns)</span>' +
         '<div class="row-title" style="margin-top:8px;">' + q.title + '</div>' +
-        '<div class="row-sub">' + (myBid ? 'Sua proposta: ' + money(myBid.price) : 'Você ainda não respondeu') + ' · ' + q.bids.length + ' proposta(s) no total</div></div>' +
+        '<div class="row-sub">' + itemNames + '</div>' +
+        '<div class="row-sub">' + totalBids + ' proposta(s) no total</div></div>' +
         statusBadge +
       '</div>' +
-      '<button class="btn btn-ghost" data-action="ver-cotacao" data-id="' + q.id + '">' + (q.status === 'aberta' ? 'Ver e responder' : 'Ver resultado') + '</button>';
+      '<button class="btn btn-ghost" data-action="ver-cotacao" data-id="' + q.id + '">Ver e responder</button>';
     return card;
+  }
+
+  function quotationOverallStatus(q){
+    return (q.items && q.items.length && q.items.every(function(it){ return it.status === 'encerrada'; })) ? 'encerrada' : 'aberta';
   }
 
   function renderCotacoesList(){
@@ -4503,29 +4622,71 @@ var QRCode;
     document.getElementById('f-cotacoes-detail-view').style.display = 'none';
     var list = document.getElementById('f-cotacoes-list');
     list.innerHTML = '';
-    var mine = QUOTATIONS.filter(function(q){ return myCategories().indexOf(q.category) > -1; });
-    if(mine.length === 0){
-      list.innerHTML = '<div class="card" style="text-align:center; color:var(--ink-soft); font-size:13px;">Nenhuma cotação nas suas categorias no momento.</div>';
+    if(QUOTATIONS.length === 0){
+      list.innerHTML = '<div class="card" style="text-align:center; color:var(--ink-soft); font-size:13px;">Nenhuma cotação no momento.</div>';
       return;
     }
-    mine.forEach(function(q){ list.appendChild(quotationCardForSupplier(q)); });
+    QUOTATIONS.forEach(function(q){ list.appendChild(quotationCardForSupplier(q)); });
   }
 
-  function competitorRow(q, bid, competitorNumber){
-    var isMe = bid.supplier === MY_NAME;
-    var prices = q.bids.map(function(b){ return b.price; });
-    var lowest = Math.min.apply(null, prices);
-    var displayName = isMe ? 'Sua proposta' : ('Concorrente ' + competitorNumber);
-    var row = document.createElement('div');
-    row.className = 'card';
-    if(isMe) row.style.border = '2px solid var(--amber)';
-    row.innerHTML =
-      '<div class="row" style="justify-content:space-between; align-items:flex-start;">' +
-        '<div><div class="row-title">' + displayName + (bid.price === lowest ? ' <span class="badge badge-green">MENOR PREÇO</span>' : '') + '</div>' +
-        '<div class="row-sub">Marca: ' + bid.brand + (bid.obs ? ' · ' + bid.obs : '') + '</div></div>' +
-        '<div style="font-size:16px; font-weight:700; font-family:\'Fraunces\',serif;">' + money(bid.price) + '</div>' +
+  function competitorEntryRow(bid, isBest){
+    if(bid.notAvailable){
+      return '<div class="card"><div class="row-title" style="color:var(--ink-faint); font-size:13px;">Concorrente</div><div class="row-sub">Não trabalha com este produto.</div></div>';
+    }
+    return '<div class="card"><div class="row" style="justify-content:space-between; align-items:flex-start;">' +
+      '<div><div class="row-title" style="font-size:13px;">Concorrente' + (isBest ? ' <span class="badge badge-green">MENOR PREÇO</span>' : '') + '</div>' +
+      '<div class="row-sub">Marca: ' + (bid.brand || '—') + (bid.obs ? ' · ' + bid.obs : '') + '</div></div>' +
+      '<div style="font-size:15px; font-weight:700; font-family:\'Fraunces\',serif;">' + money(bid.price) + '</div>' +
+      '</div></div>';
+  }
+
+  function myEntryRow(bid, index){
+    return '<div class="card" data-row data-bid-id="' + (bid.bidId || '') + '" style="margin-bottom:10px;">' +
+      '<div style="display:flex; gap:10px; flex-wrap:wrap; margin-bottom:8px;">' +
+        '<input type="text" data-field="brand" placeholder="Marca" value="' + (bid.brand || '') + '" style="flex:1 1 120px; border:1px solid var(--line); border-radius:8px; padding:8px 10px; font-size:13px;">' +
+        '<input type="text" data-field="price" placeholder="R$ 0,00" value="' + (bid.price != null ? money(bid.price) : '') + '" style="flex:1 1 100px; border:1px solid var(--line); border-radius:8px; padding:8px 10px; font-size:13px;">' +
+      '</div>' +
+      '<textarea data-field="obs" rows="1" placeholder="Observação (opcional)" style="width:100%; box-sizing:border-box; border:1px solid var(--line); border-radius:8px; padding:8px 10px; font-size:12px; margin-bottom:8px;">' + (bid.obs || '') + '</textarea>' +
+      '<button type="button" class="btn btn-ghost" data-action="remover-entrada" style="padding:6px 12px; font-size:12px; color:var(--red);">Remover esta opção</button>' +
+    '</div>';
+  }
+
+  function supplierItemBlock(q, item){
+    var wrap = document.createElement('div');
+    var myBids = item.bids.filter(function(b){ return b.supplier === MY_NAME; });
+    var isNotAvailable = myBids.length > 0 && myBids.every(function(b){ return b.notAvailable; });
+    var others = item.bids.filter(function(b){ return b.supplier !== MY_NAME; });
+    var activePrices = item.bids.filter(function(b){ return !b.notAvailable && b.price != null; }).map(function(b){ return b.price; });
+    var lowest = activePrices.length ? Math.min.apply(null, activePrices) : null;
+    var isOpen = item.status === 'aberta';
+
+    var header = '<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">' +
+      '<h3 style="font-size:16px;">' + item.name + '</h3>' +
+      (isOpen ? '<span class="badge badge-green">Aberta</span>' : '<span class="badge badge-gray">Encerrada' + (item.winner ? (item.winner === MY_NAME ? ' · você venceu!' : '') : '') + '</span>') +
+    '</div>';
+
+    var myRowsHtml = (isNotAvailable ? [] : (myBids.length ? myBids : [{brand:'', price:null, obs:'', bidId:null}]))
+      .map(function(b){ return myEntryRow(b, 0); }).join('');
+
+    var editor =
+      '<div class="card" style="background:var(--ink-dark); color:#fff; margin-bottom:12px;' + (isOpen ? '' : ' opacity:0.6;') + '">' +
+        '<label style="display:flex; align-items:center; gap:8px; font-size:13px; color:var(--ink-muted); margin-bottom:12px;">' +
+          '<input type="checkbox" data-action="toggle-not-available" ' + (isNotAvailable ? 'checked' : '') + ' ' + (isOpen ? '' : 'disabled') + '> Não trabalho com este produto' +
+        '</label>' +
+        '<div data-rows-container style="' + (isNotAvailable ? 'display:none;' : '') + '">' +
+          '<div data-rows>' + myRowsHtml + '</div>' +
+          (isOpen ? '<button type="button" class="btn btn-ghost" data-action="adicionar-entrada" style="margin-bottom:12px;">+ Adicionar outra opção</button>' : '') +
+        '</div>' +
+        (isOpen ? '<button type="button" class="btn" data-action="salvar-item" style="background:var(--amber); color:#fff;">Salvar respostas para ' + item.name + '</button>' : '<div style="font-size:12px; color:var(--ink-muted);">Item encerrado.</div>') +
       '</div>';
-    return row;
+
+    var competitorsHtml = others.length
+      ? others.map(function(b){ return competitorEntryRow(b, !b.notAvailable && b.price === lowest); }).join('')
+      : '<div class="card" style="text-align:center; color:var(--ink-soft); font-size:13px;">Nenhum concorrente respondeu este item ainda.</div>';
+
+    wrap.innerHTML = header + editor + '<div style="font-size:12px; font-weight:600; color:var(--ink-soft); margin-bottom:8px;">Propostas dos concorrentes</div>' + competitorsHtml;
+    wrap.dataset.itemId = item.id;
+    return wrap;
   }
 
   function renderCotacaoDetail(id){
@@ -4535,59 +4696,32 @@ var QRCode;
     document.getElementById('f-cotacoes-list-view').style.display = 'none';
     document.getElementById('f-cotacoes-detail-view').style.display = 'block';
 
-    document.getElementById('f-cotacao-detail-badge').textContent = q.category;
     document.getElementById('f-cotacao-detail-title').textContent = q.title;
-    document.getElementById('f-cotacao-detail-sub').textContent = (q.status === 'aberta' ? 'Aberta até ' + fmtDate(q.deadline) : 'Encerrada') + (q.winner ? ' · vencedor: ' + q.winner : '');
+    document.getElementById('f-cotacao-detail-sub').textContent = (quotationOverallStatus(q) === 'aberta' ? 'Aberta até ' + fmtDate(q.deadline) : 'Encerrada') + ' · ' + q.items.length + ' item(ns)';
 
-    var myBid = q.bids.filter(function(b){ return b.supplier === MY_NAME; })[0];
-    document.getElementById('f-cotacao-marca').value = myBid ? myBid.brand : '';
-    document.getElementById('f-cotacao-preco').value = myBid ? money(myBid.price) : '';
-    document.getElementById('f-cotacao-obs').value = myBid ? myBid.obs : '';
-    var formBox = document.getElementById('f-cotacao-marca').closest('.card');
-    var sendBtn = document.getElementById('f-cotacao-enviar');
-    if(q.status !== 'aberta'){
-      formBox.style.opacity = '0.6';
-      sendBtn.disabled = true;
-      sendBtn.textContent = 'Cotação encerrada';
-    } else {
-      formBox.style.opacity = '1';
-      sendBtn.disabled = false;
-      sendBtn.textContent = myBid ? 'Atualizar proposta' : 'Enviar proposta';
-    }
-
-    var others = q.bids.filter(function(b){ return b.supplier !== MY_NAME; });
-    var bidsList = document.getElementById('f-cotacao-bids-list');
-    bidsList.innerHTML = '';
-    var sorted = q.bids.slice().sort(function(a,b){ return a.price - b.price; });
-    if(sorted.length === 0){
-      bidsList.innerHTML = '<div class="card" style="text-align:center; color:var(--ink-soft); font-size:13px;">Nenhuma proposta enviada ainda.</div>';
-    } else {
-      var competitorCounter = 0;
-      sorted.forEach(function(bid){
-        var num = bid.supplier === MY_NAME ? null : ++competitorCounter;
-        bidsList.appendChild(competitorRow(q, bid, num));
-      });
-    }
-
-    var posEl = document.getElementById('f-cotacao-posicao');
-    if(myBid && others.length){
-      var lowestOther = Math.min.apply(null, others.map(function(b){ return b.price; }));
-      posEl.textContent = myBid.price <= lowestOther
-        ? 'Você está com o menor preço da cotação.'
-        : 'O menor concorrente está em ' + money(lowestOther) + ' (' + money(myBid.price - lowestOther) + ' abaixo do seu).';
-    } else {
-      posEl.textContent = '';
-    }
+    var itensList = document.getElementById('f-cotacao-itens-list');
+    itensList.innerHTML = '';
+    q.items.forEach(function(item){ itensList.appendChild(supplierItemBlock(q, item)); });
   }
 
   async function refreshQuotationBids(qId){
-    var res = await db.from('quotation_bids').select('id,supplier_id,brand,price,observacao').eq('quotation_id', qId);
-    var q = QUOTATIONS.filter(function(x){ return x.id === qId; })[0];
-    if(q && res.data){
-      q.bids = res.data.map(function(b){
-        return { bidId:b.id, supplier: supplierNameById[b.supplier_id] || 'Fornecedor', brand:b.brand, price:Number(b.price), obs:b.observacao || '' };
+    var selectStr = 'id,title,deadline,status, quotation_items(id,product_name,status,winner_bid_id, quotation_bids(id,supplier_id,brand,price,observacao,not_available))';
+    var res = await db.from('quotations').select(selectStr).eq('id', qId).maybeSingle();
+    if(!res.data) return;
+    var r = res.data;
+    var items = (r.quotation_items || []).map(function(it){
+      var bids = (it.quotation_bids || []).map(function(b){
+        return {
+          bidId:b.id, supplier: supplierNameById[b.supplier_id] || 'Fornecedor',
+          brand:b.brand, price: b.price != null ? Number(b.price) : null,
+          obs:b.observacao || '', notAvailable: !!b.not_available
+        };
       });
-    }
+      var winnerBid = it.winner_bid_id ? bids.filter(function(b){ return b.bidId === it.winner_bid_id; })[0] : null;
+      return { id: it.id, name: it.product_name, status: it.status, winnerBidId: it.winner_bid_id || null, winner: winnerBid ? winnerBid.supplier : null, bids: bids };
+    });
+    var idx = QUOTATIONS.findIndex(function(x){ return x.id === qId; });
+    if(idx > -1) QUOTATIONS[idx] = { id: r.id, title: r.title, deadline: new Date(r.deadline), status: r.status, items: items };
   }
 
   function unsubscribeQuotation(){
@@ -4597,8 +4731,11 @@ var QRCode;
   function subscribeToQuotation(qId){
     unsubscribeQuotation();
     if(!dbReady || String(qId).indexOf('local_') === 0) return;
+    var q = QUOTATIONS.filter(function(x){ return x.id === qId; })[0];
+    var itemIds = q ? q.items.map(function(it){ return it.id; }) : [];
+    if(itemIds.length === 0) return;
     quotationChannel = db.channel('quotation_bids_' + qId)
-      .on('postgres_changes', { event:'*', schema:'public', table:'quotation_bids', filter:'quotation_id=eq.' + qId }, async function(){
+      .on('postgres_changes', { event:'*', schema:'public', table:'quotation_bids', filter:'quotation_item_id=in.(' + itemIds.join(',') + ')' }, async function(){
         await refreshQuotationBids(qId);
         if(currentQuotationId === qId) renderCotacaoDetail(qId);
       })
@@ -4609,49 +4746,78 @@ var QRCode;
 
   supplierRoot.addEventListener('click', function(e){
     var verBtn = e.target.closest('[data-action="ver-cotacao"]');
-    if(verBtn){ subscribeToQuotation(verBtn.dataset.id); renderCotacaoDetail(verBtn.dataset.id); }
+    if(verBtn){ subscribeToQuotation(verBtn.dataset.id); renderCotacaoDetail(verBtn.dataset.id); return; }
+
+    var addBtn = e.target.closest('[data-action="adicionar-entrada"]');
+    if(addBtn){
+      var rowsContainer = addBtn.previousElementSibling; // [data-rows]
+      rowsContainer.insertAdjacentHTML('beforeend', myEntryRow({ brand:'', price:null, obs:'', bidId:null }, 0));
+      return;
+    }
+    var removeBtn = e.target.closest('[data-action="remover-entrada"]');
+    if(removeBtn){
+      var rowEl = removeBtn.closest('[data-row]');
+      var rowsWrap = rowEl.parentElement;
+      if(rowsWrap.children.length > 1){ rowEl.remove(); }
+      else { rowEl.querySelectorAll('input,textarea').forEach(function(el){ el.value = ''; }); }
+      return;
+    }
+    var saveBtn = e.target.closest('[data-action="salvar-item"]');
+    if(saveBtn){ saveItemResponses(saveBtn.closest('[data-item-id]')); return; }
   });
 
-  document.getElementById('f-cotacao-enviar').addEventListener('click', async function(){
-    var q = QUOTATIONS.filter(function(x){ return x.id === currentQuotationId; })[0];
-    if(!q || q.status !== 'aberta') return;
-    var marca = document.getElementById('f-cotacao-marca').value.trim();
-    var preco = parsePrice(document.getElementById('f-cotacao-preco').value);
-    var obs = document.getElementById('f-cotacao-obs').value.trim();
-    if(!marca || preco === null){ alert('Preencha a marca e um preço válido antes de enviar.'); return; }
-    var myBid = q.bids.filter(function(b){ return b.supplier === MY_NAME; })[0];
-    var previousBrand = myBid ? myBid.brand : null;
-    var previousPrice = myBid ? myBid.price : null;
-    var previousObs = myBid ? myBid.obs : null;
-    if(myBid){ myBid.brand = marca; myBid.price = preco; myBid.obs = obs; }
-    else { q.bids.push({ supplier:MY_NAME, brand:marca, price:preco, obs:obs }); }
+  supplierRoot.addEventListener('change', function(e){
+    var toggle = e.target.closest('[data-action="toggle-not-available"]');
+    if(toggle){
+      var itemBlock = toggle.closest('[data-item-id]');
+      var rowsContainer = itemBlock.querySelector('[data-rows-container]');
+      rowsContainer.style.display = toggle.checked ? 'none' : 'block';
+    }
+  });
 
-    if(dbReady && myId && String(q.id).indexOf('local_') !== 0){
-      try{
-        if(myBid && myBid.bidId){
-          check(await db.from('quotation_bids').update({ brand:marca, price:preco, observacao:obs }).eq('id', myBid.bidId), 'Atualizar proposta');
-        } else {
-          var existing = await db.from('quotation_bids').select('id').eq('quotation_id', q.id).eq('supplier_id', myId).maybeSingle();
-          check(existing, 'Verificar proposta existente');
-          if(existing.data){
-            check(await db.from('quotation_bids').update({ brand:marca, price:preco, observacao:obs }).eq('id', existing.data.id), 'Atualizar proposta');
-          } else {
-            var ins = check(await db.from('quotation_bids').insert({ quotation_id:q.id, supplier_id:myId, brand:marca, price:preco, observacao:obs }).select('id').single(), 'Enviar proposta');
-            if(myBid && ins.data) myBid.bidId = ins.data.id;
-          }
+  async function saveItemResponses(itemBlock){
+    var itemId = itemBlock.dataset.itemId;
+    var q = QUOTATIONS.filter(function(x){ return x.id === currentQuotationId; })[0];
+    if(!q) return;
+    var item = q.items.filter(function(it){ return it.id === itemId; })[0];
+    if(!item || item.status !== 'aberta') return;
+
+    var notAvailable = itemBlock.querySelector('[data-action="toggle-not-available"]').checked;
+    var newBids = [];
+    if(notAvailable){
+      newBids.push({ supplier:MY_NAME, brand:null, price:null, obs:'', notAvailable:true, bidId:null });
+    } else {
+      var rows = itemBlock.querySelectorAll('[data-row]');
+      rows.forEach(function(row){
+        var brand = row.querySelector('[data-field="brand"]').value.trim();
+        var price = parsePrice(row.querySelector('[data-field="price"]').value);
+        var obs = row.querySelector('[data-field="obs"]').value.trim();
+        if(brand && price !== null){
+          newBids.push({ supplier:MY_NAME, brand:brand, price:price, obs:obs, notAvailable:false, bidId:row.dataset.bidId || null });
         }
-      } catch(err){
-        console.error('Erro ao salvar proposta', err);
-        if(myBid){ myBid.brand = previousBrand; myBid.price = previousPrice; myBid.obs = previousObs; }
-        else { q.bids = q.bids.filter(function(b){ return b !== q.bids[q.bids.length-1]; }); }
-        alert('Não foi possível enviar sua proposta.\n\nDetalhe técnico: ' + (err && err.message ? err.message : err));
-        renderCotacaoDetail(q.id);
-        return;
-      }
+      });
+      if(newBids.length === 0){ alert('Preencha marca e preço de pelo menos uma opção, ou marque que não trabalha com este produto.'); return; }
     }
 
+    var previousBids = item.bids.filter(function(b){ return b.supplier === MY_NAME; });
+    item.bids = item.bids.filter(function(b){ return b.supplier !== MY_NAME; }).concat(newBids);
+
+    if(dbReady && myId && String(itemId).indexOf('local_') !== 0){
+      try{
+        check(await db.from('quotation_bids').delete().eq('quotation_item_id', itemId).eq('supplier_id', myId), 'Limpar respostas anteriores');
+        var rowsToInsert = newBids.map(function(b){
+          return { quotation_item_id:itemId, supplier_id:myId, brand:b.brand, price:b.price, observacao:b.obs, not_available:b.notAvailable };
+        });
+        var ins = check(await db.from('quotation_bids').insert(rowsToInsert).select('id'), 'Salvar respostas');
+        if(ins.data){ ins.data.forEach(function(row, i){ if(newBids[i]) newBids[i].bidId = row.id; }); }
+      } catch(err){
+        console.error('Erro ao salvar respostas', err);
+        item.bids = item.bids.filter(function(b){ return b.supplier !== MY_NAME; }).concat(previousBids);
+        alert('Não foi possível salvar suas respostas.\n\nDetalhe técnico: ' + (err && err.message ? err.message : err));
+      }
+    }
     renderCotacaoDetail(q.id);
-  });
+  }
 
   /* ---------- Perfil ---------- */
   function renderTagList(containerId, arr, tagClass, placeholder){
