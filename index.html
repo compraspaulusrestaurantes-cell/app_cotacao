@@ -290,6 +290,15 @@ input, textarea {
     font-size: 11px;
     color: #B9D9C9
     }
+#buyer-root .sidebar-user-logout {
+    font-size: 11px;
+    color: #B9D9C9;
+    background: none;
+    border: none;
+    padding: 0;
+    cursor: pointer;
+    text-decoration: underline
+    }
 #buyer-root .main {
     flex: 1 1 auto;
     margin-left: var(--sidebar-w);
@@ -1430,7 +1439,7 @@ html, body {
       <div class="avatar">M</div>
       <div>
         <div class="sidebar-user-name">Murillo</div>
-        <div class="sidebar-user-role">Compras</div>
+        <button class="sidebar-user-logout" data-action="logout">Sair</button>
       </div>
     </div>
   </nav>
@@ -2070,6 +2079,16 @@ html, body {
           <div class="card">
             <div style="font-size:13px; color:var(--ink-soft); margin-bottom:10px; font-weight:600;">Marcas atendidas</div>
             <div class="tag-list" id="f-marcas-list" style="display:flex; flex-wrap:wrap; gap:8px;"></div>
+          </div>
+
+          <div class="card">
+            <div style="font-size:13px; color:var(--ink-soft); margin-bottom:10px; font-weight:600;">Trocar senha</div>
+            <div class="banner banner-green" id="f-senha-saved-banner" style="display:none; margin-bottom:12px;">Senha atualizada.</div>
+            <div style="display:flex; gap:14px; flex-wrap:wrap; margin-bottom:14px;">
+              <div class="field" style="flex:1 1 200px;"><label for="f-nova-senha">Nova senha</label><input id="f-nova-senha" type="password" placeholder="Mínimo 6 caracteres" autocomplete="off"></div>
+              <div class="field" style="flex:1 1 200px;"><label for="f-nova-senha-confirma">Confirmar nova senha</label><input id="f-nova-senha-confirma" type="password" placeholder="Repita a nova senha" autocomplete="off"></div>
+            </div>
+            <button class="btn" id="f-trocar-senha-btn" style="background:var(--amber); color:#fff;">Atualizar senha</button>
           </div>
 
           <button class="btn btn-primary" id="f-perfil-save-btn" style="width:fit-content;">Salvar alterações</button>
@@ -2723,7 +2742,7 @@ var QRCode;
   var APP_BASE_URL = 'https://compraspaulusrestaurantes-cell.github.io/app_cotacao/';
   var DEFAULT_SUPPLIER_NAME = 'Distribuidora Bom Preço';
   var SUPPLIERS_SEED = [
-    { name:'Distribuidora Bom Preço', categories:['Mercearia','Carnes','Limpeza','Frango'] },
+    { name:'Distribuidora Bom Preço', categories:['Mercearia','Carnes','Limpeza','Frango'], email:'bompreco@fornecedor.com.br', password:'demo1234' },
     { name:'Aves & Cia Distribuidora', categories:['Carnes','Frango'] },
     { name:'Central de Carnes SP', categories:['Carnes','Frango'] },
     { name:'Grãos do Sul', categories:['Mercearia','Arroz'] }
@@ -2787,7 +2806,7 @@ var QRCode;
     var rows = res.data || [];
     if(rows.length === 0){
       var insertRes = check(await db.from('suppliers').insert(SUPPLIERS_SEED.map(function(s){
-        return { name:s.name, categories:s.categories };
+        return { name:s.name, categories:s.categories, email:s.email || null, password:s.password || null };
       })).select('id,name,email,phone,address,categories,brands'), 'Criar fornecedores iniciais');
       rows = insertRes.data || [];
     }
@@ -3252,17 +3271,28 @@ var QRCode;
   });
   document.getElementById('fornecedor-form-cancel').addEventListener('click', closeSupplierForm);
 
+  function generateTempPassword(){
+    var chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789';
+    var out = '';
+    for(var i=0;i<8;i++) out += chars[Math.floor(Math.random()*chars.length)];
+    return out;
+  }
+
   document.getElementById('fornecedor-form-save').addEventListener('click', async function(){
     var nome = document.getElementById('ff-nome').value.trim();
     if(!nome) return;
+    var email = document.getElementById('ff-email').value.trim() || null;
+    var isNewSupplier = !editingSupplierId;
+    var tempPassword = (isNewSupplier && email) ? generateTempPassword() : null;
     var payload = {
       name: nome,
-      email: document.getElementById('ff-email').value.trim() || null,
+      email: email,
       phone: document.getElementById('ff-telefone').value.trim() || null,
       address: document.getElementById('ff-endereco').value.trim() || null,
       categories: document.getElementById('ff-categorias').value.split(',').map(function(s){ return s.trim(); }).filter(Boolean),
       brands: document.getElementById('ff-marcas').value.split(',').map(function(s){ return s.trim(); }).filter(Boolean)
     };
+    if(tempPassword) payload.password = tempPassword;
     try{
       if(editingSupplierId){
         check(await db.from('suppliers').update(payload).eq('id', editingSupplierId), 'Editar fornecedor');
@@ -3280,6 +3310,9 @@ var QRCode;
     }
     closeSupplierForm();
     renderFornecedoresCadastro();
+    if(tempPassword){
+      alert('Fornecedor cadastrado!\n\nEnvie esse acesso a ele:\nE-mail: ' + email + '\nSenha temporária: ' + tempPassword + '\n\nEle pode trocar a senha depois, no perfil do portal dele.');
+    }
   });
 
   buyerRoot.addEventListener('click', async function(e){
@@ -4117,6 +4150,15 @@ var QRCode;
     goTo('home');
   });
 
+  buyerRoot.addEventListener('click', function(e){
+    if(e.target.closest('[data-action="logout"]')){
+      document.getElementById('app').classList.remove('active');
+      document.getElementById('login-screen').classList.add('active');
+      document.getElementById('login-email').value = '';
+      document.getElementById('login-senha').value = '';
+    }
+  });
+
 })();
 
 </script>
@@ -4131,7 +4173,7 @@ var QRCode;
   var db = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
   var SUPPLIERS_SEED = [
-    { name:'Distribuidora Bom Preço', categories:['Mercearia','Carnes','Limpeza','Frango'] },
+    { name:'Distribuidora Bom Preço', categories:['Mercearia','Carnes','Limpeza','Frango'], email:'bompreco@fornecedor.com.br', password:'demo1234' },
     { name:'Aves & Cia Distribuidora', categories:['Carnes','Frango'] },
     { name:'Central de Carnes SP', categories:['Carnes','Frango'] },
     { name:'Grãos do Sul', categories:['Mercearia','Arroz'] }
@@ -4194,12 +4236,12 @@ var QRCode;
   }
 
   async function ensureSuppliers(){
-    var res = check(await db.from('suppliers').select('id,name,email,categories'), 'Ler fornecedores');
+    var res = check(await db.from('suppliers').select('id,name,email,password,categories'), 'Ler fornecedores');
     var rows = res.data || [];
     if(rows.length === 0){
       var insertRes = check(await db.from('suppliers').insert(SUPPLIERS_SEED.map(function(s){
-        return { name:s.name, categories:s.categories };
-      })).select('id,name,email,categories'), 'Criar fornecedores iniciais');
+        return { name:s.name, categories:s.categories, email:s.email || null, password:s.password || null };
+      })).select('id,name,email,password,categories'), 'Criar fornecedores iniciais');
       rows = insertRes.data || [];
     }
     rows.forEach(function(r){ supplierIdByName[r.name] = r.id; supplierNameById[r.id] = r.name; });
@@ -4275,12 +4317,12 @@ var QRCode;
     }).sort(function(a,b){ return b.deadline - a.deadline; });
   }
 
-  async function loginAndBootstrap(email){
+  async function loginAndBootstrap(email, senha){
     try{
       var suppliers = await ensureSuppliers();
       var match = suppliers.filter(function(s){ return s.email && s.email.toLowerCase() === email.toLowerCase(); })[0];
-      if(!match) match = suppliers.filter(function(s){ return s.name === MY_NAME; })[0];
-      if(!match){ alert('Não encontramos um fornecedor com esse e-mail cadastrado no painel do comprador.'); return false; }
+      if(!match){ return { ok:false, reason:'email' }; }
+      if(!match.password || match.password !== senha){ return { ok:false, reason:'senha' }; }
       myId = match.id;
       MY_NAME = match.name;
       if(match.categories && match.categories.length){
@@ -4291,11 +4333,11 @@ var QRCode;
       await ensureMySupplierProducts();
       await ensureQuotations();
       dbReady = true;
-      return true;
+      return { ok:true };
     } catch(err){
       console.error('Falha ao conectar no Supabase.', err);
       alert('Não foi possível conectar ao banco de dados.\n\nDetalhe técnico: ' + (err && err.message ? err.message : err));
-      return false;
+      return { ok:false, reason:'conexao' };
     }
   }
 
@@ -4311,6 +4353,7 @@ var QRCode;
     var email = document.getElementById('f-login-email').value.trim();
     var senha = document.getElementById('f-login-senha').value.trim();
     if(!email || !senha){
+      document.getElementById('f-login-error').textContent = 'Preencha o e-mail e a senha.';
       document.getElementById('f-login-error').classList.add('show');
       return;
     }
@@ -4318,11 +4361,16 @@ var QRCode;
     var originalLabel = btn.textContent;
     btn.textContent = 'Conectando...';
     btn.disabled = true;
-    var ok = await loginAndBootstrap(email);
+    var result = await loginAndBootstrap(email, senha);
     btn.disabled = false;
     btn.textContent = originalLabel;
-    if(!ok){
-      document.getElementById('f-login-error').textContent = 'Não encontramos um fornecedor com esse e-mail.';
+    if(!result.ok){
+      var messages = {
+        email: 'Não encontramos um fornecedor com esse e-mail.',
+        senha: 'Senha incorreta.',
+        conexao: 'Não foi possível conectar ao banco de dados agora.'
+      };
+      document.getElementById('f-login-error').textContent = messages[result.reason] || 'Não foi possível entrar.';
       document.getElementById('f-login-error').classList.add('show');
       return;
     }
@@ -4463,16 +4511,17 @@ var QRCode;
     mine.forEach(function(q){ list.appendChild(quotationCardForSupplier(q)); });
   }
 
-  function competitorRow(q, bid){
+  function competitorRow(q, bid, competitorNumber){
     var isMe = bid.supplier === MY_NAME;
     var prices = q.bids.map(function(b){ return b.price; });
     var lowest = Math.min.apply(null, prices);
+    var displayName = isMe ? 'Sua proposta' : ('Concorrente ' + competitorNumber);
     var row = document.createElement('div');
     row.className = 'card';
     if(isMe) row.style.border = '2px solid var(--amber)';
     row.innerHTML =
       '<div class="row" style="justify-content:space-between; align-items:flex-start;">' +
-        '<div><div class="row-title">' + bid.supplier + (isMe ? ' <span class="badge badge-amber">VOCÊ</span>' : '') + (bid.price === lowest ? ' <span class="badge badge-green">MENOR PREÇO</span>' : '') + '</div>' +
+        '<div><div class="row-title">' + displayName + (bid.price === lowest ? ' <span class="badge badge-green">MENOR PREÇO</span>' : '') + '</div>' +
         '<div class="row-sub">Marca: ' + bid.brand + (bid.obs ? ' · ' + bid.obs : '') + '</div></div>' +
         '<div style="font-size:16px; font-weight:700; font-family:\'Fraunces\',serif;">' + money(bid.price) + '</div>' +
       '</div>';
@@ -4513,7 +4562,11 @@ var QRCode;
     if(sorted.length === 0){
       bidsList.innerHTML = '<div class="card" style="text-align:center; color:var(--ink-soft); font-size:13px;">Nenhuma proposta enviada ainda.</div>';
     } else {
-      sorted.forEach(function(bid){ bidsList.appendChild(competitorRow(q, bid)); });
+      var competitorCounter = 0;
+      sorted.forEach(function(bid){
+        var num = bid.supplier === MY_NAME ? null : ++competitorCounter;
+        bidsList.appendChild(competitorRow(q, bid, num));
+      });
     }
 
     var posEl = document.getElementById('f-cotacao-posicao');
@@ -4643,6 +4696,24 @@ var QRCode;
 
   document.getElementById('f-perfil-save-btn').addEventListener('click', function(){
     document.getElementById('f-perfil-saved-banner').classList.add('show');
+  });
+
+  document.getElementById('f-trocar-senha-btn').addEventListener('click', async function(){
+    var novaSenha = document.getElementById('f-nova-senha').value;
+    var confirma = document.getElementById('f-nova-senha-confirma').value;
+    document.getElementById('f-senha-saved-banner').style.display = 'none';
+    if(novaSenha.length < 6){ alert('A nova senha precisa ter pelo menos 6 caracteres.'); return; }
+    if(novaSenha !== confirma){ alert('As senhas não são iguais.'); return; }
+    if(!dbReady || !myId){ alert('Sem conexão com o banco de dados agora. Tente de novo mais tarde.'); return; }
+    try{
+      check(await db.from('suppliers').update({ password: novaSenha }).eq('id', myId), 'Atualizar senha');
+      document.getElementById('f-nova-senha').value = '';
+      document.getElementById('f-nova-senha-confirma').value = '';
+      document.getElementById('f-senha-saved-banner').style.display = 'block';
+    } catch(err){
+      console.error('Erro ao atualizar senha', err);
+      alert('Não foi possível atualizar a senha.\n\nDetalhe técnico: ' + (err && err.message ? err.message : err));
+    }
   });
 
 })();
