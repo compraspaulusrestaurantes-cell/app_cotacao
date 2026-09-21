@@ -1664,6 +1664,11 @@ html, body {
             </div>
             <div style="display:flex; gap:14px; flex-wrap:wrap; margin-bottom:16px;">
               <div class="field" style="flex:1 1 200px;"><label for="pf-preco">Preço de referência</label><input id="pf-preco" type="text" placeholder="R$ 0,00"></div>
+              <div class="field" style="flex:1 1 220px;">
+                <label for="pf-imagem">Foto do produto</label>
+                <input id="pf-imagem" type="file" accept="image/*" style="width:100%; border:1px solid var(--line); border-radius:8px; padding:8px 10px; font-size:12px; background:#fff;">
+                <div id="pf-imagem-preview" style="margin-top:8px;"></div>
+              </div>
             </div>
             <button class="btn btn-primary" id="produto-form-save">Salvar produto</button>
             <button class="btn btn-ghost" id="produto-form-cancel" style="margin-left:8px;">Cancelar</button>
@@ -2733,10 +2738,10 @@ var QRCode;
   var UNIT_LABELS = { Unidade:'un', Caixa:'cx', Pacote:'pct', Fardo:'fardo', Kg:'kg', Litro:'L', Saco:'saco' };
 
   var PRODUCTS = [
-    { id:'arroz', name:"Arroz tipo 1 · 5kg", category:'Mercearia', brand:'Camil', unit:'Unidade', recQty:14, price:26.50, obs:'', available:true, best:true, selected:true },
-    { id:'oleo', name:"Óleo de soja · 900ml", category:'Mercearia', brand:'Liza', unit:'Unidade', recQty:18, price:7.10, obs:'', available:true, selected:true },
-    { id:'frango', name:"Peito de frango cong. · caixa 10kg", category:'Carnes', brand:'Sadia', unit:'Caixa', recQty:20, price:15.99, obs:'Comprando 20 cx ou mais, sai por R$ 13,99 a caixa.', available:true, selected:true },
-    { id:'detergente', name:"Detergente neutro · 5L", category:'Limpeza', brand:'Ypê', unit:'Unidade', recQty:10, price:21.40, obs:'', available:true, selected:true },
+    { id:'arroz', name:"Arroz tipo 1 · 5kg", category:'Mercearia', brand:'Camil', unit:'Unidade', recQty:14, price:26.50, obs:'', available:true, best:true, selected:false },
+    { id:'oleo', name:"Óleo de soja · 900ml", category:'Mercearia', brand:'Liza', unit:'Unidade', recQty:18, price:7.10, obs:'', available:true, selected:false },
+    { id:'frango', name:"Peito de frango cong. · caixa 10kg", category:'Carnes', brand:'Sadia', unit:'Caixa', recQty:20, price:15.99, obs:'Comprando 20 cx ou mais, sai por R$ 13,99 a caixa.', available:true, selected:false },
+    { id:'detergente', name:"Detergente neutro · 5L", category:'Limpeza', brand:'Ypê', unit:'Unidade', recQty:10, price:21.40, obs:'', available:true, selected:false },
     { id:'refrigerante', name:"Refrigerante lata · 350ml", category:'Mercearia', brand:'Coca-Cola', unit:'Unidade', recQty:30, price:3.80, obs:'', available:true, selected:false },
     { id:'cafe', name:"Café em pó · 500g", category:'Mercearia', brand:'3 Corações', unit:'Unidade', recQty:16, price:14.20, obs:'', available:true, selected:false },
   ];
@@ -2802,26 +2807,26 @@ var QRCode;
   }
 
   async function ensureProducts(){
-    var res = check(await db.from('products').select('id,name,category,unit'), 'Ler produtos');
+    var res = check(await db.from('products').select('id,name,category,unit,image_url'), 'Ler produtos');
     var rows = res.data || [];
     if(rows.length === 0){
       var insertRes = check(await db.from('products').insert(PRODUCTS.map(function(p){
         return { name:p.name, category:p.category, unit:p.unit };
-      })).select('id,name,category,unit'), 'Criar produtos iniciais');
+      })).select('id,name,category,unit,image_url'), 'Criar produtos iniciais');
       rows = insertRes.data || [];
     }
     var byName = {};
     rows.forEach(function(r){ byName[r.name] = r; });
     PRODUCTS.forEach(function(p){
       var row = byName[p.name];
-      if(row){ p.dbId = row.id; if(row.unit) p.unit = row.unit; p.unitLabel = UNIT_LABELS[p.unit] || 'un'; }
+      if(row){ p.dbId = row.id; if(row.unit) p.unit = row.unit; p.unitLabel = UNIT_LABELS[p.unit] || 'un'; p.imageUrl = row.image_url || null; }
     });
     // Products registered later (via the Fornecedores > Produtos screen) that aren't in the local seed list yet
     rows.forEach(function(r){
       if(PRODUCTS.some(function(p){ return p.dbId === r.id; })) return;
       PRODUCTS.push({
         id:r.id, dbId:r.id, name:r.name, category:r.category || 'Mercearia', brand:'',
-        unit:r.unit || 'Unidade', unitLabel:UNIT_LABELS[r.unit] || 'un',
+        unit:r.unit || 'Unidade', unitLabel:UNIT_LABELS[r.unit] || 'un', imageUrl:r.image_url || null,
         recQty:1, qty:1, price:0, obs:'', available:true, selected:false,
         receiveStatus:'pendente', receivedQty:null
       });
@@ -3136,7 +3141,9 @@ var QRCode;
         '<input type="checkbox" ' + (p.selected ? 'checked' : '') + ' aria-label="Selecionar ' + p.name + '" data-id="' + p.id + '" data-action="toggle-select">' +
       '</label>' +
       '<div class="product-card-photo">' +
-        '<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--green)" stroke-width="1.6"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>' +
+        (p.imageUrl
+          ? '<img src="' + p.imageUrl + '" alt="' + p.name + '" style="width:100%; height:100%; object-fit:cover; border-radius:10px;">'
+          : '<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--green)" stroke-width="1.6"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>') +
       '</div>' +
       '<div class="product-card-name">' + p.name + '</div>' +
       '<div class="product-card-price">' + money(p.price) + ' / ' + (p.unitLabel || 'un') + '.</div>' +
@@ -3373,11 +3380,17 @@ var QRCode;
     var row = document.createElement('div');
     row.className = 'card';
     var pack = p.unit === 'Kg' || p.unit === 'Litro' ? '' : (p.unit || 'Unidade');
+    var thumb = p.imageUrl
+      ? '<img src="' + p.imageUrl + '" alt="' + p.name + '" style="width:44px; height:44px; object-fit:cover; border-radius:8px; flex:0 0 auto;">'
+      : '<div style="width:44px; height:44px; border-radius:8px; background:var(--green-tint); flex:0 0 auto; display:flex; align-items:center; justify-content:center;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--green)" stroke-width="1.6"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg></div>';
     row.innerHTML =
       '<div class="row" style="justify-content:space-between; align-items:flex-start;">' +
-        '<div>' +
-          '<div class="row-title">' + p.name + '</div>' +
-          '<div class="row-sub">' + (p.category || '—') + ' · vendido por ' + (p.unit || 'Unidade') + (p.packageSize ? ' (' + p.packageSize + ')' : '') + '</div>' +
+        '<div class="row" style="gap:12px;">' +
+          thumb +
+          '<div>' +
+            '<div class="row-title">' + p.name + '</div>' +
+            '<div class="row-sub">' + (p.category || '—') + ' · vendido por ' + (p.unit || 'Unidade') + (p.packageSize ? ' (' + p.packageSize + ')' : '') + '</div>' +
+          '</div>' +
         '</div>' +
         '<div style="text-align:right;">' +
           '<div style="font-size:14px; font-weight:700; font-family:\'Fraunces\',serif; color:var(--green);">' + money(p.price) + '</div>' +
@@ -3419,8 +3432,21 @@ var QRCode;
     document.getElementById('pf-tamanho').value = p ? (p.packageSize || '') : '';
     document.getElementById('pf-recqty').value = p ? p.recQty : 1;
     document.getElementById('pf-preco').value = p ? money(p.price) : '';
+    document.getElementById('pf-imagem').value = '';
+    document.getElementById('pf-imagem-preview').innerHTML = (p && p.imageUrl)
+      ? '<img src="' + p.imageUrl + '" alt="Foto atual" style="width:72px; height:72px; object-fit:cover; border-radius:8px;">'
+      : '';
     document.getElementById('produto-form').style.display = 'block';
+    var saveBtn = document.getElementById('produto-form-save');
+    saveBtn.disabled = false; saveBtn.textContent = 'Salvar produto';
   }
+  document.getElementById('pf-imagem').addEventListener('change', function(e){
+    var file = e.target.files[0];
+    var preview = document.getElementById('pf-imagem-preview');
+    if(!file){ return; }
+    var url = URL.createObjectURL(file);
+    preview.innerHTML = '<img src="' + url + '" alt="Pré-visualização" style="width:72px; height:72px; object-fit:cover; border-radius:8px;">';
+  });
   function closeProductForm(){
     document.getElementById('produto-form').style.display = 'none';
     editingProductId = null;
@@ -3431,6 +3457,16 @@ var QRCode;
   });
   document.getElementById('produto-form-cancel').addEventListener('click', closeProductForm);
 
+  async function uploadProductImage(file, slugHint){
+    var ext = (file.name && file.name.indexOf('.') > -1) ? file.name.split('.').pop() : 'jpg';
+    var slug = (slugHint || 'produto').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+    var path = (slug || 'produto') + '-' + Date.now() + '.' + ext;
+    var uploadRes = await db.storage.from('product-images').upload(path, file, { upsert:true });
+    if(uploadRes.error) throw new Error('Upload da imagem: ' + uploadRes.error.message);
+    var urlRes = db.storage.from('product-images').getPublicUrl(path);
+    return urlRes.data.publicUrl;
+  }
+
   document.getElementById('produto-form-save').addEventListener('click', async function(){
     var nome = document.getElementById('pf-nome').value.trim();
     if(!nome) return;
@@ -3439,28 +3475,43 @@ var QRCode;
     var packageSize = document.getElementById('pf-tamanho').value.trim();
     var recQty = parseInt(document.getElementById('pf-recqty').value, 10) || 1;
     var preco = parsePriceBR(document.getElementById('pf-preco').value);
+    var imageFile = document.getElementById('pf-imagem').files[0] || null;
+
+    var btn = document.getElementById('produto-form-save');
+    var originalLabel = btn.textContent;
+    if(imageFile){ btn.disabled = true; btn.textContent = 'Enviando foto...'; }
 
     try{
+      var imageUrl = null;
+      if(imageFile && dbReady){
+        imageUrl = await uploadProductImage(imageFile, nome);
+      }
+      btn.textContent = 'Salvando...';
       if(editingProductId){
         var existing = PRODUCTS.filter(function(p){ return p.id === editingProductId; })[0];
         if(existing){
           existing.name = nome; existing.category = categoria; existing.unit = unidade;
           existing.unitLabel = UNIT_LABELS[unidade] || 'un'; existing.packageSize = packageSize;
           existing.recQty = recQty; if(preco !== null) existing.price = preco;
+          if(imageUrl) existing.imageUrl = imageUrl;
           if(dbReady && existing.dbId){
-            check(await db.from('products').update({ name:nome, category:categoria, unit:unidade }).eq('id', existing.dbId), 'Editar produto');
+            var updatePayload = { name:nome, category:categoria, unit:unidade };
+            if(imageUrl) updatePayload.image_url = imageUrl;
+            check(await db.from('products').update(updatePayload).eq('id', existing.dbId), 'Editar produto');
             if(preco !== null) saveSupplierProduct(existing);
           }
         }
       } else {
         var newProduct = {
           id:'local_' + Date.now(), dbId:null, name:nome, category:categoria, brand:'',
-          unit:unidade, unitLabel:UNIT_LABELS[unidade] || 'un', packageSize:packageSize,
+          unit:unidade, unitLabel:UNIT_LABELS[unidade] || 'un', packageSize:packageSize, imageUrl:imageUrl,
           recQty:recQty, qty:recQty, price: preco || 0, obs:'', available:true, selected:false,
           receiveStatus:'pendente', receivedQty:null
         };
         if(dbReady){
-          var ins = check(await db.from('products').insert({ name:nome, category:categoria, unit:unidade }).select('id').single(), 'Criar produto');
+          var insertPayload = { name:nome, category:categoria, unit:unidade };
+          if(imageUrl) insertPayload.image_url = imageUrl;
+          var ins = check(await db.from('products').insert(insertPayload).select('id').single(), 'Criar produto');
           if(ins.data){
             newProduct.id = ins.data.id; newProduct.dbId = ins.data.id;
             if(defaultSupplierId){
@@ -3471,6 +3522,7 @@ var QRCode;
         PRODUCTS.push(newProduct);
       }
     } catch(err){
+      btn.disabled = false; btn.textContent = originalLabel;
       console.error('Erro ao salvar produto', err);
       alert('Não foi possível salvar o produto.\n\nDetalhe técnico: ' + (err && err.message ? err.message : err));
       return;
