@@ -1846,6 +1846,13 @@ html, body {
             <div class="stepper-track" id="tracker"></div>
           </div>
           <div style="display:flex; gap:16px; flex-wrap:wrap;">
+            <a class="card row" id="pedido-whatsapp-btn" href="#" target="_blank" rel="noopener" style="flex:1 1 260px; min-width:240px; text-align:left; border:1px solid var(--line); background:#fff; text-decoration:none;">
+              <div style="width:44px; height:44px; border-radius:10px; background:#E3F7EB; display:flex; align-items:center; justify-content:center; flex:0 0 auto;">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="#1F9E58"><path d="M12 2a10 10 0 0 0-8.6 15L2 22l5.2-1.4A10 10 0 1 0 12 2zm5.7 14.2c-.2.6-1.4 1.2-2 1.3-.5.1-1.2.2-3.5-.7-2.9-1.2-4.8-4.1-5-4.3-.1-.2-1.2-1.6-1.2-3 0-1.4.7-2.1 1-2.4.3-.3.6-.4.8-.4h.6c.2 0 .4 0 .6.5.2.5.7 1.8.8 1.9.1.1.1.3 0 .5-.1.2-.2.3-.3.5-.1.1-.3.3-.4.4-.1.1-.3.3-.1.6.2.3.9 1.4 1.9 2.3 1.3 1.1 2.4 1.5 2.7 1.6.3.1.5.1.7-.1.2-.2.7-.8.9-1.1.2-.3.4-.2.7-.1.3.1 1.7.8 2 1 .3.1.5.2.5.3.1.2.1.7-.1 1.3z"/></svg>
+              </div>
+              <div class="row-main"><div class="row-title">Enviar via WhatsApp</div><div class="row-sub" id="pedido-whatsapp-sub">avisar o fornecedor sobre este pedido</div></div>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--ink-soft)" stroke-width="2.4"><path d="M9 6l6 6-6 6"/></svg>
+            </a>
             <button class="card row" data-nav="nota" style="flex:1 1 260px; min-width:240px; text-align:left; border:1px solid var(--line); background:#fff;">
               <div style="width:44px; height:44px; border-radius:10px; background:var(--green-tint); display:flex; align-items:center; justify-content:center; flex:0 0 auto;">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--green)" stroke-width="2"><path d="M6 2h9l3 3v17H6z"/><path d="M14 2v4h4"/><path d="M9 12h6M9 16h6"/></svg>
@@ -4061,6 +4068,26 @@ var QRCode;
         track.appendChild(line);
       }
     });
+
+    var supplier = SUPPLIERS.filter(function(s){ return s.id === order.supplier_id; })[0];
+    var phoneDigits = normalizePhoneForWhatsApp(supplier ? supplier.phone : null);
+    var itemsText = (state.currentOrderItems || []).map(function(it){ return '- ' + it.name + ': ' + it.qty + ' un.'; }).join('\n');
+    var msg = 'Olá' + (supplier ? ', ' + supplier.name : '') + '! Segue o pedido ' + order.code + ' (Paulu\'s Restaurantes):\n\n' +
+      (itemsText || '(itens do pedido)') + '\n\nTotal: ' + money(Number(order.total) || 0) +
+      '\n\nEntrega prevista: ' + fmtDateStr(order.delivery_date);
+    var waBtn = document.getElementById('pedido-whatsapp-btn');
+    waBtn.href = (phoneDigits ? 'https://wa.me/' + phoneDigits : 'https://wa.me/') + '?text=' + encodeURIComponent(msg);
+    document.getElementById('pedido-whatsapp-sub').textContent = phoneDigits
+      ? 'enviar para ' + (supplier ? supplier.name : 'o fornecedor') + ' no WhatsApp'
+      : 'fornecedor sem telefone cadastrado — você escolhe o contato';
+  }
+
+  function normalizePhoneForWhatsApp(phone){
+    if(!phone) return null;
+    var digits = String(phone).replace(/\D/g, '');
+    if(!digits) return null;
+    if(digits.length <= 11) digits = '55' + digits;
+    return digits;
   }
 
   function orderCard(order){
@@ -4829,7 +4856,7 @@ var QRCode;
         '<input type="text" data-field="desconto" placeholder="Desconto % (opcional)" value="' + (bid.desconto != null ? bid.desconto : '') + '" style="flex:1 1 100px; border:1px solid var(--line); border-radius:8px; padding:8px 10px; font-size:13px;">' +
       '</div>' +
       '<textarea data-field="obs" rows="1" placeholder="Observação (opcional)" style="width:100%; box-sizing:border-box; border:1px solid var(--line); border-radius:8px; padding:8px 10px; font-size:12px; margin-bottom:8px;">' + (bid.obs || '') + '</textarea>' +
-      '<button type="button" class="btn btn-ghost" data-action="remover-entrada" style="padding:6px 12px; font-size:12px; color:var(--red);">Remover esta opção</button>' +
+      '<button type="button" data-action="remover-entrada" style="padding:6px 14px; font-size:12px; font-weight:600; border-radius:8px; border:1px solid var(--red); background:#FBEAEA; color:var(--red); cursor:pointer;">Remover esta opção</button>' +
     '</div>';
   }
 
@@ -4933,6 +4960,7 @@ var QRCode;
     var addBtn = e.target.closest('[data-action="adicionar-entrada"]');
     if(addBtn){
       var rowsContainer = addBtn.previousElementSibling; // [data-rows]
+      if(rowsContainer.querySelector('[data-row]') === null){ rowsContainer.innerHTML = ''; }
       rowsContainer.insertAdjacentHTML('beforeend', myEntryRow({ brand:'', price:null, obs:'', bidId:null }, 0));
       return;
     }
@@ -4940,8 +4968,10 @@ var QRCode;
     if(removeBtn){
       var rowEl = removeBtn.closest('[data-row]');
       var rowsWrap = rowEl.parentElement;
-      if(rowsWrap.children.length > 1){ rowEl.remove(); }
-      else { rowEl.querySelectorAll('input,textarea').forEach(function(el){ el.value = ''; }); }
+      rowEl.remove();
+      if(rowsWrap.children.length === 0){
+        rowsWrap.innerHTML = '<div style="font-size:12px; color:var(--ink-muted); margin-bottom:10px;">Nenhuma opção adicionada. Clique em "+ Adicionar outra opção".</div>';
+      }
       return;
     }
     var saveBtn = e.target.closest('[data-action="salvar-item"]');
@@ -4987,6 +5017,7 @@ var QRCode;
     var previousBids = item.bids.filter(function(b){ return b.supplier === MY_NAME; });
     item.bids = item.bids.filter(function(b){ return b.supplier !== MY_NAME; }).concat(newBids);
 
+    var saveSucceeded = true;
     if(dbReady && myId && String(itemId).indexOf('local_') !== 0){
       try{
         check(await db.from('quotation_bids').delete().eq('quotation_item_id', itemId).eq('supplier_id', myId), 'Limpar respostas anteriores');
@@ -4996,12 +5027,24 @@ var QRCode;
         var ins = check(await db.from('quotation_bids').insert(rowsToInsert).select('id'), 'Salvar respostas');
         if(ins.data){ ins.data.forEach(function(row, i){ if(newBids[i]) newBids[i].bidId = row.id; }); }
       } catch(err){
+        saveSucceeded = false;
         console.error('Erro ao salvar respostas', err);
         item.bids = item.bids.filter(function(b){ return b.supplier !== MY_NAME; }).concat(previousBids);
         alert('Não foi possível salvar suas respostas.\n\nDetalhe técnico: ' + (err && err.message ? err.message : err));
       }
     }
+    if(saveSucceeded){
+      showSupplierToast(notAvailable ? 'Salvo: você marcou que não trabalha com "' + item.name + '".' : 'Proposta para "' + item.name + '" enviada ao comprador!');
+    }
     renderCotacaoDetail(q.id);
+  }
+
+  function showSupplierToast(message){
+    var toast = document.createElement('div');
+    toast.textContent = message;
+    toast.style.cssText = 'position:fixed; top:20px; left:50%; transform:translateX(-50%); background:var(--green); color:#fff; padding:12px 20px; border-radius:10px; font-size:13px; font-weight:600; z-index:9999; box-shadow:0 8px 20px rgba(0,0,0,.25); max-width:90vw; text-align:center;';
+    supplierRoot.appendChild(toast);
+    setTimeout(function(){ toast.remove(); }, 2800);
   }
 
   /* ---------- Perfil ---------- */
