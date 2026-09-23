@@ -2862,6 +2862,13 @@ var QRCode;
       var row = byName[p.name];
       if(row){ p.dbId = row.id; if(row.unit) p.unit = row.unit; p.unitLabel = UNIT_LABELS[p.unit] || 'un'; p.imageUrl = row.image_url || null; }
     });
+    if(rows.length > 0){
+      // Drop demo/seed products that don't exist in the real database anymore
+      // (e.g. after importing a real catalog that replaced the original demo items) —
+      // otherwise they keep showing up as selectable "ghost" products with no real
+      // backing, and any cotação/pedido built from them ends up with no linked product.
+      PRODUCTS = PRODUCTS.filter(function(p){ return p.dbId; });
+    }
     // Products registered later (via the Fornecedores > Produtos screen) that aren't in the local seed list yet
     rows.forEach(function(r){
       if(PRODUCTS.some(function(p){ return p.dbId === r.id; })) return;
@@ -4077,6 +4084,28 @@ var QRCode;
       };
       try{
         if(dbReady && supplierId){
+          // Any item without a linked product yet (e.g. typed by hand in "Nova cotação",
+          // or from an older demo item) gets a real product created now, so the order
+          // always has something to reference — otherwise the item silently disappears
+          // from the pedido and the Nota comes out with no itemized list.
+          for(var gi=0; gi<group.length; gi++){
+            if(!group[gi].item.productId){
+              var existingProduct = PRODUCTS.filter(function(p){ return p.name === group[gi].item.name && p.dbId; })[0];
+              if(existingProduct){
+                group[gi].item.productId = existingProduct.dbId;
+              } else {
+                var newProdIns = check(await db.from('products').insert({ name: group[gi].item.name, category:'Mercearia', unit:'Unidade' }).select('id').single(), 'Criar produto a partir do item da cotação');
+                if(newProdIns.data){
+                  group[gi].item.productId = newProdIns.data.id;
+                  PRODUCTS.push({
+                    id:newProdIns.data.id, dbId:newProdIns.data.id, name:group[gi].item.name, category:'Mercearia', brand:'',
+                    unit:'Unidade', unitLabel:'un', recQty:1, qty:1, price:group[gi].bid.price, obs:'', available:true, selected:false,
+                    receiveStatus:'pendente', receivedQty:null
+                  });
+                }
+              }
+            }
+          }
           var orderIns = check(await db.from('orders').insert({
             code: code, supplier_id: supplierId, status: 'rascunho',
             order_date: newOrder.order_date, delivery_date: newOrder.delivery_date, total: total
