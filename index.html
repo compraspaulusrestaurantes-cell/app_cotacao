@@ -1568,12 +1568,38 @@ html, body {
               <div class="row" style="justify-content:space-between; margin-bottom:8px;"><span style="font-size:13px; color:var(--ink-soft);">Itens selecionados</span><span id="lista-count" style="font-size:13px; font-weight:600;">0</span></div>
               <div class="row" style="justify-content:space-between; margin-bottom:8px;"><span style="font-size:13px; color:var(--ink-soft);">Unidades</span><span id="lista-units" style="font-size:13px; font-weight:600;">0</span></div>
               <div style="height:1px; background:var(--line); margin:10px 0;"></div>
-              <div class="row" style="justify-content:space-between; margin-bottom:20px;"><span style="font-size:14px; font-weight:600;">Total estimado (referência)</span><span id="lista-total" style="font-size:18px; font-weight:700; font-family:'Fraunces',serif;">R$ 0,00</span></div>
+              <div class="row" style="justify-content:space-between; margin-bottom:16px;"><span style="font-size:14px; font-weight:600;">Total estimado (referência)</span><span id="lista-total" style="font-size:18px; font-weight:700; font-family:'Fraunces',serif;">R$ 0,00</span></div>
+
+              <div style="font-size:13px; font-weight:600; margin-bottom:8px;">Fornecedores participantes</div>
+              <input id="lista-fornecedor-search" type="text" placeholder="Buscar fornecedor" style="width:100%; box-sizing:border-box; border:1px solid var(--line); border-radius:8px; padding:8px 10px; font-size:12px; margin-bottom:8px;">
+              <div id="lista-fornecedores-checklist" style="max-height:180px; overflow-y:auto; border:1px solid var(--line); border-radius:8px; padding:8px; margin-bottom:8px;"></div>
+              <div style="display:flex; justify-content:space-between; margin-bottom:16px;">
+                <button type="button" class="btn btn-ghost" id="lista-fornecedores-todos" style="padding:6px 10px; font-size:11px;">Marcar sugeridos</button>
+                <button type="button" class="btn btn-ghost" id="lista-fornecedores-nenhum" style="padding:6px 10px; font-size:11px;">Desmarcar todos</button>
+              </div>
+
               <button class="btn btn-primary btn-block" id="lista-abrir-cotacao">
-                Abrir cotação com fornecedores
+                Abrir cotação com selecionados
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4"><path d="M9 6l6 6-6 6"/></svg>
               </button>
-              <button class="btn btn-ghost btn-block" data-nav="fornecedores" style="margin-top:10px;">Editar preços e condições</button>
+
+              <div style="display:flex; align-items:center; gap:10px; margin:16px 0;">
+                <div style="flex:1; height:1px; background:var(--line);"></div>
+                <span style="font-size:11px; color:var(--ink-faint);">OU</span>
+                <div style="flex:1; height:1px; background:var(--line);"></div>
+              </div>
+
+              <div style="font-size:13px; font-weight:600; margin-bottom:8px;">Fechar pedido direto</div>
+              <label for="lista-fornecedor-direto" class="sr-only">Fornecedor</label>
+              <select id="lista-fornecedor-direto" style="width:100%; border:1px solid var(--line); border-radius:8px; padding:10px 12px; font-size:13px; margin-bottom:10px;">
+                <option value="">Selecione um fornecedor</option>
+              </select>
+              <button class="btn btn-block" id="lista-fechar-direto" style="background:var(--amber); color:#fff;">
+                Fechar pedido agora com este fornecedor
+              </button>
+              <div style="font-size:11px; color:var(--ink-soft); margin-top:8px;">Pula a cotação — gera o pedido na hora, usando o preço que esse fornecedor já tem cadastrado.</div>
+
+              <button class="btn btn-ghost btn-block" data-nav="fornecedores" style="margin-top:16px;">Editar preços e condições</button>
             </div>
           </div>
         </div>
@@ -1630,11 +1656,15 @@ html, body {
             Cadastre aqui os produtos que os fornecedores podem oferecer. Lembre-se: a maioria vem em caixa, pacote ou fardo — não só por unidade.
           </div>
           <div style="display:flex; gap:12px; flex-wrap:wrap; align-items:center; justify-content:space-between; margin-bottom:16px;">
-            <div class="search" style="margin-bottom:0; flex:1 1 260px;">
+            <div class="search" style="margin-bottom:0; flex:1 1 220px;">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--ink-faint)" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
               <label for="produto-search" class="sr-only">Buscar produto</label>
               <input id="produto-search" type="text" placeholder="Buscar produto por nome ou categoria">
             </div>
+            <label for="produto-cat-filter" class="sr-only">Filtrar por categoria</label>
+            <select id="produto-cat-filter" style="border:1px solid var(--line); border-radius:8px; padding:10px 12px; font-size:13px; background:#fff; flex:0 1 220px;">
+              <option value="">Todas as categorias</option>
+            </select>
             <button class="btn btn-primary" id="produto-add-toggle">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4"><path d="M12 5v14M5 12h14"/></svg>
               Novo produto
@@ -2860,7 +2890,7 @@ var QRCode;
   }
 
   async function ensureQuotations(){
-    var selectStr = 'id,title,deadline,status, quotation_items(id,product_name,status,winner_bid_id,qty,product_id, quotation_bids(id,supplier_id,brand,price,observacao,not_available,desconto))';
+    var selectStr = 'id,title,deadline,status, quotation_items(id,product_name,status,winner_bid_id,qty,product_id, quotation_bids(id,supplier_id,brand,price,observacao,not_available,desconto)), quotation_suppliers(supplier_id)';
     var res = check(await db.from('quotations').select(selectStr), 'Ler cotações');
     var rows = res.data || [];
     if(rows.length === 0){
@@ -2906,7 +2936,7 @@ var QRCode;
         var winnerBid = it.winner_bid_id ? bids.filter(function(b){ return b.bidId === it.winner_bid_id; })[0] : null;
         return { id: it.id, name: it.product_name, status: it.status, winnerBidId: it.winner_bid_id || null, winner: winnerBid ? winnerBid.supplier : null, qty: it.qty != null ? Number(it.qty) : null, productId: it.product_id || null, bids: bids };
       });
-      return { id: r.id, title: r.title, deadline: new Date(r.deadline), status: r.status, items: items };
+      return { id: r.id, title: r.title, deadline: new Date(r.deadline), status: r.status, items: items, invitedSupplierIds: (r.quotation_suppliers || []).map(function(qs){ return qs.supplier_id; }) };
     }).sort(function(a,b){ return b.deadline - a.deadline; });
   }
 
@@ -3175,6 +3205,7 @@ var QRCode;
     document.getElementById('lista-count').textContent = items.length;
     document.getElementById('lista-units').textContent = cartUnits();
     document.getElementById('lista-total').textContent = money(cartTotal());
+    renderListaFornecedoresChecklist();
   }
   document.getElementById('estoque-search').addEventListener('input', renderListaPage);
 
@@ -3238,7 +3269,11 @@ var QRCode;
     var card = document.createElement('div');
     card.className = 'card';
     var initials = (s.name || '?').split(' ').map(function(w){ return w[0]; }).slice(0,2).join('').toUpperCase();
-    var cats = (s.categories || []).map(function(c){ return '<span class="badge badge-green" style="margin-right:4px;">' + c + '</span>'; }).join('');
+    var allCats = s.categories || [];
+    var shownCats = allCats.slice(0, 4);
+    var extraCount = allCats.length - shownCats.length;
+    var cats = shownCats.map(function(c){ return '<span class="badge badge-green" style="margin-right:4px; margin-bottom:4px;">' + c + '</span>'; }).join('');
+    if(extraCount > 0){ cats += '<span class="badge badge-gray" style="margin-bottom:4px;">+' + extraCount + '</span>'; }
     card.innerHTML =
       '<div class="row" style="justify-content:space-between; align-items:flex-start;">' +
         '<div class="row" style="gap:12px;">' +
@@ -3253,7 +3288,7 @@ var QRCode;
           '<button class="btn btn-ghost" data-action="excluir-fornecedor" data-id="' + s.id + '" style="padding:8px 14px; color:var(--red);">Excluir</button>' +
         '</div>' +
       '</div>' +
-      (cats ? '<div style="margin-top:12px;">' + cats + '</div>' : '');
+      (cats ? '<div style="margin-top:12px; display:flex; flex-wrap:wrap;">' + cats + '</div>' : '');
     return card;
   }
 
@@ -3381,7 +3416,22 @@ var QRCode;
 
   /* ---------- Produtos (cadastro pelo comprador) ---------- */
   var produtoSearchTerm = '';
+  var produtoCatFilter = '';
   var editingProductId = null;
+  var PRODUTOS_PAGE_SIZE = 150;
+
+  function populateProdutoCatFilter(){
+    var sel = document.getElementById('produto-cat-filter');
+    if(sel.options.length > 1) return; // already populated
+    var cats = [];
+    PRODUCTS.forEach(function(p){ if(p.category && cats.indexOf(p.category) === -1) cats.push(p.category); });
+    cats.sort(function(a,b){ return a.localeCompare(b, 'pt-BR'); });
+    cats.forEach(function(c){
+      var opt = document.createElement('option');
+      opt.value = c; opt.textContent = c;
+      sel.appendChild(opt);
+    });
+  }
 
   function productListRow(p){
     var row = document.createElement('div');
@@ -3412,9 +3462,11 @@ var QRCode;
   }
 
   function renderProdutos(){
+    populateProdutoCatFilter();
     var list = document.getElementById('produtos-list');
     list.innerHTML = '';
     var filtered = PRODUCTS.filter(function(p){
+      if(produtoCatFilter && p.category !== produtoCatFilter) return false;
       if(!produtoSearchTerm) return true;
       return p.name.toLowerCase().indexOf(produtoSearchTerm) > -1 ||
         (p.category || '').toLowerCase().indexOf(produtoSearchTerm) > -1;
@@ -3422,11 +3474,22 @@ var QRCode;
     if(filtered.length === 0){
       list.innerHTML = '<div class="card" style="text-align:center; color:var(--ink-soft); font-size:13px;">Nenhum produto encontrado.</div>';
     } else {
-      filtered.forEach(function(p){ list.appendChild(productListRow(p)); });
+      var shown = filtered.slice(0, PRODUTOS_PAGE_SIZE);
+      shown.forEach(function(p){ list.appendChild(productListRow(p)); });
+      if(filtered.length > shown.length){
+        var hint = document.createElement('div');
+        hint.style.cssText = 'text-align:center; color:var(--ink-soft); font-size:12px; padding:12px;';
+        hint.textContent = 'Mostrando ' + shown.length + ' de ' + filtered.length + ' produtos — refine a busca ou escolha uma categoria pra ver o restante.';
+        list.appendChild(hint);
+      }
     }
   }
   document.getElementById('produto-search').addEventListener('input', function(e){
     produtoSearchTerm = e.target.value.toLowerCase();
+    renderProdutos();
+  });
+  document.getElementById('produto-cat-filter').addEventListener('change', function(e){
+    produtoCatFilter = e.target.value;
     renderProdutos();
   });
 
@@ -3644,7 +3707,7 @@ var QRCode;
     var title = opts.title || ('Cotação de ' + items.length + ' item(ns)');
     var q = {
       id: 'local_' + Date.now(),
-      title: title, deadline: deadline, status: 'aberta',
+      title: title, deadline: deadline, status: 'aberta', invitedSupplierIds: [],
       items: items.map(function(it, i){
         return { id:'local_item_' + i + '_' + Date.now(), name:it.name, qty:it.qty, productId:it.productId || null, status:'aberta', winner:null, winnerBidId:null, bids:[] };
       })
@@ -3686,15 +3749,90 @@ var QRCode;
     renderCotacoesList();
   });
 
+  var listaSelectedSupplierIds = new Set();
+  var listaFornecedorSearchTerm = '';
+
+  function suggestedSuppliersForCart(){
+    var cats = {};
+    selectedProducts().forEach(function(p){ if(p.category) cats[p.category] = true; });
+    if(Object.keys(cats).length === 0) return [];
+    return SUPPLIERS.filter(function(s){
+      return (s.categories || []).some(function(c){ return cats[c]; });
+    }).sort(function(a,b){ return a.name.localeCompare(b.name, 'pt-BR'); });
+  }
+
+  function updateFecharDiretoOptions(suggested){
+    var sel = document.getElementById('lista-fornecedor-direto');
+    var current = sel.value;
+    var list = suggested.length ? suggested : SUPPLIERS.slice().sort(function(a,b){ return a.name.localeCompare(b.name, 'pt-BR'); }).slice(0, 60);
+    sel.innerHTML = '<option value="">Selecione um fornecedor</option>' +
+      list.map(function(s){ return '<option value="' + s.id + '">' + s.name + '</option>'; }).join('');
+    if(current && list.some(function(s){ return s.id === current; })) sel.value = current;
+  }
+
+  function renderListaFornecedoresChecklist(){
+    var container = document.getElementById('lista-fornecedores-checklist');
+    var suggested = suggestedSuppliersForCart();
+    var suggestedIds = {};
+    suggested.forEach(function(s){ suggestedIds[s.id] = true; });
+    var pool;
+    if(listaFornecedorSearchTerm){
+      pool = SUPPLIERS.filter(function(s){ return s.name.toLowerCase().indexOf(listaFornecedorSearchTerm) > -1; });
+    } else {
+      var extraSelected = SUPPLIERS.filter(function(s){ return listaSelectedSupplierIds.has(s.id) && !suggestedIds[s.id]; });
+      pool = suggested.concat(extraSelected);
+    }
+    pool = pool.slice(0, 60);
+    if(pool.length === 0){
+      container.innerHTML = '<div style="font-size:12px; color:var(--ink-soft); text-align:center; padding:10px;">' +
+        (listaFornecedorSearchTerm ? 'Nenhum fornecedor encontrado.' : 'Selecione produtos pra ver sugestões de fornecedor por categoria.') + '</div>';
+    } else {
+      container.innerHTML = pool.map(function(s){
+        var checked = listaSelectedSupplierIds.has(s.id);
+        return '<label style="display:flex; align-items:center; gap:8px; padding:6px 4px; font-size:12px; cursor:pointer;">' +
+          '<input type="checkbox" data-action="toggle-lista-fornecedor" data-id="' + s.id + '" ' + (checked ? 'checked' : '') + '>' +
+          '<span>' + s.name + '</span>' +
+        '</label>';
+      }).join('');
+    }
+    updateFecharDiretoOptions(suggested);
+  }
+  document.getElementById('lista-fornecedor-search').addEventListener('input', function(e){
+    listaFornecedorSearchTerm = e.target.value.toLowerCase();
+    renderListaFornecedoresChecklist();
+  });
+  buyerRoot.addEventListener('change', function(e){
+    var cb = e.target.closest('[data-action="toggle-lista-fornecedor"]');
+    if(cb){
+      if(cb.checked) listaSelectedSupplierIds.add(cb.dataset.id);
+      else listaSelectedSupplierIds.delete(cb.dataset.id);
+    }
+  });
+  document.getElementById('lista-fornecedores-todos').addEventListener('click', function(){
+    suggestedSuppliersForCart().forEach(function(s){ listaSelectedSupplierIds.add(s.id); });
+    renderListaFornecedoresChecklist();
+  });
+  document.getElementById('lista-fornecedores-nenhum').addEventListener('click', function(){
+    listaSelectedSupplierIds.clear();
+    renderListaFornecedoresChecklist();
+  });
+
   document.getElementById('lista-abrir-cotacao').addEventListener('click', async function(){
     var items = selectedProducts();
     if(items.length === 0){ alert('Selecione ao menos um produto antes de abrir a cotação.'); return; }
+    var supplierIds = Array.from(listaSelectedSupplierIds);
+    if(supplierIds.length === 0){ alert('Marque ao menos um fornecedor pra participar da cotação.'); return; }
     var itemsPayload = items.map(function(p){ return { name:p.name, qty:p.qty, productId:p.dbId || null }; });
     var btn = document.getElementById('lista-abrir-cotacao');
     var originalLabel = btn.textContent;
     btn.disabled = true; btn.textContent = 'Abrindo cotação...';
     try{
       var q = await createQuotationFromItems(itemsPayload, { title: 'Cotação da lista de compras' });
+      if(dbReady && q.id && String(q.id).indexOf('local_') !== 0){
+        var inviteRows = supplierIds.map(function(sid){ return { quotation_id:q.id, supplier_id:sid }; });
+        check(await db.from('quotation_suppliers').insert(inviteRows), 'Convidar fornecedores pra cotação');
+      }
+      listaSelectedSupplierIds.clear();
       btn.disabled = false; btn.textContent = originalLabel;
       goTo('cotacoes');
       subscribeToQuotation(q.id);
@@ -3703,6 +3841,76 @@ var QRCode;
       btn.disabled = false; btn.textContent = originalLabel;
       console.error('Erro ao abrir cotação a partir da lista', err);
       alert('Não foi possível abrir a cotação.\n\nDetalhe técnico: ' + (err && err.message ? err.message : err));
+    }
+  });
+
+  document.getElementById('lista-fechar-direto').addEventListener('click', async function(){
+    var items = selectedProducts();
+    if(items.length === 0){ alert('Selecione ao menos um produto antes de fechar o pedido.'); return; }
+    var supplierId = document.getElementById('lista-fornecedor-direto').value;
+    if(!supplierId){ alert('Escolha um fornecedor pra fechar o pedido direto.'); return; }
+    var supplier = SUPPLIERS.filter(function(s){ return s.id === supplierId; })[0];
+    if(!supplier){ alert('Fornecedor inválido.'); return; }
+
+    var btn = document.getElementById('lista-fechar-direto');
+    var originalLabel = btn.textContent;
+    btn.disabled = true; btn.textContent = 'Fechando pedido...';
+
+    if(!dbReady){
+      btn.disabled = false; btn.textContent = originalLabel;
+      alert('Sem conexão com o banco de dados agora. O pedido não foi salvo.');
+      return;
+    }
+
+    try{
+      var productIds = items.filter(function(p){ return p.dbId; }).map(function(p){ return p.dbId; });
+      var pricesRes = { data: [] };
+      if(productIds.length){
+        pricesRes = check(await db.from('supplier_products').select('product_id,price').eq('supplier_id', supplierId).in('product_id', productIds), 'Buscar preços do fornecedor');
+      }
+      var priceByProduct = {};
+      (pricesRes.data || []).forEach(function(row){ priceByProduct[row.product_id] = Number(row.price); });
+
+      var missingPrice = items.some(function(p){ return p.dbId && priceByProduct[p.dbId] === undefined; });
+      var total = items.reduce(function(sum, p){
+        var price = (p.dbId && priceByProduct[p.dbId] !== undefined) ? priceByProduct[p.dbId] : p.price;
+        return sum + price * p.qty;
+      }, 0);
+
+      var code = '#' + (1040 + ORDERS.length + 1);
+      var orderDate = new Date();
+      var deliveryDate = new Date(); deliveryDate.setDate(deliveryDate.getDate() + 2);
+      var orderIns = check(await db.from('orders').insert({
+        code: code, supplier_id: supplierId, status: 'enviado',
+        order_date: orderDate.toISOString().slice(0,10), delivery_date: deliveryDate.toISOString().slice(0,10),
+        total: total
+      }).select('id').single(), 'Criar pedido direto');
+      if(!orderIns.data) throw new Error('O pedido não retornou id.');
+      var orderId = orderIns.data.id;
+
+      var itemRows = items.filter(function(p){ return p.dbId; }).map(function(p){
+        var price = priceByProduct[p.dbId] !== undefined ? priceByProduct[p.dbId] : p.price;
+        return { order_id:orderId, product_id:p.dbId, qty:p.qty, price:price, receive_status:'pendente' };
+      });
+      if(itemRows.length) check(await db.from('order_items').insert(itemRows), 'Salvar itens do pedido direto');
+
+      var newOrder = {
+        id: orderId, code: code, supplier_id: supplierId, supplier_name: supplier.name,
+        status: 'enviado', order_date: orderDate.toISOString().slice(0,10), delivery_date: deliveryDate.toISOString().slice(0,10),
+        total: total, confirmed: false, receiver_note: null
+      };
+      ORDERS.unshift(newOrder);
+
+      btn.disabled = false; btn.textContent = originalLabel;
+      if(missingPrice){
+        alert('Pedido criado! Alguns itens não tinham preço cadastrado para ' + supplier.name + ' — usamos o preço de referência do produto. Confira o pedido antes de enviar pro fornecedor.');
+      }
+      await openOrder(newOrder);
+      goTo('pedidos');
+    } catch(err){
+      btn.disabled = false; btn.textContent = originalLabel;
+      console.error('Erro ao fechar pedido direto', err);
+      alert('Não foi possível fechar o pedido.\n\nDetalhe técnico: ' + (err && err.message ? err.message : err));
     }
   });
 
@@ -3786,7 +3994,7 @@ var QRCode;
   }
 
   async function refreshQuotationBids(qId){
-    var selectStr = 'id,title,deadline,status, quotation_items(id,product_name,status,winner_bid_id,qty,product_id, quotation_bids(id,supplier_id,brand,price,observacao,not_available,desconto))';
+    var selectStr = 'id,title,deadline,status, quotation_items(id,product_name,status,winner_bid_id,qty,product_id, quotation_bids(id,supplier_id,brand,price,observacao,not_available,desconto)), quotation_suppliers(supplier_id)';
     var res = await db.from('quotations').select(selectStr).eq('id', qId).maybeSingle();
     if(!res.data) return;
     var r = res.data;
@@ -3802,7 +4010,7 @@ var QRCode;
       return { id: it.id, name: it.product_name, status: it.status, winnerBidId: it.winner_bid_id || null, winner: winnerBid ? winnerBid.supplier : null, qty: it.qty != null ? Number(it.qty) : null, productId: it.product_id || null, bids: bids };
     });
     var idx = QUOTATIONS.findIndex(function(x){ return x.id === qId; });
-    if(idx > -1) QUOTATIONS[idx] = { id: r.id, title: r.title, deadline: new Date(r.deadline), status: r.status, items: items };
+    if(idx > -1) QUOTATIONS[idx] = { id: r.id, title: r.title, deadline: new Date(r.deadline), status: r.status, items: items, invitedSupplierIds: (r.quotation_suppliers || []).map(function(qs){ return qs.supplier_id; }) };
   }
 
   function unsubscribeQuotation(){
@@ -4589,7 +4797,7 @@ var QRCode;
   }
 
   async function ensureQuotations(){
-    var selectStr = 'id,title,deadline,status, quotation_items(id,product_name,status,winner_bid_id,qty,product_id, quotation_bids(id,supplier_id,brand,price,observacao,not_available,desconto))';
+    var selectStr = 'id,title,deadline,status, quotation_items(id,product_name,status,winner_bid_id,qty,product_id, quotation_bids(id,supplier_id,brand,price,observacao,not_available,desconto)), quotation_suppliers(supplier_id)';
     var res = check(await db.from('quotations').select(selectStr), 'Ler cotações');
     var rows = res.data || [];
     if(rows.length === 0){
@@ -4635,7 +4843,7 @@ var QRCode;
         var winnerBid = it.winner_bid_id ? bids.filter(function(b){ return b.bidId === it.winner_bid_id; })[0] : null;
         return { id: it.id, name: it.product_name, status: it.status, winnerBidId: it.winner_bid_id || null, winner: winnerBid ? winnerBid.supplier : null, qty: it.qty != null ? Number(it.qty) : null, productId: it.product_id || null, bids: bids };
       });
-      return { id: r.id, title: r.title, deadline: new Date(r.deadline), status: r.status, items: items };
+      return { id: r.id, title: r.title, deadline: new Date(r.deadline), status: r.status, items: items, invitedSupplierIds: (r.quotation_suppliers || []).map(function(qs){ return qs.supplier_id; }) };
     }).sort(function(a,b){ return b.deadline - a.deadline; });
   }
 
@@ -4830,11 +5038,15 @@ var QRCode;
     document.getElementById('f-cotacoes-detail-view').style.display = 'none';
     var list = document.getElementById('f-cotacoes-list');
     list.innerHTML = '';
-    if(QUOTATIONS.length === 0){
+    var mine = QUOTATIONS.filter(function(q){
+      var invited = q.invitedSupplierIds || [];
+      return invited.length === 0 || invited.indexOf(myId) > -1;
+    });
+    if(mine.length === 0){
       list.innerHTML = '<div class="card" style="text-align:center; color:var(--ink-soft); font-size:13px;">Nenhuma cotação no momento.</div>';
       return;
     }
-    QUOTATIONS.forEach(function(q){ list.appendChild(quotationCardForSupplier(q)); });
+    mine.forEach(function(q){ list.appendChild(quotationCardForSupplier(q)); });
   }
 
   function competitorEntryRow(bid, isBest){
@@ -4914,7 +5126,7 @@ var QRCode;
   }
 
   async function refreshQuotationBids(qId){
-    var selectStr = 'id,title,deadline,status, quotation_items(id,product_name,status,winner_bid_id,qty,product_id, quotation_bids(id,supplier_id,brand,price,observacao,not_available,desconto))';
+    var selectStr = 'id,title,deadline,status, quotation_items(id,product_name,status,winner_bid_id,qty,product_id, quotation_bids(id,supplier_id,brand,price,observacao,not_available,desconto)), quotation_suppliers(supplier_id)';
     var res = await db.from('quotations').select(selectStr).eq('id', qId).maybeSingle();
     if(!res.data) return;
     var r = res.data;
@@ -4930,7 +5142,7 @@ var QRCode;
       return { id: it.id, name: it.product_name, status: it.status, winnerBidId: it.winner_bid_id || null, winner: winnerBid ? winnerBid.supplier : null, qty: it.qty != null ? Number(it.qty) : null, productId: it.product_id || null, bids: bids };
     });
     var idx = QUOTATIONS.findIndex(function(x){ return x.id === qId; });
-    if(idx > -1) QUOTATIONS[idx] = { id: r.id, title: r.title, deadline: new Date(r.deadline), status: r.status, items: items };
+    if(idx > -1) QUOTATIONS[idx] = { id: r.id, title: r.title, deadline: new Date(r.deadline), status: r.status, items: items, invitedSupplierIds: (r.quotation_suppliers || []).map(function(qs){ return qs.supplier_id; }) };
   }
 
   function unsubscribeQuotation(){
