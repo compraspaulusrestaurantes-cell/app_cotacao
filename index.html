@@ -3,10 +3,21 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<script>
+/* Opened from a WhatsApp/QR link: never show any login screen, not even for a split second */
+if(/[?&](confirmar|pedido)=/.test(window.location.search)){ document.documentElement.className += ' link-mode'; }
+</script>
 <title>Paulu&#39;s</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
+/* ---------- Link mode (confirmation / receiving links): no login screens, white page ---------- */
+html.link-mode #buyer-root, html.link-mode #supplier-root {
+    display: none !important
+    }
+html.link-mode, html.link-mode body {
+    background: #fff
+    }
 /* ---------- Shared base reset ---------- */
 * {
     box-sizing: border-box
@@ -1611,6 +1622,13 @@ html, body {
                 <button type="button" class="btn btn-ghost" id="lista-fornecedores-nenhum" style="padding:6px 10px; font-size:11px;">Desmarcar todos</button>
               </div>
 
+              <div style="font-size:13px; font-weight:600; margin-bottom:8px;">Fecha para respostas em</div>
+              <div style="display:flex; gap:8px; margin-bottom:12px;">
+                <label for="lista-prazo-data" class="sr-only">Data de fechamento</label>
+                <input id="lista-prazo-data" type="date" style="flex:1 1 140px; min-width:0; border:1px solid var(--line); border-radius:8px; padding:8px 10px; font-size:12px;">
+                <label for="lista-prazo-hora" class="sr-only">Hora de fechamento</label>
+                <input id="lista-prazo-hora" type="time" value="18:00" style="flex:0 0 96px; min-width:0; border:1px solid var(--line); border-radius:8px; padding:8px 10px; font-size:12px;">
+              </div>
               <button class="btn btn-primary btn-block" id="lista-abrir-cotacao">
                 Abrir cotação com selecionados
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4"><path d="M9 6l6 6-6 6"/></svg>
@@ -1798,9 +1816,12 @@ html, body {
               </div>
             </div>
             <div style="display:flex; gap:14px; flex-wrap:wrap; margin-bottom:14px;">
-              <div class="field" style="flex:1 1 200px;">
-                <label for="nc-prazo">Prazo para os fornecedores responderem</label>
-                <input id="nc-prazo" type="date">
+              <div class="field" style="flex:1 1 280px;">
+                <label for="nc-prazo">Fecha para respostas em (data e hora)</label>
+                <div style="display:flex; gap:8px;">
+                  <input id="nc-prazo" type="date" style="flex:1 1 150px;">
+                  <input id="nc-prazo-hora" type="time" value="18:00" style="flex:0 0 120px;">
+                </div>
               </div>
               <div class="field" style="flex:1 1 200px;">
                 <label for="nc-titulo">Título (opcional)</label>
@@ -1821,6 +1842,13 @@ html, body {
           <div class="card" style="margin-bottom:20px;">
             <h2 id="cotacao-detail-title" style="font-size:19px;">—</h2>
             <div class="row-sub" id="cotacao-detail-sub">—</div>
+            <div id="cotacao-prazo-box" style="display:flex; gap:10px; flex-wrap:wrap; align-items:flex-end; margin-top:14px;">
+              <div class="field" style="flex:0 1 170px;"><label for="cotacao-prazo-data">Alterar prazo (data)</label><input id="cotacao-prazo-data" type="date"></div>
+              <div class="field" style="flex:0 1 120px;"><label for="cotacao-prazo-hora">Hora</label><input id="cotacao-prazo-hora" type="time"></div>
+              <button class="btn btn-ghost" id="cotacao-prazo-salvar">Atualizar prazo</button>
+              <button class="btn btn-ghost" id="cotacao-prazo-encerrar" style="color:var(--red);">Encerrar respostas agora</button>
+            </div>
+            <div class="banner banner-amber" id="cotacao-prazo-banner" style="display:none; margin-top:14px;"></div>
           </div>
 
           <div id="cotacao-itens-list" style="display:flex; flex-direction:column; gap:20px; margin-bottom:20px;"></div>
@@ -3058,6 +3086,29 @@ var QRCode;
     return d.toLocaleDateString('pt-BR', {day:'2-digit', month:'2-digit', year:'numeric'});
   }
 
+  /* ---------- Quotation closing time ---------- */
+  function fmtDateTime(d){
+    return d.toLocaleDateString('pt-BR', {day:'2-digit', month:'2-digit', year:'numeric'}) + ' às ' + d.toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'});
+  }
+  function quotationDeadlinePassed(q){ return !!(q && q.deadline && q.deadline.getTime() <= Date.now()); }
+  function pad2(n){ return String(n).padStart(2, '0'); }
+  function dateInputValue(d){ return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate()); }
+  function timeInputValue(d){ return pad2(d.getHours()) + ':' + pad2(d.getMinutes()); }
+  function buildDeadline(dateStr, timeStr){
+    if(!dateStr) return null;
+    var d = new Date(dateStr + 'T' + (timeStr || '18:00') + ':00');
+    return isNaN(d.getTime()) ? null : d;
+  }
+  function defaultDeadline(){ var d = new Date(); d.setDate(d.getDate() + 3); d.setHours(18, 0, 0, 0); return d; }
+  function deadlineBadge(q){
+    return quotationDeadlinePassed(q)
+      ? '<span class="badge badge-amber">Prazo encerrado · escolha os vencedores</span>'
+      : '<span class="badge badge-green">Aberta · até ' + fmtDateTime(q.deadline) + '</span>';
+  }
+  function deadlineText(q){
+    return quotationDeadlinePassed(q) ? 'Prazo de respostas encerrado em ' + fmtDateTime(q.deadline) : 'Aberta até ' + fmtDateTime(q.deadline);
+  }
+
   function selectedProducts(){
     return PRODUCTS.filter(function(p){ return p.selected; });
   }
@@ -3369,6 +3420,8 @@ var QRCode;
     document.getElementById('lista-count').textContent = items.length;
     document.getElementById('lista-units').textContent = cartUnits();
     document.getElementById('lista-total').textContent = money(cartTotal());
+    var prazoDataEl = document.getElementById('lista-prazo-data');
+    if(!prazoDataEl.value){ var dd = defaultDeadline(); prazoDataEl.value = dateInputValue(dd); document.getElementById('lista-prazo-hora').value = timeInputValue(dd); }
     renderListaFornecedoresChecklist();
   }
   document.getElementById('estoque-search').addEventListener('input', renderListaPage);
@@ -3793,15 +3846,13 @@ var QRCode;
   });
 
   /* ---------- Cotação ---------- */
-  function fmtDateTime(d){ return fmtDate(d); }
-
   function quotationCard(q, showDelete){
     var card = document.createElement('div');
     card.className = 'card';
     var overallStatus = quotationOverallStatus(q);
     var totalBids = quotationTotalBids(q);
     var statusBadge = overallStatus === 'aberta'
-      ? '<span class="badge badge-green">Aberta · até ' + fmtDate(q.deadline) + '</span>'
+      ? deadlineBadge(q)
       : '<span class="badge badge-gray">Encerrada</span>';
     var itemNames = q.items.map(function(it){ return it.name; }).join(', ');
     card.innerHTML =
@@ -3870,7 +3921,7 @@ var QRCode;
 
   async function createQuotationFromItems(items, opts){
     opts = opts || {};
-    var deadline = opts.deadline || (function(){ var d = new Date(); d.setDate(d.getDate()+3); return d; })();
+    var deadline = opts.deadline || defaultDeadline();
     var title = opts.title || ('Cotação de ' + items.length + ' item(ns)');
     var q = {
       id: 'local_' + Date.now(),
@@ -3900,7 +3951,8 @@ var QRCode;
     if(pendingQuotationItems.length === 0){ alert('Adicione ao menos um item antes de abrir a cotação.'); return; }
     var prazoVal = document.getElementById('nc-prazo').value;
     var titulo = document.getElementById('nc-titulo').value.trim();
-    var deadline = prazoVal ? new Date(prazoVal + 'T23:59:59') : null;
+    var deadline = prazoVal ? buildDeadline(prazoVal, document.getElementById('nc-prazo-hora').value) : null;
+    if(deadline && deadline.getTime() <= Date.now()){ alert('O horário de fechamento precisa estar no futuro.'); return; }
     try{
       await createQuotationFromItems(pendingQuotationItems.slice(), { title: titulo || null, deadline: deadline });
     } catch(err){
@@ -3912,6 +3964,7 @@ var QRCode;
     renderPendingItemsTags();
     document.getElementById('nc-titulo').value = '';
     document.getElementById('nc-prazo').value = '';
+    document.getElementById('nc-prazo-hora').value = '18:00';
     document.getElementById('nova-cotacao-form').style.display = 'none';
     renderCotacoesList();
   });
@@ -3989,13 +4042,16 @@ var QRCode;
     if(items.length === 0){ alert('Selecione ao menos um produto antes de abrir a cotação.'); return; }
     var supplierIds = Array.from(listaSelectedSupplierIds);
     if(supplierIds.length === 0){ alert('Marque ao menos um fornecedor pra participar da cotação.'); return; }
+    var listaDeadline = buildDeadline(document.getElementById('lista-prazo-data').value, document.getElementById('lista-prazo-hora').value);
+    if(!listaDeadline){ alert('Defina a data e a hora em que a cotação fecha para respostas.'); return; }
+    if(listaDeadline.getTime() <= Date.now()){ alert('O horário de fechamento precisa estar no futuro.'); return; }
     var itemsPayload = items.map(function(p){ return { name:p.name, qty:p.qty, productId:p.dbId || null }; });
     var btn = document.getElementById('lista-abrir-cotacao');
     var originalLabel = btn.textContent;
     btn.disabled = true; btn.textContent = 'Abrindo cotação...';
     var q = null;
     try{
-      q = await createQuotationFromItems(itemsPayload, { title: 'Cotação da lista de compras' });
+      q = await createQuotationFromItems(itemsPayload, { title: 'Cotação da lista de compras', deadline: listaDeadline });
       if(dbReady && q.id && String(q.id).indexOf('local_') !== 0){
         var inviteRows = supplierIds.map(function(sid){ return { quotation_id:q.id, supplier_id:sid }; });
         check(await db.from('quotation_suppliers').insert(inviteRows), 'Convidar fornecedores pra cotação');
@@ -4165,7 +4221,8 @@ var QRCode;
     document.getElementById('cotacoes-detail-view').style.display = 'block';
 
     document.getElementById('cotacao-detail-title').textContent = q.title;
-    document.getElementById('cotacao-detail-sub').textContent = (quotationOverallStatus(q) === 'aberta' ? 'Aberta até ' + fmtDate(q.deadline) : 'Encerrada') + ' · ' + q.items.length + ' item(ns) · ' + quotationTotalBids(q) + ' resposta(s) no total';
+    renderPrazoBox(q);
+    document.getElementById('cotacao-detail-sub').textContent = (quotationOverallStatus(q) === 'aberta' ? deadlineText(q) : 'Encerrada') + ' · ' + q.items.length + ' item(ns) · ' + quotationTotalBids(q) + ' resposta(s) no total';
 
     var itensList = document.getElementById('cotacao-itens-list');
     itensList.innerHTML = '';
@@ -4211,6 +4268,63 @@ var QRCode;
   }
 
   document.getElementById('cotacao-voltar').addEventListener('click', function(){ unsubscribeQuotation(); renderCotacoesList(); });
+
+  function renderPrazoBox(q){
+    var open = quotationOverallStatus(q) === 'aberta';
+    var passed = quotationDeadlinePassed(q);
+    document.getElementById('cotacao-prazo-box').style.display = open ? 'flex' : 'none';
+    document.getElementById('cotacao-prazo-encerrar').style.display = passed ? 'none' : '';
+    var banner = document.getElementById('cotacao-prazo-banner');
+    if(open && passed){
+      banner.style.display = 'block';
+      banner.textContent = 'O prazo para os fornecedores responderem terminou em ' + fmtDateTime(q.deadline) + '. Agora é só escolher o vencedor de cada item. Se precisar de mais respostas, estenda o prazo acima.';
+    } else {
+      banner.style.display = 'none';
+    }
+    if(q.deadline){
+      document.getElementById('cotacao-prazo-data').value = dateInputValue(q.deadline);
+      document.getElementById('cotacao-prazo-hora').value = timeInputValue(q.deadline);
+    }
+  }
+
+  async function updateQuotationDeadline(newDeadline){
+    var q = QUOTATIONS.filter(function(x){ return x.id === currentQuotationId; })[0];
+    if(!q) return;
+    try{
+      if(dbReady && String(q.id).indexOf('local_') !== 0){
+        check(await db.from('quotations').update({ deadline: newDeadline.toISOString() }).eq('id', q.id), 'Atualizar prazo da cotação');
+      }
+      q.deadline = newDeadline;
+      renderCotacaoDetail(q.id);
+    } catch(err){
+      console.error('Erro ao atualizar prazo', err);
+      alert('Não foi possível atualizar o prazo.\n\nDetalhe técnico: ' + (err && err.message ? err.message : err));
+    }
+  }
+  document.getElementById('cotacao-prazo-salvar').addEventListener('click', function(){
+    var d = buildDeadline(document.getElementById('cotacao-prazo-data').value, document.getElementById('cotacao-prazo-hora').value);
+    if(!d){ alert('Informe a data e a hora do novo prazo.'); return; }
+    updateQuotationDeadline(d);
+  });
+  document.getElementById('cotacao-prazo-encerrar').addEventListener('click', function(){
+    if(!confirm('Encerrar agora o recebimento de respostas desta cotação? Os fornecedores não poderão mais responder.')) return;
+    updateQuotationDeadline(new Date());
+  });
+
+  // When a quotation's closing time arrives while the screen is open, refresh the screen so the lock shows up.
+  var deadlineStates = {};
+  setInterval(function(){
+    var changed = false;
+    QUOTATIONS.forEach(function(q){
+      var passed = quotationDeadlinePassed(q);
+      if(deadlineStates[q.id] !== undefined && deadlineStates[q.id] !== passed) changed = true;
+      deadlineStates[q.id] = passed;
+    });
+    if(!changed || !document.getElementById('app').classList.contains('active')) return;
+    var detailOpen = document.getElementById('cotacoes-detail-view').style.display !== 'none';
+    if(state.page === 'cotacoes' && detailOpen && currentQuotationId) renderCotacaoDetail(currentQuotationId);
+    else renderPage(state.page);
+  }, 15000);
 
   buyerRoot.addEventListener('click', async function(e){
     var delBtn = e.target.closest('[data-action="excluir-cotacao"]');
@@ -4387,16 +4501,17 @@ var QRCode;
   async function loadOrderItems(orderId){
     if(!dbReady || !orderId){
       state.currentOrderItems = selectedProducts().map(function(p){
-        return { itemId:p.id, productId:p.dbId, name:p.name, qty:p.qty, price:p.price, receiveStatus:'pendente', receivedQty:null };
+        return { itemId:p.id, productId:p.dbId, name:p.name, unit:p.unit, qty:p.qty, price:p.price, receiveStatus:'pendente', receivedQty:null };
       });
       return;
     }
     try{
-      var res = await db.from('order_items').select('id,product_id,qty,price,receive_status,received_qty,products(name)').eq('order_id', orderId);
+      var res = await db.from('order_items').select('id,product_id,qty,price,receive_status,received_qty,products(name,unit)').eq('order_id', orderId);
       state.currentOrderItems = (res.data || []).map(function(row){
         return {
           itemId: row.id, productId: row.product_id,
           name: row.products ? row.products.name : 'Produto',
+          unit: row.products ? row.products.unit : null,
           qty: row.qty, price: Number(row.price),
           receiveStatus: row.receive_status || 'pendente', receivedQty: row.received_qty
         };
@@ -4508,15 +4623,51 @@ var QRCode;
 
     var supplier = SUPPLIERS.filter(function(s){ return s.id === order.supplier_id; })[0];
     var phoneDigits = normalizePhoneForWhatsApp(supplier ? supplier.phone : null);
-    var itemsText = (state.currentOrderItems || []).map(function(it){ return '- ' + it.name + ': ' + it.qty + ' un.'; }).join('\n');
-    var msg = 'Olá' + (supplier ? ', ' + supplier.name : '') + '! Segue o pedido ' + order.code + ' (Paulu\'s Restaurantes):\n\n' +
-      (itemsText || '(itens do pedido)') + '\n\nTotal: ' + money(Number(order.total) || 0) +
-      '\n\nEntrega prevista: ' + fmtDateStr(order.delivery_date);
+    var msg = buildWhatsAppMessage(order, supplier, state.currentOrderItems || []);
     var waBtn = document.getElementById('pedido-whatsapp-btn');
     waBtn.href = (phoneDigits ? 'https://wa.me/' + phoneDigits : 'https://wa.me/') + '?text=' + encodeURIComponent(msg);
     document.getElementById('pedido-whatsapp-sub').textContent = phoneDigits
-      ? 'enviar para ' + (supplier ? supplier.name : 'o fornecedor') + ' no WhatsApp'
+      ? 'enviar para ' + (supplier ? supplier.name : 'o fornecedor') + ' com link para ele confirmar'
       : 'fornecedor sem telefone cadastrado — você escolhe o contato';
+  }
+
+  // Builds the WhatsApp text using WhatsApp's own formatting (*bold*), one block per item and a clear total.
+  function buildWhatsAppMessage(order, supplier, items){
+    var SEP = '━━━━━━━━━━━━━━';
+    var compact = items.length > 15; // very long orders: one line per item so the link stays short enough
+    function keycap(n){ return n <= 9 ? (n + '\uFE0F\u20E3') : ('▪️ ' + n + '.'); }
+    var total = Number(order.total);
+    if(!total && items.length) total = items.reduce(function(sum, it){ return sum + it.qty * it.price; }, 0);
+    var lines = [];
+    lines.push('*PAULU\'S RESTAURANTES* 🍽️');
+    lines.push('*Pedido ' + order.code + '*');
+    lines.push('');
+    lines.push('Olá' + (supplier ? ', *' + supplier.name + '*' : '') + '! Segue o nosso pedido:');
+    lines.push('');
+    lines.push('📦 *ITENS*');
+    lines.push(SEP);
+    if(items.length === 0) lines.push('(itens do pedido)');
+    items.forEach(function(it, i){
+      var qtyText = it.qty + ' ' + (UNIT_LABELS[it.unit] || 'un');
+      var sub = '*' + money(it.qty * it.price) + '*';
+      if(compact){
+        lines.push('• ' + it.name + ' — ' + qtyText + ' × ' + money(it.price) + ' = ' + sub);
+      } else {
+        lines.push(keycap(i + 1) + ' *' + it.name + '*');
+        lines.push('      ' + qtyText + ' × ' + money(it.price) + ' = ' + sub);
+        lines.push('');
+      }
+    });
+    if(compact) lines.push('');
+    lines.push(SEP);
+    lines.push('💰 *TOTAL: ' + money(total || 0) + '*');
+    lines.push('📅 *Entrega prevista:* ' + fmtDateStr(order.delivery_date));
+    if(order.id){
+      lines.push('');
+      lines.push('✅ *Para CONFIRMAR o pedido, toque no link:*');
+      lines.push(APP_BASE_URL + '?confirmar=' + order.id);
+    }
+    return lines.join('\n');
   }
 
   function normalizePhoneForWhatsApp(phone){
@@ -4900,6 +5051,35 @@ var QRCode;
   function normalizeEmail(v){ return String(v || '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, ''); }
   var currentBuyer = BUYERS[0];
 
+  function showBuyerToast(message){
+    var toast = document.createElement('div');
+    toast.textContent = message;
+    toast.style.cssText = 'position:fixed; top:20px; left:50%; transform:translateX(-50%); background:var(--green); color:#fff; padding:12px 20px; border-radius:10px; font-size:13px; font-weight:600; z-index:9999; box-shadow:0 8px 20px rgba(0,0,0,.25); max-width:90vw; text-align:center;';
+    buyerRoot.appendChild(toast);
+    setTimeout(function(){ toast.remove(); }, 5000);
+  }
+
+  // Re-reads the orders so that a supplier's "Confirmar pedido" (done on the link we send by WhatsApp) shows up here.
+  async function refreshOrdersFromServer(){
+    if(!dbReady) return;
+    var before = {};
+    ORDERS.forEach(function(o){ before[o.id] = o.status; });
+    try{ await ensureOrdersList(); } catch(err){ console.error('Não foi possível atualizar os pedidos', err); return; }
+    if(state.viewingOrder){
+      var fresh = ORDERS.filter(function(o){ return o.id === state.viewingOrder.id; })[0];
+      if(fresh) state.viewingOrder = fresh;
+    }
+    var advanced = ORDERS.filter(function(o){ return before[o.id] && before[o.id] !== o.status && (o.status === 'confirmado' || o.status === 'a_caminho'); });
+    advanced.forEach(function(o){
+      showBuyerToast(o.supplier_name + (o.status === 'confirmado' ? ' confirmou o pedido ' : ' avisou que o pedido está a caminho: ') + o.code);
+    });
+    if(state.page === 'pedidos'){ if(state.viewingOrder){ showPedidosDetail(); } else { renderPedidosList(); } }
+    else if(state.page === 'home') renderHome();
+    else if(state.page === 'dashboard') renderDashboard();
+  }
+  setInterval(function(){ if(document.getElementById('app').classList.contains('active')) refreshOrdersFromServer(); }, 30000);
+  window.addEventListener('focus', function(){ if(document.getElementById('app').classList.contains('active')) refreshOrdersFromServer(); });
+
   document.getElementById('login-btn').addEventListener('click', async function(){
     var email = document.getElementById('login-email').value.trim();
     var senha = document.getElementById('login-senha').value.trim();
@@ -5008,6 +5188,18 @@ var QRCode;
 
   function money(v){ return 'R$ ' + v.toLocaleString('pt-BR', {minimumFractionDigits:2, maximumFractionDigits:2}); }
   function fmtDate(d){ return d.toLocaleDateString('pt-BR', {day:'2-digit', month:'2-digit', year:'numeric'}); }
+  function fmtDateTime(d){
+    return d.toLocaleDateString('pt-BR', {day:'2-digit', month:'2-digit', year:'numeric'}) + ' às ' + d.toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'});
+  }
+  function quotationDeadlinePassed(q){ return !!(q && q.deadline && q.deadline.getTime() <= Date.now()); }
+  function deadlineBadge(q){
+    return quotationDeadlinePassed(q)
+      ? '<span class="badge badge-amber">Prazo encerrado</span>'
+      : '<span class="badge badge-green">Aberta · até ' + fmtDateTime(q.deadline) + '</span>';
+  }
+  function deadlineText(q){
+    return quotationDeadlinePassed(q) ? 'Prazo para responder encerrado em ' + fmtDateTime(q.deadline) : 'Aberta até ' + fmtDateTime(q.deadline) + ' — depois desse horário não dá mais para responder';
+  }
   function parsePrice(v){
     var n = parseFloat(String(v).replace('R$','').replace(/\./g,'').replace(',','.').trim());
     return isNaN(n) ? null : n;
@@ -5410,7 +5602,7 @@ var QRCode;
     var totalBids = q.items.reduce(function(sum, it){ return sum + it.bids.length; }, 0);
     var itemNames = q.items.map(function(it){ return it.name; }).join(', ');
     var statusBadge = overallStatus === 'aberta'
-      ? '<span class="badge badge-green">Aberta · até ' + fmtDate(q.deadline) + '</span>'
+      ? deadlineBadge(q)
       : '<span class="badge badge-gray">Encerrada</span>';
     card.innerHTML =
       '<div class="row" style="justify-content:space-between; align-items:flex-start; margin-bottom:8px;">' +
@@ -5474,11 +5666,12 @@ var QRCode;
     var others = item.bids.filter(function(b){ return b.supplier !== MY_NAME; });
     var activePrices = item.bids.filter(function(b){ return !b.notAvailable && b.price != null; }).map(function(b){ return b.price; });
     var lowest = activePrices.length ? Math.min.apply(null, activePrices) : null;
-    var isOpen = item.status === 'aberta';
+    var deadlinePassed = quotationDeadlinePassed(q);
+    var isOpen = item.status === 'aberta' && !deadlinePassed;
 
     var header = '<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">' +
       '<h3 style="font-size:16px;">' + item.name + '</h3>' +
-      (isOpen ? '<span class="badge badge-green">Aberta</span>' : '<span class="badge badge-gray">Encerrada' + (item.winner ? (item.winner === MY_NAME ? ' · você venceu!' : '') : '') + '</span>') +
+      (isOpen ? '<span class="badge badge-green">Aberta</span>' : (deadlinePassed && item.status === 'aberta') ? '<span class="badge badge-amber">Prazo encerrado</span>' : '<span class="badge badge-gray">Encerrada' + (item.winner ? (item.winner === MY_NAME ? ' · você venceu!' : '') : '') + '</span>') +
     '</div>';
 
     var myRowsHtml = (isNotAvailable ? [] : (myBids.length ? myBids : [{brand:'', price:null, obs:'', bidId:null}]))
@@ -5493,7 +5686,7 @@ var QRCode;
           '<div data-rows>' + myRowsHtml + '</div>' +
           (isOpen ? '<button type="button" class="btn btn-ghost" data-action="adicionar-entrada" style="margin-bottom:12px;">+ Adicionar outra opção</button>' : '') +
         '</div>' +
-        (isOpen ? '<button type="button" class="btn" data-action="salvar-item" style="background:var(--amber); color:#fff;">Salvar respostas para ' + item.name + '</button>' : '<div style="font-size:12px; color:var(--ink-muted);">Item encerrado.</div>') +
+        (isOpen ? '<button type="button" class="btn" data-action="salvar-item" style="background:var(--amber); color:#fff;">Salvar respostas para ' + item.name + '</button>' : '<div style="font-size:12px; color:var(--ink-muted);">' + ((deadlinePassed && item.status === 'aberta') ? 'O prazo para responder terminou em ' + fmtDateTime(q.deadline) + '.' : 'Item encerrado.') + '</div>') +
       '</div>';
 
     var competitorsHtml = others.length
@@ -5501,6 +5694,10 @@ var QRCode;
       : '<div class="card" style="text-align:center; color:var(--ink-soft); font-size:13px;">Nenhum concorrente respondeu este item ainda.</div>';
 
     wrap.innerHTML = header + editor + '<div style="font-size:12px; font-weight:600; color:var(--ink-soft); margin-bottom:8px;">Propostas dos concorrentes</div>' + competitorsHtml;
+    if(!isOpen){
+      // closed item or closing time reached: the answers stay visible but can't be edited
+      wrap.querySelectorAll('[data-rows] input, [data-rows] textarea, [data-rows] button').forEach(function(el){ el.disabled = true; });
+    }
     wrap.dataset.itemId = item.id;
     return wrap;
   }
@@ -5513,7 +5710,7 @@ var QRCode;
     document.getElementById('f-cotacoes-detail-view').style.display = 'block';
 
     document.getElementById('f-cotacao-detail-title').textContent = q.title;
-    document.getElementById('f-cotacao-detail-sub').textContent = (quotationOverallStatus(q) === 'aberta' ? 'Aberta até ' + fmtDate(q.deadline) : 'Encerrada') + ' · ' + q.items.length + ' item(ns)';
+    document.getElementById('f-cotacao-detail-sub').textContent = (quotationOverallStatus(q) === 'aberta' ? deadlineText(q) : 'Encerrada') + ' · ' + q.items.length + ' item(ns)';
 
     var itensList = document.getElementById('f-cotacao-itens-list');
     itensList.innerHTML = '';
@@ -5600,6 +5797,11 @@ var QRCode;
     if(!q) return;
     var item = q.items.filter(function(it){ return it.id === itemId; })[0];
     if(!item || item.status !== 'aberta') return;
+    if(quotationDeadlinePassed(q)){
+      alert('O prazo desta cotação já terminou — não é mais possível enviar respostas.');
+      renderCotacaoDetail(q.id);
+      return;
+    }
 
     var notAvailable = itemBlock.querySelector('[data-action="toggle-not-available"]').checked;
     var newBids = [];
@@ -5653,6 +5855,25 @@ var QRCode;
     supplierRoot.appendChild(toast);
     setTimeout(function(){ toast.remove(); }, 2800);
   }
+
+  // Lock the answers on screen as soon as a quotation's closing time arrives.
+  var supplierDeadlineStates = {};
+  setInterval(function(){
+    var changedQuotation = null;
+    QUOTATIONS.forEach(function(q){
+      var passed = quotationDeadlinePassed(q);
+      if(supplierDeadlineStates[q.id] !== undefined && supplierDeadlineStates[q.id] !== passed && passed) changedQuotation = q;
+      supplierDeadlineStates[q.id] = passed;
+    });
+    if(!changedQuotation || !document.getElementById('f-app').classList.contains('active')) return;
+    var detailOpen = document.getElementById('f-cotacoes-detail-view').style.display !== 'none';
+    if(detailOpen && currentQuotationId === changedQuotation.id){
+      renderCotacaoDetail(currentQuotationId);
+      showSupplierToast('O prazo desta cotação terminou — as respostas foram encerradas.');
+    } else if(document.getElementById('f-page-cotacoes').classList.contains('active') && !detailOpen){
+      renderCotacoesList();
+    }
+  }, 15000);
 
   /* ---------- Perfil ---------- */
   function renderTagList(containerId, arr, tagClass, placeholder){
@@ -5908,6 +6129,70 @@ var QRCode;
   });
 
   load();
+})();
+</script>
+
+<script>
+/* Supplier confirmation: opening the link in the WhatsApp message (?confirmar=<order id>) confirms the order right away */
+(function(){
+  "use strict";
+  var params = new URLSearchParams(window.location.search);
+  var orderId = params.get('confirmar');
+  if(!orderId) return;
+
+  document.getElementById('buyer-root').style.display = 'none';
+  document.getElementById('supplier-root').style.display = 'none';
+  var root = document.getElementById('public-root');
+  root.style.cssText = 'display:flex; align-items:center; justify-content:center; min-height:100vh; background:#fff; font-family:"IBM Plex Sans",sans-serif; color:#1B2420;';
+
+  var db = window.supabase.createClient('https://dqghwfrmodulnevzpgbw.supabase.co', 'sb_publishable_nNk6sJNE-7NzraHnjXliLQ_nRfeWtZb');
+  var GREEN = '#1F9E58';
+
+  function esc(t){ return String(t == null ? '' : t).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+  function screen(inner){ root.innerHTML = '<div style="text-align:center; padding:24px; max-width:420px;">' + inner + '</div>'; }
+
+  function okScreen(code, note){
+    screen(
+      '<div style="width:150px; height:150px; border-radius:50%; background:' + GREEN + '; margin:0 auto 20px auto; display:flex; align-items:center; justify-content:center;">' +
+        '<svg width="84" height="84" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>' +
+      '</div>' +
+      '<div id="confirm-ok" style="font-size:48px; font-weight:800; color:' + GREEN + '; letter-spacing:1px;">OK</div>'
+    );
+  }
+  function messageScreen(text, color){ screen('<div id="confirm-msg" style="font-size:15px; color:' + (color || '#5B6A62') + '; line-height:1.5;">' + text + '</div>'); }
+
+  async function run(){
+    screen('<div style="font-size:15px; color:#6B7A72;">Confirmando…</div>');
+    try{
+      var o = await db.from('orders').select('id,code,status,confirmed').eq('id', orderId).single();
+      if(o.error || !o.data){ messageScreen('Pedido não encontrado. Confira o link que você recebeu.'); return; }
+      var order = o.data;
+
+      if(order.status === 'rascunho'){
+        messageScreen('Este pedido ainda não foi liberado pela Paulu&#39;s. Tente abrir o link de novo mais tarde.', '#8A5A22');
+        return;
+      }
+      if(order.confirmed || order.status === 'entregue'){ okScreen(order.code, 'entrega concluída'); return; }
+
+      if(order.status === 'enviado'){
+        // moves forward only from "enviado", so it never overwrites a newer status
+        var up = await db.from('orders').update({ status: 'confirmado' }).eq('id', orderId).eq('status', 'enviado');
+        if(up.error) throw new Error(up.error.message);
+        // the database can ignore a blocked update without any error, so check that it really changed
+        var check = await db.from('orders').select('status').eq('id', orderId).single();
+        if(check.error || !check.data || check.data.status === 'enviado') throw new Error('A confirmação não foi gravada.');
+      }
+      okScreen(order.code, 'confirmado');
+    } catch(err){
+      console.error(err);
+      screen('<div style="font-size:15px; color:#C43D3D; margin-bottom:16px;">Não foi possível confirmar o pedido agora.</div>' +
+             '<button id="confirm-retry" style="background:' + GREEN + '; color:#fff; border:none; border-radius:12px; padding:14px 22px; font-size:15px; font-weight:700; cursor:pointer;">Tentar de novo</button>');
+      var r = document.getElementById('confirm-retry');
+      if(r) r.addEventListener('click', run);
+    }
+  }
+
+  run();
 })();
 </script>
 
