@@ -1854,10 +1854,10 @@ html, body {
               <div class="field" style="flex:1 1 140px;"><label for="pe-code">Código</label><input id="pe-code" type="text"></div>
               <div class="field" style="flex:1 1 160px;"><label for="pe-status">Status</label>
                 <select id="pe-status" style="width:100%; border:1px solid var(--line); border-radius:8px; padding:10px 12px; font-size:13px;">
+                  <option value="rascunho">Rascunho · aguardando confirmação</option>
                   <option value="enviado">Pedido enviado</option>
                   <option value="confirmado">Confirmado pelo fornecedor</option>
                   <option value="a_caminho">A caminho</option>
-                  <option value="entregue">Entregue e conferido</option>
                 </select>
               </div>
               <div class="field" style="flex:1 1 160px;"><label for="pe-entrega">Data de entrega</label><input id="pe-entrega" type="date"></div>
@@ -2044,9 +2044,14 @@ html, body {
       <!-- ================= CATÁLOGO ================= -->
       <section class="page active" id="f-page-catalogo">
         <div class="banner banner-amber" style="margin-bottom:16px;">
-          Defina o preço e as condições de cada produto — os pedidos e a negociação acontecem pelo WhatsApp.
+          Esta é a árvore de produtos da Paulu&#39;s. Abra uma categoria e, nos produtos que você trabalha, informe marca, preço e condições — as alterações salvam sozinhas.
         </div>
         <div class="banner banner-green" id="f-catalogo-saved-banner" style="margin-bottom:16px;">Alterações salvas.</div>
+        <div class="search" style="margin-bottom:12px;">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--ink-faint)" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+          <label for="f-catalogo-search" class="sr-only">Buscar produto</label>
+          <input id="f-catalogo-search" type="text" placeholder="Buscar produto em todas as categorias">
+        </div>
         <div class="chip-row" id="f-catalogo-filters"></div>
         <div class="list" id="f-catalogo-list"></div>
         <button class="btn btn-primary" id="f-catalogo-save-btn" style="margin-top:20px;">Salvar alterações</button>
@@ -3642,7 +3647,7 @@ var QRCode;
   /* ---------- Cotação ---------- */
   function fmtDateTime(d){ return fmtDate(d); }
 
-  function quotationCard(q){
+  function quotationCard(q, showDelete){
     var card = document.createElement('div');
     card.className = 'card';
     var overallStatus = quotationOverallStatus(q);
@@ -3659,7 +3664,10 @@ var QRCode;
         '<div class="row-sub">' + totalBids + (totalBids === 1 ? ' resposta recebida' : ' respostas recebidas') + '</div></div>' +
         statusBadge +
       '</div>' +
-      '<button class="btn btn-ghost" data-action="ver-cotacao" data-id="' + q.id + '">Ver respostas</button>';
+      '<div style="display:flex; gap:8px;">' +
+        '<button class="btn btn-ghost" data-action="ver-cotacao" data-id="' + q.id + '">Ver respostas</button>' +
+        (showDelete ? '<button class="btn btn-ghost" data-action="excluir-cotacao" data-id="' + q.id + '" style="color:var(--red);">Excluir</button>' : '') +
+      '</div>';
     return card;
   }
 
@@ -3669,7 +3677,7 @@ var QRCode;
     document.getElementById('nova-cotacao-form').style.display = 'none';
     var list = document.getElementById('cotacoes-list');
     list.innerHTML = '';
-    QUOTATIONS.forEach(function(q){ list.appendChild(quotationCard(q)); });
+    QUOTATIONS.forEach(function(q){ list.appendChild(quotationCard(q, true)); });
   }
 
   document.getElementById('nova-cotacao-toggle').addEventListener('click', function(){
@@ -3837,8 +3845,9 @@ var QRCode;
     var btn = document.getElementById('lista-abrir-cotacao');
     var originalLabel = btn.textContent;
     btn.disabled = true; btn.textContent = 'Abrindo cotação...';
+    var q = null;
     try{
-      var q = await createQuotationFromItems(itemsPayload, { title: 'Cotação da lista de compras' });
+      q = await createQuotationFromItems(itemsPayload, { title: 'Cotação da lista de compras' });
       if(dbReady && q.id && String(q.id).indexOf('local_') !== 0){
         var inviteRows = supplierIds.map(function(sid){ return { quotation_id:q.id, supplier_id:sid }; });
         check(await db.from('quotation_suppliers').insert(inviteRows), 'Convidar fornecedores pra cotação');
@@ -3851,7 +3860,18 @@ var QRCode;
     } catch(err){
       btn.disabled = false; btn.textContent = originalLabel;
       console.error('Erro ao abrir cotação a partir da lista', err);
-      alert('Não foi possível abrir a cotação.\n\nDetalhe técnico: ' + (err && err.message ? err.message : err));
+      // Undo the half-created quotation: without its invite list it would be visible to EVERY supplier.
+      if(q){
+        QUOTATIONS = QUOTATIONS.filter(function(x){ return x !== q; });
+        if(dbReady && q.id && String(q.id).indexOf('local_') !== 0){
+          try{
+            await db.from('quotation_items').delete().eq('quotation_id', q.id);
+            await db.from('quotation_suppliers').delete().eq('quotation_id', q.id);
+            await db.from('quotations').delete().eq('id', q.id);
+          } catch(rollbackErr){ console.error('Não foi possível desfazer a cotação incompleta', rollbackErr); }
+        }
+      }
+      alert('Não foi possível abrir a cotação — nada foi enviado aos fornecedores.\n\nDetalhe técnico: ' + (err && err.message ? err.message : err));
     }
   });
 
@@ -4043,6 +4063,34 @@ var QRCode;
   }
 
   document.getElementById('cotacao-voltar').addEventListener('click', function(){ unsubscribeQuotation(); renderCotacoesList(); });
+
+  buyerRoot.addEventListener('click', async function(e){
+    var delBtn = e.target.closest('[data-action="excluir-cotacao"]');
+    if(!delBtn) return;
+    var q = QUOTATIONS.filter(function(x){ return x.id === delBtn.dataset.id; })[0];
+    if(!q) return;
+    if(!confirm('Excluir a cotação "' + q.title + '"? Isso apaga os itens e todas as propostas recebidas — não pode ser desfeito.')) return;
+
+    delBtn.disabled = true;
+    try{
+      if(dbReady && String(q.id).indexOf('local_') !== 0){
+        var itemIds = q.items.filter(function(it){ return String(it.id).indexOf('local_') !== 0; }).map(function(it){ return it.id; });
+        if(itemIds.length){
+          check(await db.from('quotation_bids').delete().in('quotation_item_id', itemIds), 'Excluir propostas da cotação');
+        }
+        check(await db.from('quotation_items').delete().eq('quotation_id', q.id), 'Excluir itens da cotação');
+        check(await db.from('quotation_suppliers').delete().eq('quotation_id', q.id), 'Excluir convites da cotação');
+        check(await db.from('quotations').delete().eq('id', q.id), 'Excluir cotação');
+      }
+      QUOTATIONS = QUOTATIONS.filter(function(x){ return x.id !== q.id; });
+      if(currentQuotationId === q.id){ unsubscribeQuotation(); currentQuotationId = null; }
+      renderCotacoesList();
+    } catch(err){
+      delBtn.disabled = false;
+      console.error('Erro ao excluir cotação', err);
+      alert('Não foi possível excluir a cotação.\n\nDetalhe técnico: ' + (err && err.message ? err.message : err));
+    }
+  });
 
   document.getElementById('cotacao-finalizar').addEventListener('click', async function(){
     var q = QUOTATIONS.filter(function(x){ return x.id === currentQuotationId; })[0];
@@ -4347,8 +4395,10 @@ var QRCode;
       '<div style="display:flex; gap:8px; margin-top:12px; flex-wrap:wrap;">' +
         (isDraft ? '<button class="btn btn-primary" data-action="confirmar-rascunho" data-id="' + order.id + '" style="padding:8px 14px;">Confirmar pedido</button>' : '') +
         '<button class="btn btn-ghost" data-action="ver-pedido" data-id="' + order.id + '" style="padding:8px 14px;">Ver</button>' +
-        '<button class="btn btn-ghost" data-action="editar-pedido" data-id="' + order.id + '" style="padding:8px 14px;">Editar</button>' +
-        '<button class="btn btn-ghost" data-action="excluir-pedido" data-id="' + order.id + '" style="padding:8px 14px; color:var(--red);">Excluir</button>' +
+        (isOrderLocked(order)
+          ? '<span style="align-self:center; font-size:12px; color:var(--ink-soft);">🔒 Entrega concluída — pedido travado</span>'
+          : '<button class="btn btn-ghost" data-action="editar-pedido" data-id="' + order.id + '" style="padding:8px 14px;">Editar</button>' +
+            '<button class="btn btn-ghost" data-action="excluir-pedido" data-id="' + order.id + '" style="padding:8px 14px; color:var(--red);">Excluir</button>') +
       '</div>';
     return card;
   }
@@ -4393,6 +4443,8 @@ var QRCode;
   document.getElementById('pedido-edit-cancel').addEventListener('click', closeOrderEditForm);
   document.getElementById('pedido-edit-save').addEventListener('click', async function(){
     if(!editingOrderId) return;
+    var editingOrder = ORDERS.filter(function(o){ return o.id === editingOrderId; })[0];
+    if(isOrderLocked(editingOrder)){ alert('Este pedido já teve a entrega concluída e não pode mais ser alterado.'); closeOrderEditForm(); return; }
     var payload = {
       code: document.getElementById('pe-code').value.trim(),
       status: document.getElementById('pe-status').value,
@@ -4442,6 +4494,7 @@ var QRCode;
     var editBtn = e.target.closest('[data-action="editar-pedido"]');
     if(editBtn){
       var order2 = ORDERS.filter(function(o){ return String(o.id) === editBtn.dataset.id; })[0];
+      if(order2 && isOrderLocked(order2)){ alert('Este pedido já teve a entrega concluída e não pode mais ser alterado.'); return; }
       if(order2) openOrderEditForm(order2);
       return;
     }
@@ -4449,6 +4502,7 @@ var QRCode;
     if(delBtn){
       var order3 = ORDERS.filter(function(o){ return String(o.id) === delBtn.dataset.id; })[0];
       if(!order3) return;
+      if(isOrderLocked(order3)){ alert('Este pedido já teve a entrega concluída e não pode mais ser excluído.'); return; }
       if(!confirm('Excluir o pedido ' + order3.code + '? Essa ação não pode ser desfeita.')) return;
       try{
         if(dbReady){
@@ -4473,10 +4527,16 @@ var QRCode;
     itemsEl.innerHTML = '';
     var computedTotal = 0;
     state.currentOrderItems.forEach(function(item){
-      computedTotal += item.qty * item.price;
+      var lineTotal = item.qty * item.price;
+      computedTotal += lineTotal;
       var row = document.createElement('div');
-      row.style.cssText = 'display:flex; justify-content:space-between; padding:6px 0; border-bottom:1px solid #F0EEE7;';
-      row.innerHTML = '<span>' + item.name + '</span><span>' + item.qty + ' × ' + money(item.price) + '</span>';
+      row.style.cssText = 'padding:7px 0; border-bottom:1px solid #F0EEE7;';
+      row.innerHTML =
+        '<div style="font-weight:600;">' + item.name + '</div>' +
+        '<div style="display:flex; justify-content:space-between; color:var(--ink-soft); margin-top:2px;">' +
+          '<span>' + item.qty + ' × ' + money(item.price) + '</span>' +
+          '<span style="font-weight:600; color:var(--ink);">' + money(lineTotal) + '</span>' +
+        '</div>';
       itemsEl.appendChild(row);
     });
     var total = order ? Number(order.total) : computedTotal;
@@ -4496,10 +4556,16 @@ var QRCode;
   }
   document.getElementById('imprimir-btn').addEventListener('click', function(){ window.print(); });
 
+  // Once the delivery has been checked in (status entregue / confirmed), nothing about the order can change anymore.
+  function isOrderLocked(order){
+    return !!(order && (order.confirmed || order.status === 'entregue'));
+  }
+
   function statusChip(item, status, label){
     var isActive = item.receiveStatus === status;
     var activeClass = status === 'recebido' ? 'active' : (status === 'parcial' ? 'active-parcial' : 'active-devolvido');
-    return '<button type="button" class="chip' + (isActive ? ' ' + activeClass : '') + '" data-id="' + item.itemId + '" data-action="set-status" data-status="' + status + '">' + label + '</button>';
+    var locked = isOrderLocked(state.viewingOrder);
+    return '<button type="button" class="chip' + (isActive ? ' ' + activeClass : '') + '" data-id="' + item.itemId + '" data-action="set-status" data-status="' + status + '"' + (locked ? ' disabled style="cursor:not-allowed; opacity:' + (isActive ? '1' : '0.45') + ';"' : '') + '>' + label + '</button>';
   }
 
   function conferenciaRow(item){
@@ -4511,9 +4577,9 @@ var QRCode;
         '<div class="row" style="justify-content:space-between; margin-top:12px; padding-top:12px; border-top:1px solid var(--line);">' +
           '<span style="font-size:12px; color:var(--ink-soft);">Quantidade recebida</span>' +
           '<div class="stepper">' +
-            '<button type="button" data-id="' + item.itemId + '" data-action="recv-dec" aria-label="Diminuir">–</button>' +
+            '<button type="button" data-id="' + item.itemId + '" data-action="recv-dec" aria-label="Diminuir"' + (isOrderLocked(state.viewingOrder) ? ' disabled' : '') + '>–</button>' +
             '<span>' + item.receivedQty + ' / ' + item.qty + '</span>' +
-            '<button type="button" data-id="' + item.itemId + '" data-action="recv-inc" aria-label="Aumentar">+</button>' +
+            '<button type="button" data-id="' + item.itemId + '" data-action="recv-inc" aria-label="Aumentar"' + (isOrderLocked(state.viewingOrder) ? ' disabled' : '') + '>+</button>' +
           '</div>' +
         '</div>';
     }
@@ -4550,7 +4616,11 @@ var QRCode;
     var devolvidoCount = items.filter(function(i){ return i.receiveStatus === 'devolvido'; }).length;
 
     var okBanner = document.getElementById('conferencia-ok');
-    if(allDecided){
+    var lockedOrder = isOrderLocked(state.viewingOrder);
+    if(lockedOrder){
+      okBanner.style.display = 'flex';
+      okBanner.textContent = 'Entrega concluída — a conferência está travada e não pode mais ser alterada.';
+    } else if(allDecided){
       okBanner.style.display = 'flex';
       okBanner.textContent = (parcialCount === 0 && devolvidoCount === 0)
         ? 'Tudo confere com a nota. Pode armazenar.'
@@ -4565,12 +4635,18 @@ var QRCode;
     btn.textContent = alreadyConfirmed ? 'Estoque atualizado' : 'Armazenar produtos';
 
     var noteEl = document.getElementById('conferencia-nota');
-    if(state.viewingOrder && state.viewingOrder.receiver_note && !noteEl.value) noteEl.value = state.viewingOrder.receiver_note;
+    var currentOrderKey = state.viewingOrder ? String(state.viewingOrder.id) : '';
+    if(noteEl.dataset.orderKey !== currentOrderKey){
+      noteEl.dataset.orderKey = currentOrderKey;
+      noteEl.value = (state.viewingOrder && state.viewingOrder.receiver_note) || '';
+    }
+    noteEl.disabled = lockedOrder;
   }
 
   buyerRoot.addEventListener('click', function(e){
     var statusBtn = e.target.closest('[data-action="set-status"]');
     if(statusBtn){
+      if(isOrderLocked(state.viewingOrder)) return;
       var item = state.currentOrderItems.filter(function(x){ return String(x.itemId) === statusBtn.dataset.id; })[0];
       if(item){
         item.receiveStatus = statusBtn.dataset.status;
@@ -4583,6 +4659,7 @@ var QRCode;
     }
     var recvBtn = e.target.closest('[data-action="recv-inc"], [data-action="recv-dec"]');
     if(recvBtn){
+      if(isOrderLocked(state.viewingOrder)) return;
       var item2 = state.currentOrderItems.filter(function(x){ return String(x.itemId) === recvBtn.dataset.id; })[0];
       if(item2){
         var delta = recvBtn.dataset.action === 'recv-inc' ? 1 : -1;
@@ -4595,6 +4672,7 @@ var QRCode;
   document.getElementById('armazenar-btn').addEventListener('click', async function(){
     var order = state.viewingOrder;
     if(!order) return;
+    if(isOrderLocked(order)){ alert('Esta entrega já foi concluída e não pode mais ser alterada.'); return; }
     var note = document.getElementById('conferencia-nota').value.trim();
 
     if(!dbReady){
@@ -4796,18 +4874,32 @@ var QRCode;
     return rows;
   }
 
+  var seededDemoCatalog = false;
+
   async function ensureProducts(){
-    var res = check(await db.from('products').select('id,name,category'), 'Ler produtos');
+    var res = check(await db.from('products').select('id,name,category,unit,image_url'), 'Ler produtos');
     var rows = res.data || [];
+    var demoByName = {};
+    seededDemoCatalog = false;
     if(rows.length === 0){
       var insertRes = check(await db.from('products').insert(PRODUCTS.map(function(p){
         return { name:p.name, category:p.category };
-      })).select('id,name'), 'Criar produtos iniciais');
+      })).select('id,name,category,unit,image_url'), 'Criar produtos iniciais');
       rows = insertRes.data || [];
+      PRODUCTS.forEach(function(p){ demoByName[p.name] = p; });
+      seededDemoCatalog = true;
     }
-    var byName = {};
-    rows.forEach(function(r){ byName[r.name] = r.id; });
-    PRODUCTS.forEach(function(p){ p.dbId = byName[p.name] || null; });
+    // The catalog tree is the company's real product list (one entry per product in the database),
+    // starting blank for this supplier — their own prices/brands are filled in by ensureMySupplierProducts.
+    PRODUCTS = rows.map(function(r){
+      var demo = demoByName[r.name];
+      return {
+        id: r.id, dbId: r.id, name: r.name, category: r.category || 'Sem categoria',
+        unit: r.unit || 'Unidade', imageUrl: r.image_url || null,
+        brand: demo ? demo.brand : '', price: demo ? demo.price : '', obs: demo ? demo.obs : '',
+        available: demo ? !!demo.available : false, best: demo ? !!demo.best : false, hasRow: false
+      };
+    });
   }
 
   async function ensureMySupplierProducts(){
@@ -4815,16 +4907,29 @@ var QRCode;
     var res = check(await db.from('supplier_products').select('product_id,brand,price,observacao,available').eq('supplier_id', myId), 'Ler meu catálogo');
     var rows = res.data || [];
     if(rows.length === 0){
-      var insertRows = PRODUCTS.filter(function(p){ return p.dbId; }).map(function(p){
-        return { supplier_id:myId, product_id:p.dbId, brand:p.brand, price:parsePrice(p.price), observacao:p.obs, available:p.available };
-      });
-      if(insertRows.length) check(await db.from('supplier_products').insert(insertRows), 'Criar catálogo inicial');
+      // Only the very first run on a brand-new demo database seeds demo catalog rows;
+      // real suppliers just start with an empty (to-be-filled) tree.
+      if(seededDemoCatalog){
+        var insertRows = PRODUCTS.filter(function(p){ return p.dbId && p.price; }).map(function(p){
+          return { supplier_id:myId, product_id:p.dbId, brand:p.brand, price:parsePrice(p.price), observacao:p.obs, available:p.available };
+        });
+        if(insertRows.length){
+          check(await db.from('supplier_products').insert(insertRows), 'Criar catálogo inicial');
+          PRODUCTS.forEach(function(p){ if(p.price) p.hasRow = true; });
+        }
+      }
     } else {
       var byProduct = {};
       rows.forEach(function(r){ byProduct[r.product_id] = r; });
       PRODUCTS.forEach(function(p){
         var row = p.dbId ? byProduct[p.dbId] : null;
-        if(row){ p.price = money(Number(row.price)); p.obs = row.observacao || ''; p.available = row.available; if(row.brand) p.brand = row.brand; }
+        if(row){
+          p.hasRow = true;
+          p.price = row.price != null ? money(Number(row.price)) : '';
+          p.obs = row.observacao || '';
+          p.available = !!row.available;
+          p.brand = row.brand || '';
+        }
       });
     }
   }
@@ -4969,44 +5074,119 @@ var QRCode;
     if(el){ e.preventDefault(); goTo(el.dataset.nav); }
   });
 
-  /* ---------- Catálogo ---------- */
-  function renderFilters(){
+  /* ---------- Catálogo (árvore de produtos da empresa) ---------- */
+  var catalogOpen = {};
+  var catalogSearchTerm = '';
+  var catalogOnlyMine = false;
+
+  function escHtml(s){ return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+  function escAttr(s){ return escHtml(s).replace(/"/g,'&quot;'); }
+  function isMineProduct(p){ return !!(p.price && String(p.price).trim()); }
+
+  function renderCatalogToolbar(){
     var row = document.getElementById('f-catalogo-filters');
     row.innerHTML = '';
-    ['Todos'].concat(CATEGORIES).forEach(function(cat){
+    var summary = document.createElement('span');
+    summary.style.cssText = 'font-size:12px; color:var(--ink-soft); align-self:center; white-space:nowrap; margin-right:8px;';
+    summary.textContent = PRODUCTS.filter(isMineProduct).length + ' de ' + PRODUCTS.length + ' produtos com preço seu';
+    row.appendChild(summary);
+    [
+      { label:'Expandir tudo', action:'catalog-expand-all', active:false },
+      { label:'Recolher tudo', action:'catalog-collapse-all', active:false },
+      { label:'Só os que já tenho preço', action:'catalog-only-mine', active:catalogOnlyMine }
+    ].forEach(function(b){
       var chip = document.createElement('button');
       chip.type = 'button';
-      chip.className = 'chip' + (cat === activeFilter ? ' active' : '');
-      chip.textContent = cat;
-      chip.addEventListener('click', function(){ activeFilter = cat; renderCatalogo(); });
+      chip.className = 'chip' + (b.active ? ' active' : '');
+      chip.dataset.action = b.action;
+      chip.textContent = b.label;
       row.appendChild(chip);
     });
   }
 
-  function productRow(p){
-    var row = document.createElement('div');
-    row.className = 'card';
-    if(!p.available) row.style.opacity = '0.7';
-    row.innerHTML =
-      '<div class="row" style="justify-content:space-between; align-items:flex-start; margin-bottom:10px;">' +
-        '<div><div class="row-title">' + p.name + (p.best ? ' <span class="badge badge-green" style="pointer-events:none;">MELHOR PREÇO</span>' : '') + '</div>' +
-        '<div class="row-sub">' + p.category + ' · ' + p.brand + '</div></div>' +
-        '<button type="button" class="badge ' + (p.available ? 'badge-green' : 'badge-gray') + '" data-id="' + p.id + '" data-action="toggle-available">' + (p.available ? 'Disponível' : 'Indisponível') + '</button>' +
+  function catalogProductRow(p){
+    var thumb = p.imageUrl
+      ? '<img src="' + escAttr(p.imageUrl) + '" alt="" style="width:40px; height:40px; object-fit:cover; border-radius:8px; flex:0 0 auto;">'
+      : '';
+    return '<div data-product-row="' + escAttr(p.id) + '" style="border-top:1px solid var(--line); padding:12px 0;">' +
+      '<div class="row" style="justify-content:space-between; align-items:center; gap:10px; margin-bottom:8px;">' +
+        '<div class="row" style="gap:10px; align-items:center;">' + thumb +
+          '<div><div class="row-title" style="font-size:13px;">' + escHtml(p.name) + '</div>' +
+          '<div class="row-sub">' + escHtml(p.unit || 'Unidade') + '</div></div></div>' +
+        '<button type="button" class="badge ' + (p.available ? 'badge-green' : 'badge-gray') + '" data-id="' + escAttr(p.id) + '" data-action="toggle-available">' + (p.available ? 'Disponível' : 'Indisponível') + '</button>' +
       '</div>' +
-      '<div style="display:flex; gap:12px; flex-wrap:wrap;">' +
-        '<div class="field" style="flex:1 1 160px;"><label>Preço</label><input type="text" data-id="' + p.id + '" data-action="edit-price" value="' + p.price + '"></div>' +
-        '<div class="field" style="flex:2 1 260px;"><label>Observações / condições</label><textarea rows="1" data-id="' + p.id + '" data-action="edit-obs" placeholder="Ex.: acima de 10 un. o preço muda">' + p.obs + '</textarea></div>' +
-      '</div>';
-    return row;
+      '<div style="display:flex; gap:10px; flex-wrap:wrap;">' +
+        '<div class="field" style="flex:1 1 130px;"><label>Marca</label><input type="text" data-id="' + escAttr(p.id) + '" data-action="edit-brand" value="' + escAttr(p.brand) + '"></div>' +
+        '<div class="field" style="flex:1 1 120px;"><label>Preço</label><input type="text" data-id="' + escAttr(p.id) + '" data-action="edit-price" placeholder="R$ 0,00" value="' + escAttr(p.price) + '"></div>' +
+        '<div class="field" style="flex:2 1 200px;"><label>Observações / condições</label><textarea rows="1" data-id="' + escAttr(p.id) + '" data-action="edit-obs" placeholder="Ex.: acima de 10 un. o preço muda">' + escHtml(p.obs) + '</textarea></div>' +
+      '</div>' +
+    '</div>';
   }
 
   function renderCatalogo(){
-    renderFilters();
+    renderCatalogToolbar();
     var list = document.getElementById('f-catalogo-list');
-    list.innerHTML = '';
-    var items = activeFilter === 'Todos' ? PRODUCTS : PRODUCTS.filter(function(p){ return p.category === activeFilter; });
-    items.forEach(function(p){ list.appendChild(productRow(p)); });
+    var term = catalogSearchTerm;
+    var groups = {};
+    PRODUCTS.forEach(function(p){ (groups[p.category] = groups[p.category] || []).push(p); });
+    var cats = Object.keys(groups).sort(function(a,b){ return a.localeCompare(b, 'pt-BR'); });
+    var out = '';
+    cats.forEach(function(cat){
+      var all = groups[cat];
+      var items = all.filter(function(p){
+        if(catalogOnlyMine && !isMineProduct(p)) return false;
+        if(term && p.name.toLowerCase().indexOf(term) === -1) return false;
+        return true;
+      });
+      if(items.length === 0) return;
+      var open = (term || catalogOnlyMine) ? true : !!catalogOpen[cat];
+      var mineCount = all.filter(isMineProduct).length;
+      out += '<div class="card" style="padding:0;">' +
+        '<button type="button" data-action="toggle-category" data-cat="' + encodeURIComponent(cat) + '" style="width:100%; display:flex; justify-content:space-between; align-items:center; gap:12px; padding:14px 18px; background:none; border:none; cursor:pointer; text-align:left; font-size:14px; font-weight:600; color:var(--ink-dark);">' +
+          '<span>' + (open ? '▾ ' : '▸ ') + escHtml(cat) + '</span>' +
+          '<span style="font-size:12px; font-weight:500; color:var(--ink-soft);">' + items.length + ' produto(s)' + (mineCount ? ' · ' + mineCount + ' com preço seu' : '') + '</span>' +
+        '</button>' +
+        (open ? '<div style="padding:0 18px 6px;">' + items.map(catalogProductRow).join('') + '</div>' : '') +
+      '</div>';
+    });
+    list.innerHTML = out || '<div class="card" style="text-align:center; color:var(--ink-soft); font-size:13px;">Nenhum produto encontrado.</div>';
     document.getElementById('f-catalogo-saved-banner').classList.remove('show');
+  }
+
+  document.getElementById('f-catalogo-search').addEventListener('input', function(e){
+    catalogSearchTerm = e.target.value.toLowerCase().trim();
+    renderCatalogo();
+  });
+
+  supplierRoot.addEventListener('click', function(e){
+    var cat = e.target.closest('[data-action="toggle-category"]');
+    if(cat){
+      var name = decodeURIComponent(cat.dataset.cat);
+      catalogOpen[name] = !catalogOpen[name];
+      renderCatalogo();
+      return;
+    }
+    if(e.target.closest('[data-action="catalog-expand-all"]')){
+      PRODUCTS.forEach(function(p){ catalogOpen[p.category] = true; });
+      renderCatalogo(); return;
+    }
+    if(e.target.closest('[data-action="catalog-collapse-all"]')){
+      catalogOpen = {};
+      renderCatalogo(); return;
+    }
+    if(e.target.closest('[data-action="catalog-only-mine"]')){
+      catalogOnlyMine = !catalogOnlyMine;
+      renderCatalogo(); return;
+    }
+  });
+
+  function refreshProductBadge(p){
+    var rowEl = supplierRoot.querySelector('[data-product-row="' + p.id + '"]');
+    if(!rowEl) return;
+    var badge = rowEl.querySelector('[data-action="toggle-available"]');
+    if(!badge) return;
+    badge.className = 'badge ' + (p.available ? 'badge-green' : 'badge-gray');
+    badge.textContent = p.available ? 'Disponível' : 'Indisponível';
   }
 
   supplierRoot.addEventListener('change', function(e){
@@ -5015,15 +5195,39 @@ var QRCode;
     var id = el.dataset.id;
     var p = PRODUCTS.filter(function(x){ return x.id === id; })[0];
     if(!p) return;
-    if(el.dataset.action === 'edit-price'){ p.price = el.value; saveSupplierProduct(p); }
+    if(el.dataset.action === 'edit-price'){
+      p.price = el.value;
+      var priceNum = parsePrice(p.price);
+      if(priceNum !== null){
+        el.value = money(priceNum);
+        p.price = el.value;
+        if(!p.available && !p.hasRow){ p.available = true; refreshProductBadge(p); }
+      }
+      saveSupplierProduct(p);
+    }
     if(el.dataset.action === 'edit-obs'){ p.obs = el.value; saveSupplierProduct(p); }
+    if(el.dataset.action === 'edit-brand'){ p.brand = el.value.trim(); saveSupplierProduct(p); }
   });
 
+  // Saves this supplier's price/brand/conditions for one product (updates the row, or creates it the first time).
   function saveSupplierProduct(p){
     if(!dbReady || !myId || !p.dbId) return;
-    db.from('supplier_products').update({ price: parsePrice(p.price), observacao: p.obs, available: p.available })
-      .eq('supplier_id', myId).eq('product_id', p.dbId)
-      .then(function(){}, function(err){ console.error('Erro ao salvar produto', err); });
+    p._saveChain = (p._saveChain || Promise.resolve()).then(async function(){
+      try{
+        var payload = { price: parsePrice(p.price), observacao: p.obs || '', available: !!p.available, brand: p.brand || null };
+        if(p.hasRow){
+          check(await db.from('supplier_products').update(payload).eq('supplier_id', myId).eq('product_id', p.dbId), 'Salvar produto do catálogo');
+        } else {
+          check(await db.from('supplier_products').insert(Object.assign({ supplier_id: myId, product_id: p.dbId }, payload)), 'Salvar produto do catálogo');
+          p.hasRow = true;
+        }
+        var banner = document.getElementById('f-catalogo-saved-banner');
+        if(banner) banner.classList.add('show');
+      } catch(err){
+        console.error('Erro ao salvar produto do catálogo', err);
+        alert('Não foi possível salvar este produto.\n\nDetalhe técnico: ' + (err && err.message ? err.message : err));
+      }
+    });
   }
 
   supplierRoot.addEventListener('click', function(e){
@@ -5033,7 +5237,7 @@ var QRCode;
     if(!p) return;
     p.available = !p.available;
     saveSupplierProduct(p);
-    renderCatalogo();
+    refreshProductBadge(p);
   });
 
   document.getElementById('f-catalogo-save-btn').addEventListener('click', function(){
@@ -5429,7 +5633,8 @@ var QRCode;
 
   function chip(item, status, label, color){
     var active = item.receiveStatus === status;
-    return '<button type="button" data-item="' + item.itemId + '" data-status="' + status + '" style="flex:1; padding:10px 4px; border-radius:8px; border:1px solid ' + (active ? color : LINE) + '; background:' + (active ? color : '#fff') + '; color:' + (active ? '#fff' : '#1B2420') + '; font-size:12px; font-weight:600;">' + label + '</button>';
+    var locked = !!(order && order.confirmed);
+    return '<button type="button" data-item="' + item.itemId + '" data-status="' + status + '"' + (locked ? ' disabled' : '') + ' style="flex:1; padding:10px 4px; border-radius:8px; border:1px solid ' + (active ? color : LINE) + '; background:' + (active ? color : '#fff') + '; color:' + (active ? '#fff' : '#1B2420') + '; font-size:12px; font-weight:600;' + (locked ? ' cursor:not-allowed; opacity:' + (active ? '1' : '0.45') + ';' : '') + '">' + label + '</button>';
   }
 
   function itemRow(item){
@@ -5438,9 +5643,9 @@ var QRCode;
       extra = '<div style="display:flex; justify-content:space-between; align-items:center; margin-top:10px; padding-top:10px; border-top:1px solid ' + LINE + ';">' +
         '<span style="font-size:12px; color:' + SOFT + ';">Quantidade recebida</span>' +
         '<div style="display:flex; align-items:center; gap:10px;">' +
-          '<button type="button" data-item="' + item.itemId + '" data-delta="-1" style="width:26px; height:26px; border-radius:6px; border:1px solid ' + LINE + '; background:#fff; font-size:15px;">–</button>' +
+          '<button type="button" data-item="' + item.itemId + '" data-delta="-1"' + (order && order.confirmed ? ' disabled' : '') + ' style="width:26px; height:26px; border-radius:6px; border:1px solid ' + LINE + '; background:#fff; font-size:15px;">–</button>' +
           '<span style="font-weight:600; min-width:44px; text-align:center;">' + item.receivedQty + ' / ' + item.qty + '</span>' +
-          '<button type="button" data-item="' + item.itemId + '" data-delta="1" style="width:26px; height:26px; border-radius:6px; border:1px solid ' + LINE + '; background:#fff; font-size:15px;">+</button>' +
+          '<button type="button" data-item="' + item.itemId + '" data-delta="1"' + (order && order.confirmed ? ' disabled' : '') + ' style="width:26px; height:26px; border-radius:6px; border:1px solid ' + LINE + '; background:#fff; font-size:15px;">+</button>' +
         '</div></div>';
     }
     return '<div style="background:#fff; border:1px solid ' + LINE + '; border-radius:12px; padding:14px;">' +
@@ -5464,6 +5669,7 @@ var QRCode;
   }
 
   async function save(){
+    if(order && order.confirmed) return;
     var note = document.getElementById('pub-nota').value.trim();
     var btn = document.getElementById('pub-armazenar');
     btn.disabled = true; btn.textContent = 'Salvando...';
@@ -5475,7 +5681,9 @@ var QRCode;
       await db.from('orders').update({ receiver_note:note, confirmed:true, status:'entregue' }).eq('id', order.id);
       order.confirmed = true;
       btn.textContent = 'Estoque atualizado';
+      document.getElementById('pub-nota').disabled = true;
       document.getElementById('pub-done-banner').style.display = 'block';
+      renderItems();
     } catch(err){
       console.error('Erro ao salvar conferência', err);
       btn.disabled = false; btn.textContent = 'Armazenar produtos';
@@ -5508,6 +5716,8 @@ var QRCode;
     if(order.confirmed){
       var btn = document.getElementById('pub-armazenar');
       btn.disabled = true; btn.textContent = 'Já conferido';
+      document.getElementById('pub-nota').disabled = true;
+      document.getElementById('pub-done-banner').textContent = 'Entrega concluída — esta conferência já foi registrada e não pode mais ser alterada.';
       document.getElementById('pub-done-banner').style.display = 'block';
     }
     renderItems();
@@ -5516,6 +5726,7 @@ var QRCode;
   root.addEventListener('click', function(e){
     var chipBtn = e.target.closest('[data-status]');
     if(chipBtn){
+      if(order && order.confirmed) return;
       var item = items.filter(function(i){ return String(i.itemId) === chipBtn.dataset.item; })[0];
       if(item){
         item.receiveStatus = chipBtn.dataset.status;
@@ -5528,6 +5739,7 @@ var QRCode;
     }
     var deltaBtn = e.target.closest('[data-delta]');
     if(deltaBtn){
+      if(order && order.confirmed) return;
       var item2 = items.filter(function(i){ return String(i.itemId) === deltaBtn.dataset.item; })[0];
       if(item2){
         var d = parseInt(deltaBtn.dataset.delta, 10);
