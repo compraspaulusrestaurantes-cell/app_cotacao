@@ -1520,9 +1520,19 @@ html, body {
 
       <!-- ================= DASHBOARD ================= -->
       <section class="page" id="page-dashboard">
+        <div style="display:flex; gap:12px; flex-wrap:wrap; align-items:center; justify-content:space-between; margin-bottom:20px;">
+          <div style="font-size:13px; color:var(--ink-soft);" id="dash-periodo-label">Mostrando: todos os meses</div>
+          <div style="display:flex; align-items:center; gap:8px;">
+            <label for="dash-month" style="font-size:12px; color:var(--ink-soft);">Filtrar por mês</label>
+            <select id="dash-month" style="border:1px solid var(--line); border-radius:8px; padding:10px 12px; font-size:13px; background:#fff; min-width:200px;">
+              <option value="todos">Todos os meses</option>
+            </select>
+          </div>
+        </div>
+
         <div style="display:flex; gap:16px; flex-wrap:wrap; margin-bottom:24px;">
           <div class="card" style="flex:1 1 200px;">
-            <div style="font-size:12px; color:var(--ink-soft); margin-bottom:6px;">Total comprado no mês</div>
+            <div id="dash-total-label" style="font-size:12px; color:var(--ink-soft); margin-bottom:6px;">Total comprado</div>
             <div id="dash-total-comprado" style="font-size:24px; font-weight:700; font-family:'Fraunces',serif;">R$ 0,00</div>
           </div>
           <div class="card" style="flex:1 1 200px;">
@@ -1539,13 +1549,32 @@ html, body {
           </div>
         </div>
 
-        <h2 style="font-size:18px; margin-bottom:14px;">Mais comprados</h2>
-        <div class="grid-products" style="margin-bottom:28px;">
-          <div class="card"><div style="width:100%; height:56px; background:var(--green-tint); border-radius:10px; margin-bottom:10px;"></div><div class="row-title">Arroz tipo 1</div><div class="row-sub">18 pedidos/mês</div></div>
-          <div class="card"><div style="width:100%; height:56px; background:var(--green-tint); border-radius:10px; margin-bottom:10px;"></div><div class="row-title">Óleo de soja</div><div class="row-sub">15 pedidos/mês</div></div>
-          <div class="card"><div style="width:100%; height:56px; background:var(--green-tint); border-radius:10px; margin-bottom:10px;"></div><div class="row-title">Filé de frango</div><div class="row-sub">12 pedidos/mês</div></div>
-          <div class="card"><div style="width:100%; height:56px; background:var(--green-tint); border-radius:10px; margin-bottom:10px;"></div><div class="row-title">Detergente</div><div class="row-sub">10 pedidos/mês</div></div>
+        <h2 style="font-size:18px; margin-bottom:14px;">Entregas parciais</h2>
+        <div style="display:flex; gap:16px; flex-wrap:wrap; margin-bottom:28px;">
+          <div class="card" style="flex:1 1 220px; background:var(--amber-tint); border-color:#F0D9BD;">
+            <div style="font-size:12px; color:var(--amber-dark); margin-bottom:6px; font-weight:600;">Pedidos com entrega parcial</div>
+            <div id="dash-parcial-pedidos" style="font-size:40px; font-weight:700; font-family:'Fraunces',serif; color:var(--amber); line-height:1.1;">0</div>
+            <div id="dash-parcial-pedidos-sub" style="font-size:12px; color:var(--amber-dark); margin-top:6px;">&nbsp;</div>
+          </div>
+          <div class="card" style="flex:1 1 220px; background:var(--amber-tint); border-color:#F0D9BD;">
+            <div style="font-size:12px; color:var(--amber-dark); margin-bottom:6px; font-weight:600;">% dos pedidos entregues</div>
+            <div id="dash-parcial-pct" style="font-size:40px; font-weight:700; font-family:'Fraunces',serif; color:var(--amber); line-height:1.1;">0%</div>
+            <div id="dash-parcial-pct-sub" style="font-size:12px; color:var(--amber-dark); margin-top:6px;">&nbsp;</div>
+          </div>
+          <div class="card" style="flex:1 1 220px; background:var(--amber-tint); border-color:#F0D9BD;">
+            <div style="font-size:12px; color:var(--amber-dark); margin-bottom:6px; font-weight:600;">Unidades que não chegaram</div>
+            <div id="dash-parcial-unidades" style="font-size:40px; font-weight:700; font-family:'Fraunces',serif; color:var(--amber); line-height:1.1;">0</div>
+            <div style="font-size:12px; color:var(--amber-dark); margin-top:6px;">falta em relação ao pedido</div>
+          </div>
+          <div class="card" style="flex:1 1 220px; background:var(--amber-tint); border-color:#F0D9BD;">
+            <div style="font-size:12px; color:var(--amber-dark); margin-bottom:6px; font-weight:600;">Valor não entregue</div>
+            <div id="dash-parcial-valor" style="font-size:40px; font-weight:700; font-family:'Fraunces',serif; color:var(--red); line-height:1.1;">R$ 0,00</div>
+            <div style="font-size:12px; color:var(--amber-dark); margin-top:6px;">pelo preço do pedido</div>
+          </div>
         </div>
+
+        <h2 style="font-size:18px; margin-bottom:14px;">Mais comprados</h2>
+        <div class="grid-products" id="dash-mais-comprados" style="margin-bottom:28px;"></div>
 
         <h2 style="font-size:18px; margin-bottom:14px;">Cotações abertas agora</h2>
         <div class="list" id="dash-cotacoes-abertas-list" style="margin-bottom:28px;"></div>
@@ -2906,7 +2935,7 @@ var QRCode;
   }
 
   async function ensureQuotations(){
-    var selectStr = 'id,title,deadline,status, quotation_items(id,product_name,status,winner_bid_id,qty,product_id, quotation_bids(id,supplier_id,brand,price,observacao,not_available,desconto)), quotation_suppliers(supplier_id)';
+    var selectStr = 'id,title,deadline,status,created_at, quotation_items(id,product_name,status,winner_bid_id,qty,product_id, quotation_bids(id,supplier_id,brand,price,observacao,not_available,desconto)), quotation_suppliers(supplier_id)';
     var res = check(await db.from('quotations').select(selectStr), 'Ler cotações');
     var rows = res.data || [];
     if(rows.length === 0){
@@ -2952,7 +2981,7 @@ var QRCode;
         var winnerBid = it.winner_bid_id ? bids.filter(function(b){ return b.bidId === it.winner_bid_id; })[0] : null;
         return { id: it.id, name: it.product_name, status: it.status, winnerBidId: it.winner_bid_id || null, winner: winnerBid ? winnerBid.supplier : null, qty: it.qty != null ? Number(it.qty) : null, productId: it.product_id || null, bids: bids };
       });
-      return { id: r.id, title: r.title, deadline: new Date(r.deadline), status: r.status, items: items, invitedSupplierIds: (r.quotation_suppliers || []).map(function(qs){ return qs.supplier_id; }) };
+      return { id: r.id, title: r.title, deadline: new Date(r.deadline), createdAt: r.created_at ? new Date(r.created_at) : null, status: r.status, items: items, invitedSupplierIds: (r.quotation_suppliers || []).map(function(qs){ return qs.supplier_id; }) };
     }).sort(function(a,b){ return b.deadline - a.deadline; });
   }
 
@@ -3140,25 +3169,140 @@ var QRCode;
       document.getElementById('home-pedidos-fechados').textContent = pedidosFechados;
       document.getElementById('home-economia').textContent = money(economiaNegociando);
     }
-    var dashTotal = document.getElementById('dash-total-comprado');
-    if(dashTotal){
-      dashTotal.textContent = money(totalComprado);
-      document.getElementById('dash-pedidos-fechados').textContent = pedidosFechados;
+  }
+
+  /* ---------- Dashboard: month filter, partial-delivery numbers ---------- */
+  var dashMonth = 'todos';
+  var dashStatsToken = 0;
+  var MONTH_NAMES = ['janeiro','fevereiro','março','abril','maio','junho','julho','agosto','setembro','outubro','novembro','dezembro'];
+
+  function monthKeyFromDateStr(str){ return str ? String(str).slice(0,7) : ''; }
+  function monthKeyFromDate(d){
+    if(!d || isNaN(d.getTime())) return '';
+    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
+  }
+  function quotationMonthKey(q){ return monthKeyFromDate(q.createdAt || q.deadline); }
+  function monthLabel(key){
+    var p = key.split('-');
+    return MONTH_NAMES[Number(p[1]) - 1] + ' de ' + p[0];
+  }
+
+  function renderDashMonthSelect(){
+    var sel = document.getElementById('dash-month');
+    var keys = {};
+    ORDERS.forEach(function(o){ var k = monthKeyFromDateStr(o.order_date); if(k) keys[k] = true; });
+    QUOTATIONS.forEach(function(q){ var k = quotationMonthKey(q); if(k) keys[k] = true; });
+    keys[monthKeyFromDate(new Date())] = true;
+    var sorted = Object.keys(keys).sort().reverse();
+    sel.innerHTML = '<option value="todos">Todos os meses</option>' +
+      sorted.map(function(k){ return '<option value="' + k + '">' + monthLabel(k).replace(/^./, function(c){ return c.toUpperCase(); }) + '</option>'; }).join('');
+    sel.value = (dashMonth === 'todos' || keys[dashMonth]) ? dashMonth : 'todos';
+    dashMonth = sel.value;
+  }
+
+  function fillPartialStats(values){
+    document.getElementById('dash-parcial-pedidos').textContent = values.pedidos;
+    document.getElementById('dash-parcial-pedidos-sub').textContent = values.pedidosSub;
+    document.getElementById('dash-parcial-pct').textContent = values.pct;
+    document.getElementById('dash-parcial-pct-sub').textContent = values.pctSub;
+    document.getElementById('dash-parcial-unidades').textContent = values.unidades;
+    document.getElementById('dash-parcial-valor').textContent = values.valor;
+  }
+
+  function renderMaisComprados(items){
+    var box = document.getElementById('dash-mais-comprados');
+    var byProduct = {};
+    items.forEach(function(it){
+      var name = it.products && it.products.name ? it.products.name : 'Produto';
+      var key = it.product_id || name;
+      var b = byProduct[key] || (byProduct[key] = { name: name, orders: {}, qty: 0 });
+      b.orders[it.order_id] = true;
+      b.qty += Number(it.qty) || 0;
+    });
+    var top = Object.keys(byProduct).map(function(k){ return byProduct[k]; })
+      .sort(function(a, b){ return (Object.keys(b.orders).length - Object.keys(a.orders).length) || (b.qty - a.qty); })
+      .slice(0, 4);
+    if(top.length === 0){
+      box.innerHTML = '<div class="card" style="grid-column:1/-1; text-align:center; color:var(--ink-soft); font-size:13px;">Nenhuma compra no período.</div>';
+      return;
     }
+    box.innerHTML = top.map(function(t){
+      var n = Object.keys(t.orders).length;
+      return '<div class="card"><div style="width:100%; height:56px; background:var(--green-tint); border-radius:10px; margin-bottom:10px;"></div>' +
+        '<div class="row-title">' + t.name + '</div>' +
+        '<div class="row-sub">' + n + (n === 1 ? ' pedido' : ' pedidos') + ' · ' + t.qty + ' un.</div></div>';
+    }).join('');
+  }
+
+  async function renderDashboardOrderStats(orders){
+    var token = ++dashStatsToken;
+    var delivered = orders.filter(function(o){ return o.status === 'entregue' || o.confirmed; });
+    var ids = orders.map(function(o){ return o.id; }).filter(Boolean);
+    if(!dbReady || ids.length === 0){
+      fillPartialStats({ pedidos:0, pedidosSub:'de ' + delivered.length + ' entregue(s) no período', pct:'0%', pctSub:'nenhum pedido parcial', unidades:0, valor:money(0) });
+      renderMaisComprados([]);
+      return;
+    }
+    fillPartialStats({ pedidos:'…', pedidosSub:'carregando', pct:'…', pctSub:'carregando', unidades:'…', valor:'…' });
+    var items = [];
+    try{
+      var res = check(await db.from('order_items').select('id,order_id,product_id,qty,price,receive_status,received_qty,products(name)').in('order_id', ids), 'Ler itens dos pedidos');
+      items = res.data || [];
+    } catch(err){
+      console.error('Erro ao carregar números do dashboard', err);
+      if(token === dashStatsToken){
+        fillPartialStats({ pedidos:'—', pedidosSub:'não foi possível carregar', pct:'—', pctSub:'', unidades:'—', valor:'—' });
+      }
+      return;
+    }
+    if(token !== dashStatsToken) return; // a newer render replaced this one
+
+    var partialOrders = {}, partialItems = 0, missingUnits = 0, missingValue = 0;
+    items.forEach(function(it){
+      if(it.receive_status !== 'parcial') return;
+      var qty = Number(it.qty) || 0, price = Number(it.price) || 0, got = Number(it.received_qty) || 0;
+      var miss = Math.max(0, qty - got);
+      partialItems++; partialOrders[it.order_id] = true;
+      missingUnits += miss; missingValue += miss * price;
+    });
+    var nPartial = Object.keys(partialOrders).length;
+    var pct = delivered.length ? Math.round((nPartial / delivered.length) * 100) : 0;
+    fillPartialStats({
+      pedidos: nPartial,
+      pedidosSub: partialItems + (partialItems === 1 ? ' item chegou parcial' : ' itens chegaram parciais'),
+      pct: pct + '%',
+      pctSub: nPartial + ' de ' + delivered.length + ' pedido(s) entregue(s)',
+      unidades: missingUnits,
+      valor: money(missingValue)
+    });
+    renderMaisComprados(items);
   }
 
   function renderDashboard(){
-    renderResumoMes();
-    var abertas = QUOTATIONS.filter(function(q){ return quotationOverallStatus(q) === 'aberta'; });
-    var encerradas = QUOTATIONS.filter(function(q){ return quotationOverallStatus(q) === 'encerrada'; });
+    renderDashMonthSelect();
+    var inMonth = function(key){ return dashMonth === 'todos' || key === dashMonth; };
+    var orders = ORDERS.filter(function(o){ return inMonth(monthKeyFromDateStr(o.order_date)); });
+    var realOrders = orders.filter(function(o){ return o.status !== 'rascunho'; });
+    var quots = QUOTATIONS.filter(function(q){ return inMonth(quotationMonthKey(q)); });
+
+    var periodo = dashMonth === 'todos' ? 'todos os meses' : monthLabel(dashMonth);
+    document.getElementById('dash-periodo-label').textContent = 'Mostrando: ' + periodo;
+    document.getElementById('dash-total-label').textContent = dashMonth === 'todos' ? 'Total comprado (todos os meses)' : 'Total comprado em ' + periodo;
+    document.getElementById('dash-total-comprado').textContent = money(realOrders.reduce(function(sum, o){ return sum + (Number(o.total) || 0); }, 0));
+    document.getElementById('dash-pedidos-fechados').textContent = realOrders.filter(function(o){ return o.status === 'entregue'; }).length;
+
+    var abertas = quots.filter(function(q){ return quotationOverallStatus(q) === 'aberta'; });
+    var encerradas = quots.filter(function(q){ return quotationOverallStatus(q) === 'encerrada'; });
     document.getElementById('dash-cotacoes-abertas').textContent = abertas.length;
     var economiaTotal = encerradas.reduce(function(sum, q){ return sum + quotationSavings(q); }, 0);
     document.getElementById('dash-economia-total').textContent = money(economiaTotal);
 
+    renderDashboardOrderStats(realOrders);
+
     var abertasList = document.getElementById('dash-cotacoes-abertas-list');
     abertasList.innerHTML = '';
     if(abertas.length === 0){
-      abertasList.innerHTML = '<div class="card" style="text-align:center; color:var(--ink-soft); font-size:13px;">Nenhuma cotação aberta no momento.</div>';
+      abertasList.innerHTML = '<div class="card" style="text-align:center; color:var(--ink-soft); font-size:13px;">Nenhuma cotação aberta no período.</div>';
     } else {
       abertas.forEach(function(q){ abertasList.appendChild(quotationCard(q)); });
     }
@@ -3166,7 +3310,7 @@ var QRCode;
     var encerradasList = document.getElementById('dash-cotacoes-encerradas-list');
     encerradasList.innerHTML = '';
     if(encerradas.length === 0){
-      encerradasList.innerHTML = '<div class="card" style="text-align:center; color:var(--ink-soft); font-size:13px;">Nenhuma cotação encerrada ainda.</div>';
+      encerradasList.innerHTML = '<div class="card" style="text-align:center; color:var(--ink-soft); font-size:13px;">Nenhuma cotação encerrada no período.</div>';
     } else {
       encerradas.forEach(function(q){
         var card = document.createElement('div');
@@ -3185,6 +3329,10 @@ var QRCode;
       });
     }
   }
+  document.getElementById('dash-month').addEventListener('change', function(e){
+    dashMonth = e.target.value;
+    renderDashboard();
+  });
 
   function productCard(p){
     var card = document.createElement('div');
@@ -3726,7 +3874,7 @@ var QRCode;
     var title = opts.title || ('Cotação de ' + items.length + ' item(ns)');
     var q = {
       id: 'local_' + Date.now(),
-      title: title, deadline: deadline, status: 'aberta', invitedSupplierIds: [],
+      title: title, deadline: deadline, createdAt: new Date(), status: 'aberta', invitedSupplierIds: [],
       items: items.map(function(it, i){
         return { id:'local_item_' + i + '_' + Date.now(), name:it.name, qty:it.qty, productId:it.productId || null, status:'aberta', winner:null, winnerBidId:null, bids:[] };
       })
@@ -4025,7 +4173,7 @@ var QRCode;
   }
 
   async function refreshQuotationBids(qId){
-    var selectStr = 'id,title,deadline,status, quotation_items(id,product_name,status,winner_bid_id,qty,product_id, quotation_bids(id,supplier_id,brand,price,observacao,not_available,desconto)), quotation_suppliers(supplier_id)';
+    var selectStr = 'id,title,deadline,status,created_at, quotation_items(id,product_name,status,winner_bid_id,qty,product_id, quotation_bids(id,supplier_id,brand,price,observacao,not_available,desconto)), quotation_suppliers(supplier_id)';
     var res = await db.from('quotations').select(selectStr).eq('id', qId).maybeSingle();
     if(!res.data) return;
     var r = res.data;
@@ -4041,7 +4189,7 @@ var QRCode;
       return { id: it.id, name: it.product_name, status: it.status, winnerBidId: it.winner_bid_id || null, winner: winnerBid ? winnerBid.supplier : null, qty: it.qty != null ? Number(it.qty) : null, productId: it.product_id || null, bids: bids };
     });
     var idx = QUOTATIONS.findIndex(function(x){ return x.id === qId; });
-    if(idx > -1) QUOTATIONS[idx] = { id: r.id, title: r.title, deadline: new Date(r.deadline), status: r.status, items: items, invitedSupplierIds: (r.quotation_suppliers || []).map(function(qs){ return qs.supplier_id; }) };
+    if(idx > -1) QUOTATIONS[idx] = { id: r.id, title: r.title, deadline: new Date(r.deadline), createdAt: r.created_at ? new Date(r.created_at) : null, status: r.status, items: items, invitedSupplierIds: (r.quotation_suppliers || []).map(function(qs){ return qs.supplier_id; }) };
   }
 
   function unsubscribeQuotation(){
@@ -4743,17 +4891,27 @@ var QRCode;
   }
 
   /* ---------- Login ---------- */
-  var BUYER_EMAIL = 'compras@paulusrestaurantes.com.br';
-  var BUYER_SENHA = 'paulus2026';
+  // Buyer profiles (each one has the same access to the buyer panel)
+  var BUYERS = [
+    { email:'compras@paulusrestaurantes.com.br', senha:'paulus2026', nome:'Murillo', inicial:'M' },
+    { email:'açougue@paulusrestaurantes.com.br', senha:'paulus2026', nome:'Açougue', inicial:'A' }
+  ];
+  // Compare e-mails ignoring case and accents, so "acougue@..." and "açougue@..." both work
+  function normalizeEmail(v){ return String(v || '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, ''); }
+  var currentBuyer = BUYERS[0];
 
   document.getElementById('login-btn').addEventListener('click', async function(){
     var email = document.getElementById('login-email').value.trim();
     var senha = document.getElementById('login-senha').value.trim();
-    if(email.toLowerCase() !== BUYER_EMAIL || senha !== BUYER_SENHA){
+    var match = BUYERS.filter(function(b){ return normalizeEmail(b.email) === normalizeEmail(email) && b.senha === senha; })[0];
+    if(!match){
       document.getElementById('login-error').textContent = 'E-mail ou senha incorretos. Tente novamente.';
       document.getElementById('login-error').classList.add('show');
       return;
     }
+    currentBuyer = match;
+    buyerRoot.querySelector('.sidebar-user .avatar').textContent = match.inicial;
+    buyerRoot.querySelector('.sidebar-user-name').textContent = match.nome;
     document.getElementById('login-error').classList.remove('show');
     var btn = document.getElementById('login-btn');
     var originalLabel = btn.textContent;
