@@ -4743,7 +4743,7 @@ var QRCode;
   document.getElementById('pedido-edit-save').addEventListener('click', async function(){
     if(!editingOrderId) return;
     var editingOrder = ORDERS.filter(function(o){ return o.id === editingOrderId; })[0];
-    if(isOrderLocked(editingOrder)){ alert('Este pedido já teve a entrega concluída e não pode mais ser alterado.'); closeOrderEditForm(); return; }
+    if(await orderLockedOnServer(editingOrder)){ alert('Este pedido já teve a entrega concluída e não pode mais ser alterado.'); closeOrderEditForm(); redrawAfterLock(); return; }
     var payload = {
       code: document.getElementById('pe-code').value.trim(),
       status: document.getElementById('pe-status').value,
@@ -4793,7 +4793,7 @@ var QRCode;
     var editBtn = e.target.closest('[data-action="editar-pedido"]');
     if(editBtn){
       var order2 = ORDERS.filter(function(o){ return String(o.id) === editBtn.dataset.id; })[0];
-      if(order2 && isOrderLocked(order2)){ alert('Este pedido já teve a entrega concluída e não pode mais ser alterado.'); return; }
+      if(order2 && await orderLockedOnServer(order2)){ alert('Este pedido já teve a entrega concluída e não pode mais ser alterado.'); redrawAfterLock(); return; }
       if(order2) openOrderEditForm(order2);
       return;
     }
@@ -4801,7 +4801,7 @@ var QRCode;
     if(delBtn){
       var order3 = ORDERS.filter(function(o){ return String(o.id) === delBtn.dataset.id; })[0];
       if(!order3) return;
-      if(isOrderLocked(order3)){ alert('Este pedido já teve a entrega concluída e não pode mais ser excluído.'); return; }
+      if(await orderLockedOnServer(order3)){ alert('Este pedido já teve a entrega concluída e não pode mais ser excluído.'); redrawAfterLock(); return; }
       if(!confirm('Excluir o pedido ' + order3.code + '? Essa ação não pode ser desfeita.')) return;
       try{
         if(dbReady){
@@ -4858,6 +4858,27 @@ var QRCode;
   // Once the delivery has been checked in (status entregue / confirmed), nothing about the order can change anymore.
   function isOrderLocked(order){
     return !!(order && (order.confirmed || order.status === 'entregue'));
+  }
+
+  // The screen can be out of date (e.g. the stockkeeper finished the delivery by QR code on his phone),
+  // so before changing an order we ask the database whether it has already been delivered.
+  async function orderLockedOnServer(order){
+    if(!order) return false;
+    if(dbReady && order.id && String(order.id).indexOf('local_') !== 0){
+      try{
+        var res = await db.from('orders').select('status,confirmed,receiver_note').eq('id', order.id).maybeSingle();
+        if(res && res.data){
+          order.status = res.data.status;
+          order.confirmed = !!res.data.confirmed;
+          order.receiver_note = res.data.receiver_note;
+        }
+      } catch(err){ console.error('Não foi possível conferir o pedido no banco', err); }
+    }
+    return isOrderLocked(order);
+  }
+  function redrawAfterLock(){
+    if(state.page === 'conferencia') renderConferencia();
+    else if(state.page === 'pedidos'){ if(state.viewingOrder) showPedidosDetail(); else renderPedidosList(); }
   }
 
   function statusChip(item, status, label){
@@ -4971,7 +4992,7 @@ var QRCode;
   document.getElementById('armazenar-btn').addEventListener('click', async function(){
     var order = state.viewingOrder;
     if(!order) return;
-    if(isOrderLocked(order)){ alert('Esta entrega já foi concluída e não pode mais ser alterada.'); return; }
+    if(await orderLockedOnServer(order)){ alert('Esta entrega já foi concluída e não pode mais ser alterada.'); redrawAfterLock(); return; }
     var note = document.getElementById('conferencia-nota').value.trim();
 
     if(!dbReady){
@@ -5972,6 +5993,7 @@ var QRCode;
   var GREEN = '#146C4E', AMBER = '#C97A2B', RED = '#C43D3D', LINE = '#E1E4DF', SOFT = '#5B6A62';
   var order = null;
   var items = [];
+  function isLocked(){ return !!(order && (order.confirmed || order.status === 'entregue')); }
 
   function money(v){ return 'R$ ' + Number(v || 0).toLocaleString('pt-BR', {minimumFractionDigits:2, maximumFractionDigits:2}); }
   function fmtDateStr(s){
@@ -6012,7 +6034,7 @@ var QRCode;
 
   function chip(item, status, label, color){
     var active = item.receiveStatus === status;
-    var locked = !!(order && order.confirmed);
+    var locked = isLocked();
     return '<button type="button" data-item="' + item.itemId + '" data-status="' + status + '"' + (locked ? ' disabled' : '') + ' style="flex:1; padding:10px 4px; border-radius:8px; border:1px solid ' + (active ? color : LINE) + '; background:' + (active ? color : '#fff') + '; color:' + (active ? '#fff' : '#1B2420') + '; font-size:12px; font-weight:600;' + (locked ? ' cursor:not-allowed; opacity:' + (active ? '1' : '0.45') + ';' : '') + '">' + label + '</button>';
   }
 
@@ -6022,9 +6044,9 @@ var QRCode;
       extra = '<div style="display:flex; justify-content:space-between; align-items:center; margin-top:10px; padding-top:10px; border-top:1px solid ' + LINE + ';">' +
         '<span style="font-size:12px; color:' + SOFT + ';">Quantidade recebida</span>' +
         '<div style="display:flex; align-items:center; gap:10px;">' +
-          '<button type="button" data-item="' + item.itemId + '" data-delta="-1"' + (order && order.confirmed ? ' disabled' : '') + ' style="width:26px; height:26px; border-radius:6px; border:1px solid ' + LINE + '; background:#fff; font-size:15px;">–</button>' +
+          '<button type="button" data-item="' + item.itemId + '" data-delta="-1"' + (isLocked() ? ' disabled' : '') + ' style="width:26px; height:26px; border-radius:6px; border:1px solid ' + LINE + '; background:#fff; font-size:15px;">–</button>' +
           '<span style="font-weight:600; min-width:44px; text-align:center;">' + item.receivedQty + ' / ' + item.qty + '</span>' +
-          '<button type="button" data-item="' + item.itemId + '" data-delta="1"' + (order && order.confirmed ? ' disabled' : '') + ' style="width:26px; height:26px; border-radius:6px; border:1px solid ' + LINE + '; background:#fff; font-size:15px;">+</button>' +
+          '<button type="button" data-item="' + item.itemId + '" data-delta="1"' + (isLocked() ? ' disabled' : '') + ' style="width:26px; height:26px; border-radius:6px; border:1px solid ' + LINE + '; background:#fff; font-size:15px;">+</button>' +
         '</div></div>';
     }
     return '<div style="background:#fff; border:1px solid ' + LINE + '; border-radius:12px; padding:14px;">' +
@@ -6044,11 +6066,17 @@ var QRCode;
     var decided = items.filter(function(i){ return i.receiveStatus && i.receiveStatus !== 'pendente'; }).length;
     document.getElementById('pub-progress').textContent = decided + ' de ' + total + ' itens conferidos';
     var btn = document.getElementById('pub-armazenar');
-    btn.disabled = decided < total || !!order.confirmed;
+    btn.disabled = decided < total || isLocked();
   }
 
   async function save(){
-    if(order && order.confirmed) return;
+    if(isLocked()) return;
+    // the page may have been open for a while: ask the database before writing anything
+    try{
+      var latest = await db.from('orders').select('status,confirmed').eq('id', order.id).maybeSingle();
+      if(latest && latest.data){ order.status = latest.data.status; order.confirmed = !!latest.data.confirmed; }
+    } catch(e){ console.error(e); }
+    if(isLocked()){ render(); return; }
     var note = document.getElementById('pub-nota').value.trim();
     var btn = document.getElementById('pub-armazenar');
     btn.disabled = true; btn.textContent = 'Salvando...';
@@ -6058,7 +6086,7 @@ var QRCode;
         await db.from('order_items').update({ receive_status:it.receiveStatus, received_qty:it.receivedQty }).eq('id', it.itemId);
       }
       await db.from('orders').update({ receiver_note:note, confirmed:true, status:'entregue' }).eq('id', order.id);
-      order.confirmed = true;
+      order.confirmed = true; order.status = 'entregue';
       btn.textContent = 'Estoque atualizado';
       document.getElementById('pub-nota').disabled = true;
       document.getElementById('pub-done-banner').style.display = 'block';
@@ -6092,7 +6120,7 @@ var QRCode;
 
     document.getElementById('pub-nota').value = order.receiver_note || '';
     document.getElementById('pub-armazenar').addEventListener('click', save);
-    if(order.confirmed){
+    if(isLocked()){
       var btn = document.getElementById('pub-armazenar');
       btn.disabled = true; btn.textContent = 'Já conferido';
       document.getElementById('pub-nota').disabled = true;
@@ -6105,7 +6133,7 @@ var QRCode;
   root.addEventListener('click', function(e){
     var chipBtn = e.target.closest('[data-status]');
     if(chipBtn){
-      if(order && order.confirmed) return;
+      if(isLocked()) return;
       var item = items.filter(function(i){ return String(i.itemId) === chipBtn.dataset.item; })[0];
       if(item){
         item.receiveStatus = chipBtn.dataset.status;
@@ -6118,7 +6146,7 @@ var QRCode;
     }
     var deltaBtn = e.target.closest('[data-delta]');
     if(deltaBtn){
-      if(order && order.confirmed) return;
+      if(isLocked()) return;
       var item2 = items.filter(function(i){ return String(i.itemId) === deltaBtn.dataset.item; })[0];
       if(item2){
         var d = parseInt(deltaBtn.dataset.delta, 10);
