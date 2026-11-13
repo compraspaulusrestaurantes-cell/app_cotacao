@@ -492,7 +492,7 @@ input, textarea {
     font-size: 14px;
     font-weight: 600;
     text-align: center;
-    width: 44px;
+    width: 58px;
     border: none;
     background: transparent;
     color: var(--ink);
@@ -1423,6 +1423,7 @@ html, body {
     <div class="login-field">
       <label for="login-senha">Senha</label>
       <input id="login-senha" type="password" placeholder="••••••••" autocomplete="off">
+      <button type="button" id="login-toggle-senha" style="background:none; border:none; padding:6px 0 0 0; font-size:12px; color:var(--green); cursor:pointer; text-decoration:underline;">Mostrar senha</button>
     </div>
     <button class="login-forgot" type="button">Esqueci minha senha</button>
     <button class="btn btn-primary btn-block" id="login-btn">Entrar</button>
@@ -1616,7 +1617,7 @@ html, body {
 
               <div style="font-size:13px; font-weight:600; margin-bottom:8px;">Fornecedores participantes</div>
               <input id="lista-fornecedor-search" type="text" placeholder="Buscar fornecedor" style="width:100%; box-sizing:border-box; border:1px solid var(--line); border-radius:8px; padding:8px 10px; font-size:12px; margin-bottom:8px;">
-              <div id="lista-fornecedores-checklist" style="max-height:180px; overflow-y:auto; border:1px solid var(--line); border-radius:8px; padding:8px; margin-bottom:8px;"></div>
+              <div id="lista-fornecedores-checklist" style="max-height:230px; overflow-y:auto; border:1px solid var(--line); border-radius:8px; padding:8px; margin-bottom:8px;"></div>
               <div style="display:flex; justify-content:space-between; margin-bottom:16px;">
                 <button type="button" class="btn btn-ghost" id="lista-fornecedores-todos" style="padding:6px 10px; font-size:11px;">Marcar sugeridos</button>
                 <button type="button" class="btn btn-ghost" id="lista-fornecedores-nenhum" style="padding:6px 10px; font-size:11px;">Desmarcar todos</button>
@@ -1641,10 +1642,18 @@ html, body {
               </div>
 
               <div style="font-size:13px; font-weight:600; margin-bottom:8px;">Fechar pedido direto</div>
-              <label for="lista-fornecedor-direto" class="sr-only">Fornecedor</label>
-              <select id="lista-fornecedor-direto" style="width:100%; border:1px solid var(--line); border-radius:8px; padding:10px 12px; font-size:13px; margin-bottom:10px;">
-                <option value="">Selecione um fornecedor</option>
-              </select>
+              <div id="direto-picker" style="position:relative; margin-bottom:10px;">
+                <input type="hidden" id="lista-fornecedor-direto" value="">
+                <div id="direto-busca-wrap">
+                  <label for="direto-busca" class="sr-only">Buscar fornecedor</label>
+                  <input id="direto-busca" type="text" placeholder="Buscar fornecedor pelo nome" autocomplete="off" style="width:100%; box-sizing:border-box; border:1px solid var(--line); border-radius:10px; padding:11px 12px; font-size:13px; background:#fff;">
+                </div>
+                <div id="direto-escolhido" style="display:none; align-items:center; gap:10px; border:1px solid var(--green); background:var(--green-tint); border-radius:10px; padding:10px 12px;">
+                  <div id="direto-escolhido-nome" style="flex:1; font-size:13px; font-weight:600; color:var(--green-dark);"></div>
+                  <button type="button" id="direto-trocar" style="background:none; border:none; color:var(--green); font-size:12px; text-decoration:underline; cursor:pointer;">Trocar</button>
+                </div>
+                <div id="direto-lista" style="display:none; position:absolute; left:0; right:0; top:100%; margin-top:6px; max-height:300px; overflow-y:auto; background:#fff; border:1px solid var(--line); border-radius:12px; box-shadow:0 14px 32px rgba(23,50,42,.18); z-index:30;"></div>
+              </div>
               <button class="btn btn-block" id="lista-fechar-direto" style="background:var(--amber); color:#fff;">
                 Fechar pedido agora com este fornecedor
               </button>
@@ -2034,6 +2043,27 @@ html, body {
   </nav>
 
 </div>
+
+  <!-- ================= REVISAR PEDIDO (editar quantidades e valores antes de fechar) ================= -->
+  <div id="review-overlay" style="display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(15,30,25,.55); z-index:80; align-items:flex-start; justify-content:center; padding:24px 16px; overflow-y:auto;">
+    <div class="card" style="width:min(780px,100%); margin:auto;">
+      <div class="row" style="justify-content:space-between; align-items:flex-start; margin-bottom:6px;">
+        <div><h2 id="review-title" style="font-size:20px;">Revisar pedido</h2><div class="row-sub" id="review-sub"></div></div>
+        <button type="button" id="review-close" aria-label="Fechar" style="background:none; border:none; font-size:26px; line-height:1; cursor:pointer; color:var(--ink-soft);">&times;</button>
+      </div>
+      <div class="banner banner-amber" id="review-warn" style="display:none; margin:12px 0;"></div>
+      <div id="review-items"></div>
+      <div style="display:flex; justify-content:space-between; align-items:center; padding:14px 0; border-top:2px solid var(--line); margin-top:4px;">
+        <span style="font-weight:700;">TOTAL</span>
+        <span id="review-total" style="font-size:24px; font-weight:700; font-family:'Fraunces',serif;">R$ 0,00</span>
+      </div>
+      <div class="field" style="max-width:240px; margin-bottom:18px;"><label for="review-entrega">Entrega prevista</label><input id="review-entrega" type="date"></div>
+      <div style="display:flex; gap:10px; flex-wrap:wrap;">
+        <button class="btn btn-primary" id="review-confirm">Confirmar</button>
+        <button class="btn btn-ghost" id="review-cancel">Cancelar</button>
+      </div>
+    </div>
+  </div>
 
 </div>
 
@@ -3076,11 +3106,33 @@ var QRCode;
     return 'R$ ' + v.toLocaleString('pt-BR', {minimumFractionDigits:2, maximumFractionDigits:2});
   }
 
-  function parsePriceBR(v){
-    if(v === null || v === undefined || v === '') return null;
-    var n = parseFloat(String(v).replace('R$','').replace(/\./g,'').replace(',','.').trim());
+  // Prices typed by hand: "45,85", "45.85", "R$ 1.234,56" and "1.234" all give the number the person meant
+  // (a dot followed by exactly 3 digits counts as a thousands separator; otherwise the dot is a decimal point).
+  function parseMoneyFlexible(v){
+    if(v === null || v === undefined) return null;
+    var t = String(v).replace(/R\$/g, '').replace(/\s/g, '');
+    if(!t) return null;
+    if(t.indexOf(',') > -1){ t = t.replace(/\./g, '').replace(',', '.'); }
+    else if(/^\d{1,3}(\.\d{3})+$/.test(t)){ t = t.replace(/\./g, ''); }
+    var n = parseFloat(t);
     return isNaN(n) ? null : n;
   }
+  function parsePriceBR(v){ return parseMoneyFlexible(v); }
+  // Quantities can be fractional (kg, litros): "2,5" and "2.5" both mean two and a half
+  function parseQtyInput(v){
+    var t = String(v == null ? '' : v).replace(/\s/g, '');
+    if(!t) return null;
+    if(t.indexOf(',') > -1){ t = t.replace(/\./g, '').replace(',', '.'); }
+    var n = parseFloat(t);
+    if(isNaN(n) || n < 0) return null;
+    return Math.round(n * 1000) / 1000;
+  }
+  function fmtQty(n){ return Number(n).toLocaleString('pt-BR', { maximumFractionDigits: 3 }); }
+  function fmtQtyInput(n){ return String(Math.round(Number(n) * 1000) / 1000).replace('.', ','); }
+  function fmtPriceInput(n){ return Number(n).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 4 }); }
+  function round2(n){ return Math.round(n * 100) / 100; }
+  function escHtml(v){ return String(v == null ? '' : v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+  function normalizeText(v){ return String(v || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, ''); }
 
   function fmtDate(d){
     return d.toLocaleDateString('pt-BR', {day:'2-digit', month:'2-digit', year:'numeric'});
@@ -3281,7 +3333,7 @@ var QRCode;
       var n = Object.keys(t.orders).length;
       return '<div class="card"><div style="width:100%; height:56px; background:var(--green-tint); border-radius:10px; margin-bottom:10px;"></div>' +
         '<div class="row-title">' + t.name + '</div>' +
-        '<div class="row-sub">' + n + (n === 1 ? ' pedido' : ' pedidos') + ' · ' + t.qty + ' un.</div></div>';
+        '<div class="row-sub">' + n + (n === 1 ? ' pedido' : ' pedidos') + ' · ' + fmtQty(t.qty) + ' un.</div></div>';
     }).join('');
   }
 
@@ -3402,7 +3454,7 @@ var QRCode;
       '<div class="product-card-qty">' +
         '<div class="stepper">' +
           '<button type="button" data-id="' + p.id + '" data-action="qty-dec" aria-label="Diminuir quantidade">–</button>' +
-          '<input type="number" min="0" step="1" class="stepper-input" value="' + p.qty + '" data-id="' + p.id + '" data-action="qty-input" aria-label="Quantidade de ' + p.name + '">' +
+          '<input type="text" inputmode="decimal" class="stepper-input" value="' + fmtQtyInput(p.qty) + '" data-id="' + p.id + '" data-action="qty-input" aria-label="Quantidade de ' + p.name + '">' +
           '<button type="button" data-id="' + p.id + '" data-action="qty-inc" aria-label="Aumentar quantidade">+</button>' +
         '</div>' +
       '</div>';
@@ -3418,7 +3470,7 @@ var QRCode;
 
     var items = selectedProducts();
     document.getElementById('lista-count').textContent = items.length;
-    document.getElementById('lista-units').textContent = cartUnits();
+    document.getElementById('lista-units').textContent = fmtQty(cartUnits());
     document.getElementById('lista-total').textContent = money(cartTotal());
     var prazoDataEl = document.getElementById('lista-prazo-data');
     if(!prazoDataEl.value){ var dd = defaultDeadline(); prazoDataEl.value = dateInputValue(dd); document.getElementById('lista-prazo-hora').value = timeInputValue(dd); }
@@ -3981,44 +4033,88 @@ var QRCode;
     }).sort(function(a,b){ return a.name.localeCompare(b.name, 'pt-BR'); });
   }
 
-  function updateFecharDiretoOptions(suggested){
-    var sel = document.getElementById('lista-fornecedor-direto');
-    var current = sel.value;
-    var list = suggested.length ? suggested : SUPPLIERS.slice().sort(function(a,b){ return a.name.localeCompare(b.name, 'pt-BR'); }).slice(0, 60);
-    sel.innerHTML = '<option value="">Selecione um fornecedor</option>' +
-      list.map(function(s){ return '<option value="' + s.id + '">' + s.name + '</option>'; }).join('');
-    if(current && list.some(function(s){ return s.id === current; })) sel.value = current;
+  function supplierGroupHead(text){
+    return '<div style="position:sticky; top:0; background:#F6F4EE; padding:7px 12px; font-size:11px; font-weight:700; letter-spacing:.4px; color:var(--ink-soft); text-transform:uppercase; z-index:1;">' + text + '</div>';
+  }
+  function splitSuppliers(term){
+    var suggestedIds = {};
+    suggestedSuppliersForCart().forEach(function(x){ suggestedIds[x.id] = true; });
+    var q = normalizeText(term).trim();
+    var filtered = SUPPLIERS.slice().sort(function(x, y){ return x.name.localeCompare(y.name, 'pt-BR'); })
+      .filter(function(x){ return !q || normalizeText(x.name).indexOf(q) > -1; });
+    return {
+      suggested: filtered.filter(function(x){ return suggestedIds[x.id]; }),
+      others: filtered.filter(function(x){ return !suggestedIds[x.id]; })
+    };
   }
 
+  // ---- "Fechar pedido direto": searchable list with ALL suppliers (suggested ones first) ----
+  function renderDiretoLista(){
+    var groups = splitSuppliers(document.getElementById('direto-busca').value);
+    function item(x){
+      var cats = (x.categories || []).slice(0, 2).join(' · ');
+      return '<button type="button" data-action="escolher-direto" data-id="' + escHtml(x.id) + '" style="display:block; width:100%; text-align:left; background:none; border:none; border-bottom:1px solid #F0EEE7; padding:10px 12px; cursor:pointer;">' +
+        '<div style="font-size:13px; font-weight:600; color:var(--ink);">' + escHtml(x.name) + '</div>' +
+        (cats ? '<div style="font-size:11px; color:var(--ink-soft); margin-top:2px;">' + escHtml(cats) + '</div>' : '') +
+      '</button>';
+    }
+    var out = '';
+    if(groups.suggested.length) out += supplierGroupHead('Sugeridos para os produtos marcados (' + groups.suggested.length + ')') + groups.suggested.map(item).join('');
+    if(groups.others.length) out += supplierGroupHead((groups.suggested.length ? 'Outros fornecedores' : 'Todos os fornecedores') + ' (' + groups.others.length + ')') + groups.others.map(item).join('');
+    document.getElementById('direto-lista').innerHTML = out || '<div style="padding:16px; font-size:12px; color:var(--ink-soft); text-align:center;">Nenhum fornecedor encontrado.</div>';
+  }
+  function openDiretoLista(){ renderDiretoLista(); document.getElementById('direto-lista').style.display = 'block'; }
+  function closeDiretoLista(){ document.getElementById('direto-lista').style.display = 'none'; }
+  function renderDiretoEscolhido(){
+    var hidden = document.getElementById('lista-fornecedor-direto');
+    var chosen = SUPPLIERS.filter(function(x){ return x.id === hidden.value; })[0];
+    if(hidden.value && !chosen) hidden.value = '';
+    document.getElementById('direto-escolhido').style.display = chosen ? 'flex' : 'none';
+    document.getElementById('direto-busca-wrap').style.display = chosen ? 'none' : 'block';
+    if(chosen) document.getElementById('direto-escolhido-nome').textContent = chosen.name;
+  }
+  function updateFecharDiretoOptions(){
+    renderDiretoEscolhido();
+    if(document.getElementById('direto-lista').style.display === 'block') renderDiretoLista();
+  }
+  document.getElementById('direto-busca').addEventListener('focus', openDiretoLista);
+  document.getElementById('direto-busca').addEventListener('click', openDiretoLista);
+  document.getElementById('direto-busca').addEventListener('input', openDiretoLista);
+  document.getElementById('direto-busca').addEventListener('keydown', function(e){ if(e.key === 'Escape') closeDiretoLista(); });
+  document.getElementById('direto-trocar').addEventListener('click', function(){
+    document.getElementById('lista-fornecedor-direto').value = '';
+    renderDiretoEscolhido();
+    var box = document.getElementById('direto-busca'); box.value = ''; box.focus(); openDiretoLista();
+  });
+  buyerRoot.addEventListener('click', function(e){
+    var pick = e.target.closest('[data-action="escolher-direto"]');
+    if(pick){
+      document.getElementById('lista-fornecedor-direto').value = pick.dataset.id;
+      document.getElementById('direto-busca').value = '';
+      closeDiretoLista(); renderDiretoEscolhido();
+      return;
+    }
+    if(!e.target.closest('#direto-picker')) closeDiretoLista();
+  });
+
+  // ---- participants checklist for the quotation: every supplier is reachable, suggested ones first ----
   function renderListaFornecedoresChecklist(){
     var container = document.getElementById('lista-fornecedores-checklist');
-    var suggested = suggestedSuppliersForCart();
-    var suggestedIds = {};
-    suggested.forEach(function(s){ suggestedIds[s.id] = true; });
-    var pool;
-    if(listaFornecedorSearchTerm){
-      pool = SUPPLIERS.filter(function(s){ return s.name.toLowerCase().indexOf(listaFornecedorSearchTerm) > -1; });
-    } else {
-      var extraSelected = SUPPLIERS.filter(function(s){ return listaSelectedSupplierIds.has(s.id) && !suggestedIds[s.id]; });
-      pool = suggested.concat(extraSelected);
+    var groups = splitSuppliers(listaFornecedorSearchTerm);
+    function row(x){
+      var checked = listaSelectedSupplierIds.has(x.id);
+      return '<label style="display:flex; align-items:center; gap:8px; padding:7px 10px; font-size:12px; cursor:pointer; border-bottom:1px solid #F4F2EC;">' +
+        '<input type="checkbox" data-action="toggle-lista-fornecedor" data-id="' + escHtml(x.id) + '" ' + (checked ? 'checked' : '') + '>' +
+        '<span>' + escHtml(x.name) + '</span></label>';
     }
-    pool = pool.slice(0, 60);
-    if(pool.length === 0){
-      container.innerHTML = '<div style="font-size:12px; color:var(--ink-soft); text-align:center; padding:10px;">' +
-        (listaFornecedorSearchTerm ? 'Nenhum fornecedor encontrado.' : 'Selecione produtos pra ver sugestões de fornecedor por categoria.') + '</div>';
-    } else {
-      container.innerHTML = pool.map(function(s){
-        var checked = listaSelectedSupplierIds.has(s.id);
-        return '<label style="display:flex; align-items:center; gap:8px; padding:6px 4px; font-size:12px; cursor:pointer;">' +
-          '<input type="checkbox" data-action="toggle-lista-fornecedor" data-id="' + s.id + '" ' + (checked ? 'checked' : '') + '>' +
-          '<span>' + s.name + '</span>' +
-        '</label>';
-      }).join('');
-    }
-    updateFecharDiretoOptions(suggested);
+    var out = '';
+    if(groups.suggested.length) out += supplierGroupHead('Sugeridos (' + groups.suggested.length + ')') + groups.suggested.map(row).join('');
+    if(groups.others.length) out += supplierGroupHead((groups.suggested.length ? 'Outros fornecedores' : 'Todos os fornecedores') + ' (' + groups.others.length + ')') + groups.others.map(row).join('');
+    container.innerHTML = out || '<div style="font-size:12px; color:var(--ink-soft); text-align:center; padding:12px;">Nenhum fornecedor encontrado.</div>';
+    updateFecharDiretoOptions();
   }
   document.getElementById('lista-fornecedor-search').addEventListener('input', function(e){
-    listaFornecedorSearchTerm = e.target.value.toLowerCase();
+    listaFornecedorSearchTerm = e.target.value;
     renderListaFornecedoresChecklist();
   });
   buyerRoot.addEventListener('change', function(e){
@@ -4056,7 +4152,7 @@ var QRCode;
         var inviteRows = supplierIds.map(function(sid){ return { quotation_id:q.id, supplier_id:sid }; });
         check(await db.from('quotation_suppliers').insert(inviteRows), 'Convidar fornecedores pra cotação');
       }
-      listaSelectedSupplierIds.clear();
+      resetListaSelection();
       btn.disabled = false; btn.textContent = originalLabel;
       goTo('cotacoes');
       subscribeToQuotation(q.id);
@@ -4079,74 +4175,194 @@ var QRCode;
     }
   });
 
+  /* ---------- Review screen: edit quantities and values right before closing an order ---------- */
+  var reviewCtx = null;
+
+  function reviewTotal(){
+    return round2(reviewCtx.items.reduce(function(sum, it){ return sum + (Number(it.qty) || 0) * (Number(it.price) || 0); }, 0));
+  }
+  function updateReviewTotals(){
+    if(!reviewCtx) return;
+    reviewCtx.items.forEach(function(it, i){
+      var el = document.querySelector('#review-items [data-review-sub="' + i + '"]');
+      if(el) el.textContent = money(round2((Number(it.qty) || 0) * (Number(it.price) || 0)));
+    });
+    document.getElementById('review-total').textContent = money(reviewTotal());
+    var missing = reviewCtx.items.filter(function(it){ return it.missingPrice && !(Number(it.price) > 0); }).length;
+    var warn = document.getElementById('review-warn');
+    if(missing){
+      warn.style.display = 'block';
+      warn.textContent = missing + (missing === 1 ? ' item está' : ' itens estão') + ' sem preço deste fornecedor. Informe o valor combinado antes de confirmar.';
+    } else {
+      warn.style.display = 'none';
+    }
+  }
+  function renderReviewItems(){
+    var box = document.getElementById('review-items');
+    if(reviewCtx.items.length === 0){
+      box.innerHTML = '<div style="padding:18px; text-align:center; color:var(--ink-soft); font-size:13px;">Nenhum item no pedido.</div>';
+    } else {
+      box.innerHTML = reviewCtx.items.map(function(it, i){
+        var unitName = it.unit || 'Unidade';
+        var note = it.refNote ? '<div style="font-size:11px; color:var(--amber-dark); margin-top:6px;">' + escHtml(it.refNote) + '</div>' : '';
+        return '<div style="padding:12px 0; border-bottom:1px solid #F0EEE7;">' +
+          '<div style="display:flex; justify-content:space-between; gap:10px; align-items:flex-start;">' +
+            '<div><div style="font-weight:600; font-size:14px;">' + escHtml(it.name) + '</div><div class="row-sub">vendido por ' + escHtml(unitName) + '</div></div>' +
+            '<button type="button" data-action="review-remove" data-idx="' + i + '" style="background:none; border:none; color:var(--red); font-size:12px; text-decoration:underline; cursor:pointer;">Remover</button>' +
+          '</div>' +
+          '<div style="display:flex; gap:12px; flex-wrap:wrap; margin-top:8px; align-items:flex-end;">' +
+            '<div class="field" style="flex:0 1 130px;"><label>Quantidade (' + escHtml(UNIT_LABELS[it.unit] || 'un') + ')</label><input type="text" inputmode="decimal" data-review="qty" data-idx="' + i + '" value="' + escHtml(fmtQtyInput(it.qty)) + '"></div>' +
+            '<div class="field" style="flex:0 1 150px;"><label>Preço unitário (R$)</label><input type="text" inputmode="decimal" data-review="price" data-idx="' + i + '" value="' + (Number(it.price) > 0 ? escHtml(fmtPriceInput(it.price)) : '') + '" placeholder="0,00"></div>' +
+            '<div style="flex:1 1 110px; text-align:right;"><div style="font-size:11px; color:var(--ink-soft);">Subtotal</div><div data-review-sub="' + i + '" style="font-weight:700; font-size:15px;">R$ 0,00</div></div>' +
+          '</div>' + note +
+        '</div>';
+      }).join('');
+    }
+    updateReviewTotals();
+  }
+  function openOrderReview(ctx){
+    reviewCtx = ctx;
+    document.getElementById('review-title').textContent = ctx.title;
+    document.getElementById('review-sub').textContent = ctx.subtitle || '';
+    document.getElementById('review-entrega').value = ctx.deliveryDate;
+    var btn = document.getElementById('review-confirm');
+    btn.textContent = ctx.confirmLabel || 'Confirmar'; btn.disabled = false;
+    renderReviewItems();
+    document.getElementById('review-overlay').style.display = 'flex';
+  }
+  function closeOrderReview(){
+    reviewCtx = null;
+    document.getElementById('review-overlay').style.display = 'none';
+  }
+
+  document.getElementById('review-overlay').addEventListener('input', function(e){
+    var field = e.target.closest('[data-review]');
+    if(!field || !reviewCtx) return;
+    var it = reviewCtx.items[Number(field.dataset.idx)];
+    if(!it) return;
+    var value = field.dataset.review === 'qty' ? parseQtyInput(field.value) : parseMoneyFlexible(field.value);
+    field.style.borderColor = (value === null && field.value.trim() !== '') ? 'var(--red)' : '';
+    if(field.dataset.review === 'qty') it.qty = value === null ? 0 : value;
+    else it.price = value === null ? 0 : value;
+    updateReviewTotals();
+  });
+  document.getElementById('review-overlay').addEventListener('change', function(e){
+    var field = e.target.closest('[data-review]');
+    if(!field || !reviewCtx) return;
+    var it = reviewCtx.items[Number(field.dataset.idx)];
+    if(!it) return;
+    if(field.dataset.review === 'qty'){ if(it.qty > 0) field.value = fmtQtyInput(it.qty); }
+    else if(it.price > 0){ field.value = fmtPriceInput(it.price); }
+  });
+  document.getElementById('review-overlay').addEventListener('click', function(e){
+    var rm = e.target.closest('[data-action="review-remove"]');
+    if(rm && reviewCtx){ reviewCtx.items.splice(Number(rm.dataset.idx), 1); renderReviewItems(); return; }
+    if(e.target === this) closeOrderReview();   // click on the dark background
+  });
+  document.getElementById('review-close').addEventListener('click', closeOrderReview);
+  document.getElementById('review-cancel').addEventListener('click', closeOrderReview);
+  document.addEventListener('keydown', function(e){
+    if(e.key === 'Escape' && reviewCtx && document.getElementById('review-overlay').style.display !== 'none') closeOrderReview();
+  });
+  document.getElementById('review-confirm').addEventListener('click', async function(){
+    if(!reviewCtx) return;
+    var ctx = reviewCtx, btn = this;
+    if(ctx.items.length === 0){ alert('O pedido ficou sem itens. Cancele ou volte e adicione produtos.'); return; }
+    var badQty = ctx.items.filter(function(it){ return !(Number(it.qty) > 0); });
+    if(badQty.length){ alert('Confira a quantidade de: ' + badQty.map(function(it){ return it.name; }).join(', ') + '.'); return; }
+    var zero = ctx.items.filter(function(it){ return !(Number(it.price) > 0); });
+    if(zero.length && !confirm(zero.length + (zero.length === 1 ? ' item está' : ' itens estão') + ' com preço R$ 0,00. Gerar o pedido assim mesmo?')) return;
+    var delivery = document.getElementById('review-entrega').value;
+    if(!delivery){ alert('Informe a data de entrega prevista.'); return; }
+    var label = btn.textContent;
+    btn.disabled = true; btn.textContent = 'Gerando...';
+    try{
+      await ctx.onConfirm(ctx.items.slice(), delivery, reviewTotal());
+      closeOrderReview();
+    } catch(err){
+      console.error('Erro ao confirmar pedido', err);
+      btn.disabled = false; btn.textContent = label;
+      alert('Não foi possível concluir o pedido.\n\nDetalhe técnico: ' + (err && err.message ? err.message : err));
+    }
+  });
+
+  // After an order is created the list starts clean again (nothing pre-selected, default quantities)
+  function resetListaSelection(){
+    PRODUCTS.forEach(function(prod){ prod.selected = false; prod.qty = prod.recQty; });
+    listaSelectedSupplierIds.clear();
+    var hidden = document.getElementById('lista-fornecedor-direto'); if(hidden) hidden.value = '';
+  }
+
+  /* ---------- Fechar pedido direto: review quantities/prices first, then create the order ---------- */
   document.getElementById('lista-fechar-direto').addEventListener('click', async function(){
     var items = selectedProducts();
     if(items.length === 0){ alert('Selecione ao menos um produto antes de fechar o pedido.'); return; }
     var supplierId = document.getElementById('lista-fornecedor-direto').value;
     if(!supplierId){ alert('Escolha um fornecedor pra fechar o pedido direto.'); return; }
-    var supplier = SUPPLIERS.filter(function(s){ return s.id === supplierId; })[0];
+    var supplier = SUPPLIERS.filter(function(x){ return x.id === supplierId; })[0];
     if(!supplier){ alert('Fornecedor inválido.'); return; }
+    if(!dbReady){ alert('Sem conexão com o banco de dados agora. O pedido não foi salvo.'); return; }
 
     var btn = document.getElementById('lista-fechar-direto');
     var originalLabel = btn.textContent;
-    btn.disabled = true; btn.textContent = 'Fechando pedido...';
-
-    if(!dbReady){
-      btn.disabled = false; btn.textContent = originalLabel;
-      alert('Sem conexão com o banco de dados agora. O pedido não foi salvo.');
-      return;
-    }
-
+    btn.disabled = true; btn.textContent = 'Buscando preços...';
+    var reviewItems;
     try{
       var productIds = items.filter(function(p){ return p.dbId; }).map(function(p){ return p.dbId; });
-      var pricesRes = { data: [] };
-      if(productIds.length){
-        pricesRes = check(await db.from('supplier_products').select('product_id,price').eq('supplier_id', supplierId).in('product_id', productIds), 'Buscar preços do fornecedor');
-      }
       var priceByProduct = {};
-      (pricesRes.data || []).forEach(function(row){ priceByProduct[row.product_id] = Number(row.price); });
-
-      var missingPrice = items.some(function(p){ return p.dbId && priceByProduct[p.dbId] === undefined; });
-      var total = items.reduce(function(sum, p){
-        var price = (p.dbId && priceByProduct[p.dbId] !== undefined) ? priceByProduct[p.dbId] : p.price;
-        return sum + price * p.qty;
-      }, 0);
-
-      var code = '#' + (1040 + ORDERS.length + 1);
-      var orderDate = new Date();
-      var deliveryDate = new Date(); deliveryDate.setDate(deliveryDate.getDate() + 2);
-      var orderIns = check(await db.from('orders').insert({
-        code: code, supplier_id: supplierId, status: 'enviado',
-        order_date: orderDate.toISOString().slice(0,10), delivery_date: deliveryDate.toISOString().slice(0,10),
-        total: total
-      }).select('id').single(), 'Criar pedido direto');
-      if(!orderIns.data) throw new Error('O pedido não retornou id.');
-      var orderId = orderIns.data.id;
-
-      var itemRows = items.filter(function(p){ return p.dbId; }).map(function(p){
-        var price = priceByProduct[p.dbId] !== undefined ? priceByProduct[p.dbId] : p.price;
-        return { order_id:orderId, product_id:p.dbId, qty:p.qty, price:price, receive_status:'pendente' };
-      });
-      if(itemRows.length) check(await db.from('order_items').insert(itemRows), 'Salvar itens do pedido direto');
-
-      var newOrder = {
-        id: orderId, code: code, supplier_id: supplierId, supplier_name: supplier.name,
-        status: 'enviado', order_date: orderDate.toISOString().slice(0,10), delivery_date: deliveryDate.toISOString().slice(0,10),
-        total: total, confirmed: false, receiver_note: null
-      };
-      ORDERS.unshift(newOrder);
-
-      btn.disabled = false; btn.textContent = originalLabel;
-      if(missingPrice){
-        alert('Pedido criado! Alguns itens não tinham preço cadastrado para ' + supplier.name + ' — usamos o preço de referência do produto. Confira o pedido antes de enviar pro fornecedor.');
+      if(productIds.length){
+        var pricesRes = check(await db.from('supplier_products').select('product_id,price').eq('supplier_id', supplierId).in('product_id', productIds), 'Buscar preços do fornecedor');
+        (pricesRes.data || []).forEach(function(row){ if(row.price != null) priceByProduct[row.product_id] = Number(row.price); });
       }
-      await openOrder(newOrder);
-      goTo('pedidos');
+      reviewItems = items.filter(function(p){ return p.dbId; }).map(function(p){
+        var has = priceByProduct[p.dbId] !== undefined && priceByProduct[p.dbId] > 0;
+        var ref = Number(p.price) || 0;
+        return {
+          name: p.name, unit: p.unit, productId: p.dbId, qty: p.qty,
+          price: has ? priceByProduct[p.dbId] : ref,
+          missingPrice: !has,
+          refNote: has ? '' : (ref > 0 ? 'Este fornecedor ainda não tem preço cadastrado — coloquei o preço de referência (' + money(ref) + '). Confira.' : 'Este fornecedor ainda não tem preço cadastrado — informe o valor.')
+        };
+      });
     } catch(err){
+      console.error('Erro ao preparar o pedido direto', err);
+      alert('Não foi possível buscar os preços.\n\nDetalhe técnico: ' + (err && err.message ? err.message : err));
+      return;
+    } finally {
       btn.disabled = false; btn.textContent = originalLabel;
-      console.error('Erro ao fechar pedido direto', err);
-      alert('Não foi possível fechar o pedido.\n\nDetalhe técnico: ' + (err && err.message ? err.message : err));
     }
+
+    var dDelivery = new Date(); dDelivery.setDate(dDelivery.getDate() + 2);
+    openOrderReview({
+      title: 'Revisar pedido',
+      subtitle: 'Fornecedor: ' + supplier.name + ' — confira quantidades e valores antes de gerar o pedido.',
+      items: reviewItems,
+      deliveryDate: dateInputValue(dDelivery),
+      confirmLabel: 'Confirmar e gerar pedido',
+      onConfirm: async function(finalItems, deliveryStr, total){
+        var code = '#' + (1040 + ORDERS.length + 1);
+        var orderDateStr = new Date().toISOString().slice(0, 10);
+        var orderIns = check(await db.from('orders').insert({
+          code: code, supplier_id: supplierId, status: 'enviado',
+          order_date: orderDateStr, delivery_date: deliveryStr, total: total
+        }).select('id').single(), 'Criar pedido direto');
+        if(!orderIns.data) throw new Error('O pedido não retornou id.');
+        var orderId = orderIns.data.id;
+        var itemRows = finalItems.map(function(it){
+          return { order_id: orderId, product_id: it.productId, qty: it.qty, price: it.price, receive_status: 'pendente' };
+        });
+        if(itemRows.length) check(await db.from('order_items').insert(itemRows), 'Salvar itens do pedido direto');
+        var newOrder = {
+          id: orderId, code: code, supplier_id: supplierId, supplier_name: supplier.name,
+          status: 'enviado', order_date: orderDateStr, delivery_date: deliveryStr,
+          total: total, confirmed: false, receiver_note: null
+        };
+        ORDERS.unshift(newOrder);
+        resetListaSelection();
+        await openOrder(newOrder);
+        goTo('pedidos');
+      }
+    });
   });
 
   function bidRow(item, bid){
@@ -4648,7 +4864,7 @@ var QRCode;
     lines.push(SEP);
     if(items.length === 0) lines.push('(itens do pedido)');
     items.forEach(function(it, i){
-      var qtyText = it.qty + ' ' + (UNIT_LABELS[it.unit] || 'un');
+      var qtyText = fmtQty(it.qty) + ' ' + (UNIT_LABELS[it.unit] || 'un');
       var sub = '*' + money(it.qty * it.price) + '*';
       if(compact){
         lines.push('• ' + it.name + ' — ' + qtyText + ' × ' + money(it.price) + ' = ' + sub);
@@ -4769,19 +4985,44 @@ var QRCode;
     if(confirmBtn){
       var draft = ORDERS.filter(function(o){ return String(o.id) === confirmBtn.dataset.id; })[0];
       if(!draft) return;
-      confirmBtn.disabled = true; confirmBtn.textContent = 'Confirmando...';
+      if(!dbReady || !draft.id){ alert('Sem conexão com o banco de dados agora.'); return; }
+      confirmBtn.disabled = true; confirmBtn.textContent = 'Abrindo...';
+      var draftItems = [];
       try{
-        if(dbReady && draft.id){
-          check(await db.from('orders').update({ status:'enviado' }).eq('id', draft.id), 'Confirmar pedido');
-        }
-        draft.status = 'enviado';
-        renderPedidosList();
-        renderResumoMes();
+        var rowsRes = check(await db.from('order_items').select('id,product_id,qty,price,products(name,unit)').eq('order_id', draft.id), 'Ler itens do rascunho');
+        draftItems = (rowsRes.data || []).map(function(r){
+          return { itemId: r.id, productId: r.product_id, name: r.products ? r.products.name : 'Produto', unit: r.products ? r.products.unit : null, qty: Number(r.qty) || 0, price: Number(r.price) || 0 };
+        });
       } catch(err){
-        console.error('Erro ao confirmar pedido', err);
+        console.error('Erro ao abrir o rascunho', err);
+        alert('Não foi possível abrir o pedido.\n\nDetalhe técnico: ' + (err && err.message ? err.message : err));
         confirmBtn.disabled = false; confirmBtn.textContent = 'Confirmar pedido';
-        alert('Não foi possível confirmar o pedido.\n\nDetalhe técnico: ' + (err && err.message ? err.message : err));
+        return;
       }
+      confirmBtn.disabled = false; confirmBtn.textContent = 'Confirmar pedido';
+      if(draftItems.length === 0){ alert('Este rascunho não tem itens. Exclua e gere o pedido de novo pela cotação.'); return; }
+      var dDraft = draft.delivery_date ? String(draft.delivery_date).slice(0, 10) : '';
+      if(!dDraft){ var d2 = new Date(); d2.setDate(d2.getDate() + 2); dDraft = dateInputValue(d2); }
+      openOrderReview({
+        title: 'Confirmar pedido ' + draft.code,
+        subtitle: draft.supplier_name + ' — ajuste quantidades e valores se precisar, depois confirme.',
+        items: draftItems.map(function(it){ return Object.assign({}, it); }),
+        deliveryDate: dDraft,
+        confirmLabel: 'Confirmar pedido',
+        onConfirm: async function(finalItems, deliveryStr, total){
+          var keep = {};
+          finalItems.forEach(function(it){ keep[it.itemId] = true; });
+          var removed = draftItems.filter(function(it){ return !keep[it.itemId]; }).map(function(it){ return it.itemId; });
+          if(removed.length) check(await db.from('order_items').delete().in('id', removed), 'Remover itens do pedido');
+          for(var fi = 0; fi < finalItems.length; fi++){
+            check(await db.from('order_items').update({ qty: finalItems[fi].qty, price: finalItems[fi].price }).eq('id', finalItems[fi].itemId), 'Atualizar item do pedido');
+          }
+          check(await db.from('orders').update({ status: 'enviado', total: total, delivery_date: deliveryStr }).eq('id', draft.id), 'Confirmar pedido');
+          draft.status = 'enviado'; draft.total = total; draft.delivery_date = deliveryStr;
+          renderPedidosList();
+          renderResumoMes();
+        }
+      });
       return;
     }
     var verBtn = e.target.closest('[data-action="ver-pedido"]');
@@ -4833,7 +5074,7 @@ var QRCode;
       row.innerHTML =
         '<div style="font-weight:600;">' + item.name + '</div>' +
         '<div style="display:flex; justify-content:space-between; color:var(--ink-soft); margin-top:2px;">' +
-          '<span>' + item.qty + ' × ' + money(item.price) + '</span>' +
+          '<span>' + fmtQty(item.qty) + ' × ' + money(item.price) + '</span>' +
           '<span style="font-weight:600; color:var(--ink);">' + money(lineTotal) + '</span>' +
         '</div>';
       itemsEl.appendChild(row);
@@ -4898,7 +5139,7 @@ var QRCode;
           '<span style="font-size:12px; color:var(--ink-soft);">Quantidade recebida</span>' +
           '<div class="stepper">' +
             '<button type="button" data-id="' + item.itemId + '" data-action="recv-dec" aria-label="Diminuir"' + (isOrderLocked(state.viewingOrder) ? ' disabled' : '') + '>–</button>' +
-            '<span>' + item.receivedQty + ' / ' + item.qty + '</span>' +
+            '<span>' + fmtQty(item.receivedQty) + ' / ' + fmtQty(item.qty) + '</span>' +
             '<button type="button" data-id="' + item.itemId + '" data-action="recv-inc" aria-label="Aumentar"' + (isOrderLocked(state.viewingOrder) ? ' disabled' : '') + '>+</button>' +
           '</div>' +
         '</div>';
@@ -4906,7 +5147,7 @@ var QRCode;
     row.innerHTML =
       '<div class="row" style="justify-content:space-between; margin-bottom:10px;">' +
         '<div class="row-title">' + item.name + '</div>' +
-        '<div class="row-sub">esperado: ' + item.qty + ' un.</div>' +
+        '<div class="row-sub">esperado: ' + fmtQty(item.qty) + ' ' + (UNIT_LABELS[item.unit] || 'un') + '</div>' +
       '</div>' +
       '<div style="display:flex; gap:8px; flex-wrap:wrap;">' +
         statusChip(item, 'recebido', 'Recebido') +
@@ -5032,8 +5273,8 @@ var QRCode;
     var id = btn.dataset.id;
     var p = PRODUCTS.filter(function(x){ return x.id === id; })[0];
     if(!p) return;
-    if(btn.dataset.action === 'qty-inc'){ p.qty += 1; renderPage(state.page); }
-    if(btn.dataset.action === 'qty-dec'){ p.qty = Math.max(0, p.qty - 1); renderPage(state.page); }
+    if(btn.dataset.action === 'qty-inc'){ p.qty = Math.round((p.qty + 1) * 1000) / 1000; renderPage(state.page); }
+    if(btn.dataset.action === 'qty-dec'){ p.qty = Math.max(0, Math.round((p.qty - 1) * 1000) / 1000); renderPage(state.page); }
   });
 
   buyerRoot.addEventListener('change', function(e){
@@ -5044,13 +5285,13 @@ var QRCode;
     if(!p) return;
     if(el.dataset.action === 'toggle-select'){ p.selected = el.checked; renderPage(state.page); }
     if(el.dataset.action === 'qty-input'){
-      var n = parseInt(el.value, 10);
-      p.qty = isNaN(n) || n < 0 ? 0 : n;
+      var qn = parseQtyInput(el.value);
+      if(qn !== null) p.qty = qn;   // text that is not a number: go back to the previous quantity
       renderPage(state.page);
     }
     if(el.dataset.action === 'edit-price'){
-      var n = parseFloat(el.value.replace('R$','').replace(/\./g,'').replace(',','.').trim());
-      if(!isNaN(n)){ p.price = n; saveSupplierProduct(p); }
+      var n = parseMoneyFlexible(el.value);
+      if(n !== null){ p.price = n; saveSupplierProduct(p); }
     }
     if(el.dataset.action === 'edit-obs'){ p.obs = el.value; saveSupplierProduct(p); }
   });
@@ -5069,7 +5310,9 @@ var QRCode;
     { email:'açougue@paulusrestaurantes.com.br', senha:'paulus2026', nome:'Açougue', inicial:'A' }
   ];
   // Compare e-mails ignoring case and accents, so "acougue@..." and "açougue@..." both work
-  function normalizeEmail(v){ return String(v || '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, ''); }
+  // Text copied from WhatsApp / Word / PDF often carries invisible characters (zero-width spaces etc.): drop them
+  function stripInvisible(v){ return String(v || '').replace(/[\u200B-\u200F\u202A-\u202E\u2060-\u2064\uFEFF]/g, ''); }
+  function normalizeEmail(v){ return stripInvisible(v).replace(/\s+/g, '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, ''); }
   var currentBuyer = BUYERS[0];
 
   function showBuyerToast(message){
@@ -5102,14 +5345,26 @@ var QRCode;
   window.addEventListener('focus', function(){ if(document.getElementById('app').classList.contains('active')) refreshOrdersFromServer(); });
 
   document.getElementById('login-btn').addEventListener('click', async function(){
-    var email = document.getElementById('login-email').value.trim();
-    var senha = document.getElementById('login-senha').value.trim();
-    var match = BUYERS.filter(function(b){ return normalizeEmail(b.email) === normalizeEmail(email) && b.senha === senha; })[0];
-    if(!match){
-      document.getElementById('login-error').textContent = 'E-mail ou senha incorretos. Tente novamente.';
-      document.getElementById('login-error').classList.add('show');
+    var email = document.getElementById('login-email').value;
+    var senha = stripInvisible(document.getElementById('login-senha').value).trim();
+    var errorEl = document.getElementById('login-error');
+    if(!normalizeEmail(email) || !senha){
+      errorEl.textContent = 'Preencha o e-mail e a senha.';
+      errorEl.classList.add('show');
       return;
     }
+    var byEmail = BUYERS.filter(function(b){ return normalizeEmail(b.email) === normalizeEmail(email); })[0];
+    if(!byEmail){
+      errorEl.textContent = 'E-mail não encontrado. Confira se digitou certo (ex.: compras@paulusrestaurantes.com.br).';
+      errorEl.classList.add('show');
+      return;
+    }
+    if(byEmail.senha !== senha){
+      errorEl.textContent = 'Senha incorreta. Dica: use "Mostrar senha" para conferir o que foi digitado — o navegador pode ter preenchido uma senha antiga.';
+      errorEl.classList.add('show');
+      return;
+    }
+    var match = byEmail;
     currentBuyer = match;
     buyerRoot.querySelector('.sidebar-user .avatar').textContent = match.inicial;
     buyerRoot.querySelector('.sidebar-user-name').textContent = match.nome;
@@ -5126,12 +5381,27 @@ var QRCode;
     goTo('home');
   });
 
+  // Enter key submits the login, and "Mostrar senha" lets the user see what is being typed
+  ['login-email', 'login-senha'].forEach(function(id){
+    document.getElementById(id).addEventListener('keydown', function(e){
+      if(e.key === 'Enter'){ e.preventDefault(); document.getElementById('login-btn').click(); }
+    });
+  });
+  document.getElementById('login-toggle-senha').addEventListener('click', function(){
+    var input = document.getElementById('login-senha');
+    var show = input.type === 'password';
+    input.type = show ? 'text' : 'password';
+    this.textContent = show ? 'Ocultar senha' : 'Mostrar senha';
+  });
+
   buyerRoot.addEventListener('click', function(e){
     if(e.target.closest('[data-action="logout"]')){
       document.getElementById('app').classList.remove('active');
       document.getElementById('login-screen').classList.add('active');
       document.getElementById('login-email').value = '';
       document.getElementById('login-senha').value = '';
+      document.getElementById('login-senha').type = 'password';
+      document.getElementById('login-toggle-senha').textContent = 'Mostrar senha';
     }
   });
 
@@ -5221,8 +5491,14 @@ var QRCode;
   function deadlineText(q){
     return quotationDeadlinePassed(q) ? 'Prazo para responder encerrado em ' + fmtDateTime(q.deadline) : 'Aberta até ' + fmtDateTime(q.deadline) + ' — depois desse horário não dá mais para responder';
   }
+  // "45,85", "45.85", "R$ 1.234,56" and "1.234" all give the number the person meant
   function parsePrice(v){
-    var n = parseFloat(String(v).replace('R$','').replace(/\./g,'').replace(',','.').trim());
+    if(v === null || v === undefined) return null;
+    var t = String(v).replace(/R\$/g, '').replace(/\s/g, '');
+    if(!t) return null;
+    if(t.indexOf(',') > -1){ t = t.replace(/\./g, '').replace(',', '.'); }
+    else if(/^\d{1,3}(\.\d{3})+$/.test(t)){ t = t.replace(/\./g, ''); }
+    var n = parseFloat(t);
     return isNaN(n) ? null : n;
   }
 
