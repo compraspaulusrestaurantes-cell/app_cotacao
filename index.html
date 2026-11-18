@@ -4141,7 +4141,7 @@ var QRCode;
       row.innerHTML =
         '<div style="font-weight:600;">' + item.name + '</div>' +
         '<div style="display:flex; justify-content:space-between; color:var(--ink-soft); margin-top:2px;">' +
-          '<span>' + fmtQty(item.qty) + (UNIT_LABELS[item.unit] || 'un') + ' x ' + money(item.price) + '</span>' +
+          '<span>' + fmtQty(item.qty) + (UNIT_LABELS[item.unit] || 'un') + ' x ' + money(item.price) + '/' + (UNIT_LABELS[item.unit] || 'un') + '</span>' +
           '<span style="font-weight:600; color:var(--ink);">' + money(lineTotal) + '</span>' +
         '</div>';
       itemsEl.appendChild(row);
