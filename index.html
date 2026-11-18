@@ -1401,35 +1401,34 @@ html, body {
     </div>
   </div>
 
-  <!-- ================= ALOCAR ITEM PARA FORNECEDOR ================= -->
-  <div class="overlay" id="alloc-overlay">
-    <div class="card" style="width:min(640px,100%); margin:auto;">
+  <!-- ================= COLOCAR FORNECEDOR NOS ITENS ================= -->
+  <div class="overlay" id="bulk-overlay">
+    <div class="card" style="width:min(780px,100%); margin:auto;">
       <div class="row" style="justify-content:space-between; align-items:flex-start; margin-bottom:10px;">
-        <div><h2 id="alloc-title" style="font-size:20px;">Item</h2><div class="row-sub" id="alloc-sub"></div></div>
-        <button type="button" class="modal-x" id="alloc-close" aria-label="Fechar">&times;</button>
+        <div><h2 id="bulk-title" style="font-size:20px;">Colocar fornecedor</h2><div class="row-sub" id="bulk-sub"></div></div>
+        <button type="button" class="modal-x" id="bulk-close" aria-label="Fechar">&times;</button>
       </div>
-      <div class="field" style="margin-bottom:14px;">
-        <label for="alloc-busca">Fornecedor</label>
-        <div id="alloc-picker" style="position:relative;">
-          <input type="hidden" id="alloc-fornecedor" value="">
-          <div id="alloc-busca-wrap"><input id="alloc-busca" type="text" placeholder="Buscar fornecedor pelo nome" autocomplete="off"></div>
-          <div id="alloc-escolhido" style="display:none; align-items:center; gap:10px; border:1px solid var(--green); background:var(--green-tint); border-radius:10px; padding:10px 12px;">
-            <div id="alloc-escolhido-nome" style="flex:1; font-size:13px; font-weight:600; color:var(--green-dark);"></div>
-            <button type="button" id="alloc-trocar" style="background:none; border:none; color:var(--green); font-size:12px; text-decoration:underline; cursor:pointer;">Trocar</button>
+      <div class="field" style="margin-bottom:10px;">
+        <label for="bulk-busca">Fornecedor</label>
+        <div id="bulk-picker" style="position:relative;">
+          <input type="hidden" id="bulk-fornecedor" value="">
+          <div id="bulk-busca-wrap"><input id="bulk-busca" type="text" placeholder="Buscar fornecedor pelo nome" autocomplete="off"></div>
+          <div id="bulk-escolhido" style="display:none; align-items:center; gap:10px; border:1px solid var(--green); background:var(--green-tint); border-radius:10px; padding:10px 12px;">
+            <div id="bulk-escolhido-nome" style="flex:1; font-size:13px; font-weight:600; color:var(--green-dark);"></div>
+            <button type="button" id="bulk-trocar" style="background:none; border:none; color:var(--green); font-size:12px; text-decoration:underline; cursor:pointer;">Trocar</button>
           </div>
-          <div id="alloc-lista" style="display:none; position:absolute; left:0; right:0; top:100%; margin-top:6px; max-height:300px; overflow-y:auto; background:#fff; border:1px solid var(--line); border-radius:12px; box-shadow:0 14px 32px rgba(23,50,42,.18); z-index:30;"></div>
+          <div id="bulk-lista" style="display:none; position:absolute; left:0; right:0; top:100%; margin-top:6px; max-height:300px; overflow-y:auto; background:#fff; border:1px solid var(--line); border-radius:12px; box-shadow:0 14px 32px rgba(23,50,42,.18); z-index:30;"></div>
         </div>
       </div>
-      <div style="display:flex; gap:14px; flex-wrap:wrap; margin-bottom:6px;">
-        <div class="field" style="flex:1 1 160px;"><label for="alloc-qty" id="alloc-qty-label">Quantidade</label><input id="alloc-qty" type="text" inputmode="decimal"></div>
-        <div class="field" style="flex:1 1 180px;"><label for="alloc-price">Preço unitário (R$)</label><input id="alloc-price" type="text" inputmode="decimal" placeholder="0,00"></div>
-        <div style="flex:1 1 120px; text-align:right; align-self:flex-end;"><div style="font-size:11px; color:var(--ink-soft);">Subtotal</div><div id="alloc-subtotal" style="font-size:18px; font-weight:700; font-family:'Fraunces',serif;">R$ 0,00</div></div>
+      <div id="bulk-rows"></div>
+      <div style="display:flex; justify-content:space-between; align-items:center; padding:12px 0; border-top:2px solid var(--line); margin-top:4px;">
+        <span style="font-weight:700;">TOTAL</span>
+        <span id="bulk-total" style="font-size:22px; font-weight:700; font-family:'Fraunces',serif;">R$ 0,00</span>
       </div>
-      <div class="row-sub" id="alloc-hint" style="min-height:18px; margin-bottom:10px;"></div>
-      <div class="banner banner-amber" id="alloc-warn" style="display:none; margin-bottom:12px;"></div>
+      <div class="banner banner-amber" id="bulk-warn" style="display:none; margin-bottom:12px;"></div>
       <div style="display:flex; gap:10px; flex-wrap:wrap;">
-        <button class="btn btn-primary" id="alloc-save">Adicionar</button>
-        <button class="btn btn-ghost" id="alloc-cancel">Fechar</button>
+        <button class="btn btn-primary" id="bulk-save">Salvar lançamentos</button>
+        <button class="btn btn-ghost" id="bulk-cancel">Cancelar</button>
       </div>
     </div>
   </div>
@@ -2220,7 +2219,7 @@ var QRCode;
 
   function mapQuotationRow(r){
     return {
-      id: r.id, title: r.title || 'Cotação', status: r.status || 'aberta',
+      id: r.id, number: r.number != null ? Number(r.number) : null, title: r.title || 'Cotação', status: r.status || 'aberta',
       createdAt: r.created_at ? new Date(r.created_at) : null,
       items: (r.quotation_items || []).map(function(it){
         return {
@@ -2233,16 +2232,40 @@ var QRCode;
     };
   }
 
-  async function ensureQuotations(){
-    var res = await db.from('quotations').select(QUOTATION_SELECT);
-    if(res.error){
-      // The allocation table is not there yet: still list the quotations so the app opens
-      res = check(await db.from('quotations').select(QUOTATION_SELECT_BASIC), 'Ler cotações');
-      allocReady = false;
-    } else {
-      allocReady = true;
+  var numberReady = true;   // false until quotations.number exists in the database
+  function quotationName(q){ return q.number ? 'Cotação #' + q.number : q.title; }
+  function friendlyDbError(err, prefix){
+    var msg = err && err.message ? err.message : String(err);
+    if(/row-level security/i.test(msg)){
+      return prefix + '\n\nO Supabase está bloqueando a gravação nesta tabela (proteção RLS). Rode o arquivo cotacao_lancamentos.sql no SQL Editor do Supabase — ele libera a tabela — e tente de novo.\n\nDetalhe técnico: ' + msg;
     }
-    QUOTATIONS = (res.data || []).map(mapQuotationRow).sort(function(a, b){
+    return prefix + '\n\nDetalhe técnico: ' + msg;
+  }
+
+  async function ensureQuotations(){
+    // Prefer the full read; fall back step by step when the SQL for the new columns/tables was not run yet
+    var attempts = [
+      { sel: QUOTATION_SELECT, alloc: true, number: true },
+      { sel: QUOTATION_SELECT, alloc: true, number: false },
+      { sel: QUOTATION_SELECT_BASIC, alloc: false, number: true },
+      { sel: QUOTATION_SELECT_BASIC, alloc: false, number: false }
+    ];
+    var res = null, used = null;
+    for(var i = 0; i < attempts.length; i++){
+      var at = attempts[i];
+      var sel = at.number ? at.sel.replace('id,title,status,created_at,', 'id,title,status,created_at,number,') : at.sel;
+      var r = await db.from('quotations').select(sel);
+      if(!r.error){ res = r; used = at; break; }
+      if(i === attempts.length - 1) check(r, 'Ler cotações');
+    }
+    allocReady = used.alloc; numberReady = used.number;
+    var list = (res.data || []).map(mapQuotationRow);
+    if(!numberReady){
+      // no number column yet: number them by order of creation so the screen still shows #1, #2...
+      list.slice().sort(function(a, b){ return (a.createdAt ? a.createdAt.getTime() : 0) - (b.createdAt ? b.createdAt.getTime() : 0); })
+        .forEach(function(q, idx){ q.number = idx + 1; });
+    }
+    QUOTATIONS = list.sort(function(a, b){
       return (b.createdAt ? b.createdAt.getTime() : 0) - (a.createdAt ? a.createdAt.getTime() : 0);
     });
   }
@@ -2646,8 +2669,8 @@ var QRCode;
         card.className = 'card';
         card.innerHTML =
           '<div class="row" style="justify-content:space-between; align-items:flex-start; margin-bottom:8px;">' +
-            '<div><div class="row-title">' + escHtml(q.title) + '</div>' +
-            '<div class="row-sub">' + q.items.length + ' item(ns) · ' + Object.keys(sup).length + ' fornecedor(es)</div></div>' +
+            '<div><div class="row-title">' + escHtml(quotationName(q)) + '</div>' +
+            '<div class="row-sub">' + (q.createdAt ? fmtDateTime(q.createdAt) + ' · ' : '') + q.items.length + ' item(ns) · ' + Object.keys(sup).length + ' fornecedor(es)</div></div>' +
             '<span class="badge badge-gray">Encerrada</span>' +
           '</div>' +
           '<button class="btn btn-ghost" data-action="ver-cotacao" data-id="' + q.id + '">Ver detalhes</button>';
@@ -3027,7 +3050,7 @@ var QRCode;
       '</div>';
     });
     document.getElementById('hist-tbl').innerHTML = tblHtml(HIST_COLS, ['Data', 'Produto', 'Fornecedor', 'Quantidade', 'Preço unit.', 'Total'], rows,
-      allocReady ? 'Ainda não há valores lançados. Eles aparecem aqui assim que você separar itens por fornecedor numa cotação.' : 'O histórico será ativado depois de rodar o SQL da tabela quotation_allocations.');
+      allocReady ? 'Ainda não há valores lançados. Eles aparecem aqui assim que você separar itens por fornecedor numa cotação.' : 'O histórico será ativado depois de rodar o arquivo cotacao_lancamentos.sql no Supabase.');
     document.getElementById('hist-more').innerHTML = moreButton('historico', list.length, shown.length);
   }
   document.getElementById('hist-search').addEventListener('input', function(e){ histSearchTerm = e.target.value; cadLimit.historico = CAD_PAGE; renderHistoricoTbl(); });
@@ -3058,7 +3081,7 @@ var QRCode;
     function keycap(n){ return n <= 9 ? (n + '\uFE0F\u20E3') : ('▪️ ' + n + '.'); }
     var lines = [];
     lines.push('*PAULU\'S RESTAURANTES* 🍽️');
-    lines.push('*Pedido de cotação* — ' + fmtDate(q.createdAt || new Date()));
+    lines.push('*Pedido de cotação' + (q.number ? ' #' + q.number : '') + '* — ' + fmtDate(q.createdAt || new Date()));
     lines.push('');
     lines.push('Olá! Poderia me passar *preço e condições* dos itens abaixo?');
     lines.push('');
@@ -3106,7 +3129,7 @@ var QRCode;
     shareQuotationId = q.id;
     var msg = buildQuotationMessage(q);
     document.getElementById('share-title').textContent = title || 'Mensagem da cotação';
-    document.getElementById('share-sub').textContent = q.title;
+    document.getElementById('share-sub').textContent = quotationName(q) + (q.createdAt ? ' · ' + fmtDateTime(q.createdAt) : '');
     document.getElementById('share-preview').textContent = msg;
     document.getElementById('share-whatsapp').href = whatsappLinkFor(msg);
     document.getElementById('share-overlay').style.display = 'flex';
@@ -3138,13 +3161,14 @@ var QRCode;
     try{
       var now = new Date();
       var title = 'Cotação de ' + fmtDateTime(now);
-      var qIns = check(await db.from('quotations').insert({ title: title, status: 'aberta' }).select('id,created_at').single(), 'Criar cotação');
+      var qIns = check(await db.from('quotations').insert({ title: title, status: 'aberta' }).select(numberReady ? 'id,created_at,number' : 'id,created_at').single(), 'Criar cotação');
       if(!qIns.data) throw new Error('A cotação não retornou id.');
       createdId = qIns.data.id;
       var rows = items.map(function(p){ return { quotation_id: createdId, product_name: p.name, status: 'aberta', qty: p.qty, product_id: p.dbId }; });
       var itemRes = check(await db.from('quotation_items').insert(rows).select('id,product_name,qty,product_id'), 'Criar itens da cotação');
       var q = {
         id: createdId, title: title, status: 'aberta', createdAt: qIns.data.created_at ? new Date(qIns.data.created_at) : now,
+        number: (numberReady && qIns.data.number != null) ? Number(qIns.data.number) : (QUOTATIONS.reduce(function(m, x){ return Math.max(m, x.number || 0); }, 0) + 1),
         items: (itemRes.data || []).map(function(r){ return { id: r.id, name: r.product_name, qty: Number(r.qty) || 0, productId: r.product_id || null, status: 'aberta', allocations: [] }; })
       };
       QUOTATIONS.unshift(q);
@@ -3161,7 +3185,7 @@ var QRCode;
           await db.from('quotations').delete().eq('id', createdId);
         } catch(e2){ console.error('Não foi possível desfazer a cotação incompleta', e2); }
       }
-      alert('Não foi possível criar a cotação.\n\nDetalhe técnico: ' + (err && err.message ? err.message : err));
+      alert(friendlyDbError(err, 'Não foi possível criar a cotação.'));
     }
   });
 
@@ -3175,8 +3199,8 @@ var QRCode;
     card.className = 'card';
     card.innerHTML =
       '<div class="row" style="justify-content:space-between; align-items:flex-start; gap:12px;">' +
-        '<div style="min-width:0;"><div class="row-title">' + escHtml(q.title) + '</div>' +
-        '<div class="row-sub" style="margin-top:4px;">' + st.items + (st.items === 1 ? ' item' : ' itens') + ' · ' + escHtml(names.length > 90 ? names.slice(0, 90) + '…' : names) + '</div></div>' +
+        '<div style="min-width:0;"><div class="row-title">' + escHtml(quotationName(q)) + '</div>' +
+        '<div class="row-sub" style="margin-top:4px;">' + (q.createdAt ? fmtDateTime(q.createdAt) + ' · ' : '') + st.items + (st.items === 1 ? ' item' : ' itens') + ' · ' + escHtml(names.length > 90 ? names.slice(0, 90) + '…' : names) + '</div></div>' +
         (open ? '<span class="badge badge-amber">Em aberto</span>' : '<span class="badge badge-gray">Encerrada</span>') +
       '</div>' +
       '<div class="progress" style="margin:12px 0 6px 0;"><div style="width:' + pct + '%;"></div></div>' +
@@ -3197,7 +3221,7 @@ var QRCode;
     var warn = document.getElementById('alloc-setup-warn');
     if(!allocReady){
       warn.style.display = 'block';
-      warn.textContent = 'Falta ativar o lançamento de fornecedores e preços: rode o SQL da tabela quotation_allocations no Supabase e recarregue a página.';
+      warn.textContent = 'Falta ativar o lançamento de fornecedores e preços: rode o arquivo cotacao_lancamentos.sql no SQL Editor do Supabase e recarregue a página.';
     } else {
       warn.style.display = 'none';
     }
@@ -3232,12 +3256,17 @@ var QRCode;
     var alloc = allocatedQty(item), rem = remainingQty(item);
     var done = itemIsComplete(item);
     var pct = item.qty > 0 ? Math.min(100, Math.round(alloc / item.qty * 100)) : (alloc > 0 ? 100 : 0);
+    var check = done
+      ? '<div style="width:18px; flex:0 0 18px;"></div>'
+      : '<input type="checkbox" data-action="sel-item" data-item="' + item.id + '" aria-label="Selecionar ' + escHtml(item.name) + '" style="margin-top:3px; width:18px; height:18px; flex:0 0 18px; cursor:pointer;"' + (cotSelected[item.id] ? ' checked' : '') + '>';
     return '<div class="card" style="padding:16px 18px; margin-bottom:14px;">' +
       '<div style="display:flex; justify-content:space-between; align-items:flex-start; gap:12px; flex-wrap:wrap;">' +
-        '<div style="min-width:0;"><div class="row-title" style="font-size:15px;">' + escHtml(item.name) + '</div>' +
+        '<div style="display:flex; gap:12px; align-items:flex-start; min-width:0; flex:1 1 260px;">' + check +
+          '<div style="min-width:0;"><div class="row-title" style="font-size:15px;">' + escHtml(item.name) + '</div>' +
           '<div class="row-sub" style="margin-top:4px;">Pedido: <b>' + fmtQty(item.qty) + ' ' + unit + '</b> · Separado: <b>' + fmtQty(alloc) + ' ' + unit + '</b> · ' +
           (done ? '<span style="color:var(--green); font-weight:600;">Completo ✔</span>' : '<span style="color:var(--amber-dark); font-weight:600;">Falta: ' + fmtQty(rem) + ' ' + unit + '</span>') + '</div></div>' +
-        (done ? '' : '<button type="button" class="btn btn-primary" data-action="alocar-item" data-id="' + q.id + '" data-item="' + item.id + '">+ Separar por fornecedor</button>') +
+        '</div>' +
+        (done ? '' : '<button type="button" class="btn btn-ghost" data-action="alocar-item" data-id="' + q.id + '" data-item="' + item.id + '">Só este item</button>') +
       '</div>' +
       '<div class="progress" style="margin:12px 0 4px 0;"><div style="width:' + pct + '%;"></div></div>' +
       item.allocations.map(function(a){ return allocationRowHtml(q, item, a); }).join('') +
@@ -3248,6 +3277,7 @@ var QRCode;
     var q = quotationById(id);
     if(!q) return;
     currentQuotationId = id;
+    if(cotSelectionQid !== id){ cotSelected = {}; cotSelectionQid = id; }
     document.getElementById('cotacoes-list-view').style.display = 'none';
     document.getElementById('cotacoes-detail-view').style.display = 'block';
     var st = quotationStats(q);
@@ -3270,11 +3300,18 @@ var QRCode;
         }).join('') +
       '</div>';
 
+    var pendingCount = pendingItems(q).length;
+    var bar = pendingCount === 0 ? '' :
+      '<div class="card" style="margin-bottom:14px; display:flex; gap:14px; align-items:center; flex-wrap:wrap; position:sticky; top:8px; z-index:5; box-shadow:0 6px 16px rgba(0,0,0,.08);">' +
+        '<label style="display:flex; align-items:center; gap:8px; font-size:13px; font-weight:600; cursor:pointer;"><input type="checkbox" id="cot-select-all" style="width:18px; height:18px;"> Selecionar todos os pendentes</label>' +
+        '<span id="cot-sel-count" style="font-size:12px; color:var(--ink-soft);">0 de ' + pendingCount + ' selecionado(s)</span>' +
+        '<button type="button" class="btn btn-primary" id="cot-bulk-btn" data-action="bulk-alocar" data-id="' + q.id + '" style="margin-left:auto;" disabled>Colocar fornecedor nos selecionados</button>' +
+      '</div>';
     document.getElementById('cotacao-detail-body').innerHTML =
       '<div class="card" style="margin-bottom:14px;">' +
         '<div style="display:flex; justify-content:space-between; align-items:flex-start; gap:12px; flex-wrap:wrap;">' +
-          '<div><h2 style="font-size:19px;">' + escHtml(q.title) + '</h2>' +
-          '<div class="row-sub" style="margin-top:4px;">' + st.complete + ' de ' + st.items + ' itens com fornecedor definido' + (open ? '' : ' · cotação encerrada') + '</div></div>' +
+          '<div><h2 style="font-size:19px;">' + escHtml(quotationName(q)) + '</h2>' +
+          '<div class="row-sub" style="margin-top:4px;">' + (q.createdAt ? fmtDateTime(q.createdAt) + ' · ' : '') + st.complete + ' de ' + st.items + ' itens com fornecedor definido' + (open ? '' : ' · cotação encerrada') + '</div></div>' +
           (open ? '<span class="badge badge-amber">Em aberto</span>' : '<span class="badge badge-gray">Encerrada</span>') +
         '</div>' +
         '<div class="progress" style="margin:14px 0;"><div style="width:' + pct + '%;"></div></div>' +
@@ -3285,159 +3322,223 @@ var QRCode;
           '<button type="button" class="btn btn-ghost" data-action="excluir-cotacao" data-id="' + q.id + '" style="color:var(--red);">Excluir cotação</button>' +
         '</div>' +
       '</div>' +
-      summary +
+      summary + bar +
       q.items.map(function(it){ return itemCardHtml(q, it); }).join('');
+    updateCotSelectionBar();
   }
   document.getElementById('cotacao-voltar').addEventListener('click', renderCotacoesList);
 
-  /* ----- Separar item por fornecedor ----- */
-  var allocCtx = null;
-  function allocItem(){
-    var q = allocCtx && quotationById(allocCtx.qid);
-    return q ? q.items.filter(function(i){ return i.id === allocCtx.itemId; })[0] : null;
+  /* ----- Colocar fornecedor nos itens (um ou vários de uma vez) ----- */
+  var cotSelected = {};       // itemId -> true : items ticked on the open quotation
+  var cotSelectionQid = null;
+  var bulkCtx = null;         // { qid, rows: [ { item, qtyText, priceText, priceEdited, hint } ] }
+
+  function pendingItems(q){ return q.items.filter(function(it){ return !itemIsComplete(it); }); }
+  function selectedItemIds(q){ return q.items.filter(function(it){ return cotSelected[it.id] && !itemIsComplete(it); }).map(function(it){ return it.id; }); }
+  function updateCotSelectionBar(){
+    var q = quotationById(currentQuotationId);
+    var btn = document.getElementById('cot-bulk-btn');
+    if(!q || !btn) return;
+    var n = selectedItemIds(q).length, pend = pendingItems(q).length;
+    btn.disabled = n === 0;
+    btn.textContent = n === 0 ? 'Colocar fornecedor nos selecionados' : 'Colocar fornecedor em ' + n + (n === 1 ? ' item' : ' itens');
+    document.getElementById('cot-sel-count').textContent = n + ' de ' + pend + ' selecionado(s)';
+    document.getElementById('cot-select-all').checked = pend > 0 && n === pend;
   }
-  function updateAllocSubtotal(){
-    var qty = parseQtyInput(document.getElementById('alloc-qty').value) || 0;
-    var price = parseMoneyFlexible(document.getElementById('alloc-price').value) || 0;
-    document.getElementById('alloc-subtotal').textContent = money(round2(qty * price));
+  buyerRoot.addEventListener('change', function(e){
+    var q = quotationById(currentQuotationId);
+    if(!q) return;
+    var one = e.target.closest('[data-action="sel-item"]');
+    if(one){
+      if(one.checked) cotSelected[one.dataset.item] = true; else delete cotSelected[one.dataset.item];
+      updateCotSelectionBar();
+      return;
+    }
+    if(e.target.id === 'cot-select-all'){
+      var on = e.target.checked;
+      q.items.forEach(function(it){ if(!itemIsComplete(it)){ if(on) cotSelected[it.id] = true; else delete cotSelected[it.id]; } });
+      buyerRoot.querySelectorAll('[data-action="sel-item"]').forEach(function(cb){ cb.checked = on; });
+      updateCotSelectionBar();
+    }
+  });
+
+  function bulkSupplierId(){ return document.getElementById('bulk-fornecedor').value; }
+  function updateBulkTotals(){
+    if(!bulkCtx) return;
+    var total = 0;
+    bulkCtx.rows.forEach(function(r, i){
+      var sub = round2((parseQtyInput(r.qtyText) || 0) * (parseMoneyFlexible(r.priceText) || 0));
+      total += sub;
+      var el = document.querySelector('#bulk-rows [data-bulk-sub="' + i + '"]');
+      if(el) el.textContent = money(sub);
+    });
+    document.getElementById('bulk-total').textContent = money(round2(total));
   }
-  function renderAllocEscolhido(){
-    var hidden = document.getElementById('alloc-fornecedor');
+  function renderBulkRows(){
+    document.getElementById('bulk-rows').innerHTML = bulkCtx.rows.map(function(r, i){
+      var it = r.item, unit = itemUnitLabel(it);
+      return '<div style="padding:12px 0; border-top:1px solid #F0EEE7;">' +
+        '<div style="display:flex; justify-content:space-between; gap:10px; align-items:flex-start;">' +
+          '<div><div style="font-weight:600; font-size:14px;">' + escHtml(it.name) + '</div><div class="row-sub">Pedido ' + fmtQty(it.qty) + ' ' + unit + ' · falta ' + fmtQty(remainingQty(it)) + ' ' + unit + '</div></div>' +
+          '<button type="button" data-action="bulk-remove-row" data-idx="' + i + '" style="background:none; border:none; color:var(--red); font-size:12px; text-decoration:underline; cursor:pointer;">Tirar</button>' +
+        '</div>' +
+        '<div style="display:flex; gap:12px; flex-wrap:wrap; margin-top:8px; align-items:flex-end;">' +
+          '<div class="field" style="flex:0 1 130px;"><label>Quantidade (' + unit + ')</label><input type="text" inputmode="decimal" data-bulk="qty" data-idx="' + i + '" value="' + escHtml(r.qtyText) + '"></div>' +
+          '<div class="field" style="flex:0 1 150px;"><label>Preço unitário (R$)</label><input type="text" inputmode="decimal" data-bulk="price" data-idx="' + i + '" value="' + escHtml(r.priceText) + '" placeholder="0,00"></div>' +
+          '<div style="flex:1 1 110px; text-align:right;"><div style="font-size:11px; color:var(--ink-soft);">Subtotal</div><div data-bulk-sub="' + i + '" style="font-weight:700; font-size:15px;">R$ 0,00</div></div>' +
+        '</div>' +
+        '<div class="row-sub" style="margin-top:6px; min-height:16px;">' + escHtml(r.hint || '') + '</div>' +
+      '</div>';
+    }).join('') || '<div style="padding:16px; text-align:center; color:var(--ink-soft); font-size:13px;">Nenhum item na lista.</div>';
+    updateBulkTotals();
+  }
+  // pre-fills each price from the history of the chosen supplier (and never overwrites what the buyer typed)
+  function applyBulkSupplierPrices(){
+    var sid = bulkSupplierId();
+    bulkCtx.rows.forEach(function(r){
+      var it = r.item, hint = '';
+      if(it.productId){
+        var same = sid ? lastPriceFor(it.productId, sid) : null;
+        if(same){
+          if(!r.priceEdited) r.priceText = fmtPriceInput(same.price);
+          hint = 'Último preço com este fornecedor: ' + money(same.price) + (same.createdAt ? ' em ' + fmtDate(same.createdAt) : '');
+        } else {
+          if(!r.priceEdited) r.priceText = '';
+          var any = lastPriceFor(it.productId);
+          hint = any ? (sid ? 'Sem histórico com este fornecedor. ' : '') + 'Último preço pago: ' + money(any.price) + ' (' + supplierName(any.supplierId) + ')' : 'Ainda não há histórico de preço deste produto.';
+        }
+      }
+      r.hint = hint;
+    });
+    renderBulkRows();
+  }
+  function renderBulkEscolhido(){
+    var hidden = document.getElementById('bulk-fornecedor');
     var chosen = SUPPLIERS.filter(function(x){ return x.id === hidden.value; })[0];
     if(hidden.value && !chosen) hidden.value = '';
-    document.getElementById('alloc-escolhido').style.display = chosen ? 'flex' : 'none';
-    document.getElementById('alloc-busca-wrap').style.display = chosen ? 'none' : 'block';
-    if(chosen) document.getElementById('alloc-escolhido-nome').textContent = chosen.name;
+    document.getElementById('bulk-escolhido').style.display = chosen ? 'flex' : 'none';
+    document.getElementById('bulk-busca-wrap').style.display = chosen ? 'none' : 'block';
+    if(chosen) document.getElementById('bulk-escolhido-nome').textContent = chosen.name;
   }
   function supplierGroupHead(text){
     return '<div style="position:sticky; top:0; background:#F6F4EE; padding:7px 12px; font-size:11px; font-weight:700; letter-spacing:.4px; color:var(--ink-soft); text-transform:uppercase; z-index:1;">' + text + '</div>';
   }
-  function renderAllocLista(){
-    var item = allocItem();
-    var q = quotationById(allocCtx.qid);
-    var term = normalizeText(document.getElementById('alloc-busca').value).trim();
+  function renderBulkLista(){
+    var q = quotationById(bulkCtx.qid);
+    var term = normalizeText(document.getElementById('bulk-busca').value).trim();
     var usedHere = {};
     q.items.forEach(function(it){ it.allocations.forEach(function(a){ usedHere[a.supplierId] = true; }); });
-    var prod = item ? productOfItem(item) : null;
-    var cat = prod ? prod.category : null;
+    var cats = {};
+    bulkCtx.rows.forEach(function(r){ var p = productOfItem(r.item); if(p && p.category) cats[p.category] = true; });
     var filtered = SUPPLIERS.slice().sort(function(a, b){ return a.name.localeCompare(b.name, 'pt-BR'); })
       .filter(function(x){ return !term || normalizeText(x.name).indexOf(term) > -1; });
     var g1 = filtered.filter(function(x){ return usedHere[x.id]; });
-    var g2 = filtered.filter(function(x){ return !usedHere[x.id] && cat && (x.categories || []).indexOf(cat) > -1; });
+    var g2 = filtered.filter(function(x){ return !usedHere[x.id] && (x.categories || []).some(function(c){ return cats[c]; }); });
     var seen = {}; g1.concat(g2).forEach(function(x){ seen[x.id] = true; });
     var g3 = filtered.filter(function(x){ return !seen[x.id]; });
     function row(x){
-      var cats = (x.categories || []).slice(0, 2).join(' · ');
-      return '<button type="button" data-action="escolher-alloc" data-id="' + escHtml(x.id) + '" style="display:block; width:100%; text-align:left; background:none; border:none; border-bottom:1px solid #F0EEE7; padding:10px 12px; cursor:pointer;">' +
+      var cs = (x.categories || []).slice(0, 2).join(' · ');
+      return '<button type="button" data-action="escolher-bulk" data-id="' + escHtml(x.id) + '" style="display:block; width:100%; text-align:left; background:none; border:none; border-bottom:1px solid #F0EEE7; padding:10px 12px; cursor:pointer;">' +
         '<div style="font-size:13px; font-weight:600; color:var(--ink);">' + escHtml(x.name) + '</div>' +
-        (cats ? '<div style="font-size:11px; color:var(--ink-soft); margin-top:2px;">' + escHtml(cats) + '</div>' : '') + '</button>';
+        (cs ? '<div style="font-size:11px; color:var(--ink-soft); margin-top:2px;">' + escHtml(cs) + '</div>' : '') + '</button>';
     }
     var out = '';
     if(g1.length) out += supplierGroupHead('Já usados nesta cotação (' + g1.length + ')') + g1.map(row).join('');
-    if(g2.length) out += supplierGroupHead('Da categoria deste produto (' + g2.length + ')') + g2.map(row).join('');
+    if(g2.length) out += supplierGroupHead('Da categoria destes produtos (' + g2.length + ')') + g2.map(row).join('');
     if(g3.length) out += supplierGroupHead(((g1.length || g2.length) ? 'Outros fornecedores' : 'Todos os fornecedores') + ' (' + g3.length + ')') + g3.map(row).join('');
-    document.getElementById('alloc-lista').innerHTML = out || '<div style="padding:16px; font-size:12px; color:var(--ink-soft); text-align:center;">Nenhum fornecedor encontrado.</div>';
+    document.getElementById('bulk-lista').innerHTML = out || '<div style="padding:16px; font-size:12px; color:var(--ink-soft); text-align:center;">Nenhum fornecedor encontrado.</div>';
   }
-  function openAllocLista(){ if(!allocCtx) return; renderAllocLista(); document.getElementById('alloc-lista').style.display = 'block'; }
-  function closeAllocLista(){ document.getElementById('alloc-lista').style.display = 'none'; }
+  function openBulkLista(){ if(!bulkCtx) return; renderBulkLista(); document.getElementById('bulk-lista').style.display = 'block'; }
+  function closeBulkLista(){ document.getElementById('bulk-lista').style.display = 'none'; }
 
-  function resetAllocForm(){
-    var item = allocItem();
-    if(!item) return;
-    var unit = itemUnitLabel(item);
-    document.getElementById('alloc-title').textContent = item.name;
-    document.getElementById('alloc-sub').textContent = 'Pedido: ' + fmtQty(item.qty) + ' ' + unit + ' · separado: ' + fmtQty(allocatedQty(item)) + ' · falta: ' + fmtQty(remainingQty(item));
-    document.getElementById('alloc-qty-label').textContent = 'Quantidade (' + unit + ')';
-    document.getElementById('alloc-fornecedor').value = '';
-    document.getElementById('alloc-busca').value = '';
-    renderAllocEscolhido(); closeAllocLista();
-    document.getElementById('alloc-qty').value = fmtQtyInput(remainingQty(item));
-    document.getElementById('alloc-price').value = '';
-    document.getElementById('alloc-hint').textContent = '';
-    document.getElementById('alloc-warn').style.display = 'none';
-    document.getElementById('alloc-save').disabled = false;
-    updateAllocSubtotal();
+  function openBulkModal(qid, itemIds){
+    if(!allocReady){ alert('Antes de colocar fornecedor, rode o arquivo cotacao_lancamentos.sql no SQL Editor do Supabase e recarregue a página.'); return; }
+    var q = quotationById(qid); if(!q) return;
+    var items = q.items.filter(function(it){ return itemIds.indexOf(it.id) > -1 && !itemIsComplete(it); });
+    if(items.length === 0){ alert('Selecione ao menos um item que ainda falta separar.'); return; }
+    bulkCtx = { qid: qid, rows: items.map(function(it){ return { item: it, qtyText: fmtQtyInput(remainingQty(it)), priceText: '', priceEdited: false, hint: '' }; }) };
+    document.getElementById('bulk-title').textContent = items.length === 1 ? items[0].name : items.length + ' itens selecionados';
+    document.getElementById('bulk-sub').textContent = quotationName(q) + ' — escolha o fornecedor e confira a quantidade e o preço de cada item.';
+    document.getElementById('bulk-fornecedor').value = '';
+    document.getElementById('bulk-busca').value = '';
+    renderBulkEscolhido(); closeBulkLista();
+    document.getElementById('bulk-warn').style.display = 'none';
+    document.getElementById('bulk-save').disabled = false;
+    applyBulkSupplierPrices();
+    document.getElementById('bulk-overlay').style.display = 'flex';
   }
-  function openAllocModal(qid, itemId){
-    if(!allocReady){ alert('Antes de separar por fornecedor, rode o SQL da tabela quotation_allocations no Supabase e recarregue a página.'); return; }
-    allocCtx = { qid: qid, itemId: itemId };
-    resetAllocForm();
-    document.getElementById('alloc-overlay').style.display = 'flex';
-  }
-  function closeAllocModal(){ allocCtx = null; closeAllocLista(); document.getElementById('alloc-overlay').style.display = 'none'; }
+  function closeBulkModal(){ bulkCtx = null; closeBulkLista(); document.getElementById('bulk-overlay').style.display = 'none'; }
 
-  function onAllocSupplierChosen(){
-    var item = allocItem();
-    var sid = document.getElementById('alloc-fornecedor').value;
-    var hint = '';
-    if(item && item.productId){
-      var same = lastPriceFor(item.productId, sid);
-      if(same){
-        document.getElementById('alloc-price').value = fmtPriceInput(same.price);
-        hint = 'Último preço com este fornecedor: ' + money(same.price) + (same.createdAt ? ' em ' + fmtDate(same.createdAt) : '') + ' (já preenchido — altere se mudou).';
-      } else {
-        var any = lastPriceFor(item.productId);
-        hint = any ? 'Ainda sem histórico com este fornecedor. Último preço pago: ' + money(any.price) + ' (' + supplierName(any.supplierId) + ').' : 'Ainda não há histórico de preço deste produto.';
-      }
-    }
-    document.getElementById('alloc-hint').textContent = hint;
-    updateAllocSubtotal();
-  }
-
-  document.getElementById('alloc-busca').addEventListener('focus', openAllocLista);
-  document.getElementById('alloc-busca').addEventListener('click', openAllocLista);
-  document.getElementById('alloc-busca').addEventListener('input', openAllocLista);
-  document.getElementById('alloc-trocar').addEventListener('click', function(){
-    document.getElementById('alloc-fornecedor').value = '';
-    renderAllocEscolhido();
-    var box = document.getElementById('alloc-busca'); box.value = ''; box.focus(); openAllocLista();
+  document.getElementById('bulk-busca').addEventListener('focus', openBulkLista);
+  document.getElementById('bulk-busca').addEventListener('click', openBulkLista);
+  document.getElementById('bulk-busca').addEventListener('input', openBulkLista);
+  document.getElementById('bulk-trocar').addEventListener('click', function(){
+    document.getElementById('bulk-fornecedor').value = '';
+    renderBulkEscolhido(); applyBulkSupplierPrices();
+    var box = document.getElementById('bulk-busca'); box.value = ''; box.focus(); openBulkLista();
   });
-  document.getElementById('alloc-qty').addEventListener('input', updateAllocSubtotal);
-  document.getElementById('alloc-price').addEventListener('input', updateAllocSubtotal);
-  document.getElementById('alloc-close').addEventListener('click', closeAllocModal);
-  document.getElementById('alloc-cancel').addEventListener('click', closeAllocModal);
-  document.getElementById('alloc-overlay').addEventListener('click', function(e){
-    var pick = e.target.closest('[data-action="escolher-alloc"]');
+  document.getElementById('bulk-close').addEventListener('click', closeBulkModal);
+  document.getElementById('bulk-cancel').addEventListener('click', closeBulkModal);
+  document.getElementById('bulk-overlay').addEventListener('input', function(e){
+    var field = e.target.closest('[data-bulk]');
+    if(!field || !bulkCtx) return;
+    var r = bulkCtx.rows[Number(field.dataset.idx)];
+    if(!r) return;
+    if(field.dataset.bulk === 'qty') r.qtyText = field.value; else { r.priceText = field.value; r.priceEdited = true; }
+    updateBulkTotals();
+  });
+  document.getElementById('bulk-overlay').addEventListener('click', function(e){
+    var pick = e.target.closest('[data-action="escolher-bulk"]');
     if(pick){
-      document.getElementById('alloc-fornecedor').value = pick.dataset.id;
-      document.getElementById('alloc-busca').value = '';
-      closeAllocLista(); renderAllocEscolhido(); onAllocSupplierChosen();
+      document.getElementById('bulk-fornecedor').value = pick.dataset.id;
+      document.getElementById('bulk-busca').value = '';
+      closeBulkLista(); renderBulkEscolhido(); applyBulkSupplierPrices();
       return;
     }
-    if(!e.target.closest('#alloc-picker')) closeAllocLista();
-    if(e.target === this) closeAllocModal();
+    var rm = e.target.closest('[data-action="bulk-remove-row"]');
+    if(rm && bulkCtx){ bulkCtx.rows.splice(Number(rm.dataset.idx), 1); renderBulkRows(); return; }
+    if(!e.target.closest('#bulk-picker')) closeBulkLista();
+    if(e.target === this) closeBulkModal();
   });
 
-  document.getElementById('alloc-save').addEventListener('click', async function(){
-    var item = allocItem(), q = allocCtx && quotationById(allocCtx.qid);
-    if(!item || !q) return;
-    var sid = document.getElementById('alloc-fornecedor').value;
+  document.getElementById('bulk-save').addEventListener('click', async function(){
+    if(!bulkCtx) return;
+    var q = quotationById(bulkCtx.qid); if(!q) return;
+    var sid = bulkSupplierId();
     if(!sid){ alert('Escolha o fornecedor.'); return; }
-    var qty = parseQtyInput(document.getElementById('alloc-qty').value);
-    if(!(qty > 0)){ alert('Informe a quantidade.'); return; }
-    var price = parseMoneyFlexible(document.getElementById('alloc-price').value);
-    if(!(price > 0)){ alert('Informe o preço unitário combinado com o fornecedor.'); return; }
-    var rem = remainingQty(item);
-    if(qty > rem + 1e-9 && !confirm('A quantidade (' + fmtQty(qty) + ') passa do que falta (' + fmtQty(rem) + '). Lançar mesmo assim?')) return;
+    if(bulkCtx.rows.length === 0){ alert('Não há itens para lançar.'); return; }
+    var lines = [], bad = [], over = [];
+    bulkCtx.rows.forEach(function(r){
+      var qty = parseQtyInput(r.qtyText), price = parseMoneyFlexible(r.priceText);
+      if(!(qty > 0) || !(price > 0)){ bad.push(r.item.name); return; }
+      if(qty > remainingQty(r.item) + 1e-9) over.push(r.item.name);
+      lines.push({ item: r.item, qty: qty, price: price });
+    });
+    if(bad.length){ alert('Confira a quantidade e o preço de: ' + bad.join(', ') + '.\n(Use "Tirar" para deixar um item de fora.)'); return; }
+    if(over.length && !confirm('Estes itens passam do que falta: ' + over.join(', ') + '. Lançar mesmo assim?')) return;
 
     var btn = this; btn.disabled = true;
     try{
-      var ins = check(await db.from('quotation_allocations').insert({
-        quotation_id: q.id, quotation_item_id: item.id, product_id: item.productId, product_name: item.name,
-        supplier_id: sid, qty: qty, price: price
-      }).select('id,created_at').single(), 'Salvar lançamento');
-      var created = ins.data && ins.data.created_at ? new Date(ins.data.created_at) : new Date();
-      var a = { id: ins.data.id, supplierId: sid, qty: qty, price: price, orderId: null, createdAt: created };
-      item.allocations.push(a);
-      HISTORY.unshift({ id: a.id, quotationId: q.id, productId: item.productId, productName: item.name, supplierId: sid, qty: qty, price: price, orderId: null, createdAt: created });
+      var ins = check(await db.from('quotation_allocations').insert(lines.map(function(l){
+        return { quotation_id: q.id, quotation_item_id: l.item.id, product_id: l.item.productId, product_name: l.item.name, supplier_id: sid, qty: l.qty, price: l.price };
+      })).select('id,created_at,quotation_item_id'), 'Salvar lançamentos');
+      var byItem = {};
+      (ins.data || []).forEach(function(r){ byItem[r.quotation_item_id] = r; });
+      lines.forEach(function(l){
+        var saved = byItem[l.item.id];
+        var created = saved && saved.created_at ? new Date(saved.created_at) : new Date();
+        var a = { id: saved ? saved.id : null, supplierId: sid, qty: l.qty, price: l.price, orderId: null, createdAt: created };
+        l.item.allocations.push(a);
+        HISTORY.unshift({ id: a.id, quotationId: q.id, productId: l.item.productId, productName: l.item.name, supplierId: sid, qty: l.qty, price: l.price, orderId: null, createdAt: created });
+        delete cotSelected[l.item.id];
+      });
       applyLastPrices();
+      closeBulkModal();
       renderCotacaoDetail(q.id);
-      var left = remainingQty(item);
-      showBuyerToast('Lançado: ' + supplierName(sid) + ' · ' + fmtQty(qty) + ' ' + itemUnitLabel(item) + ' a ' + money(price) + (left > 0 ? ' — falta ' + fmtQty(left) : ' — item completo ✔'));
-      if(left > 0) resetAllocForm(); else closeAllocModal();
+      showBuyerToast(lines.length + (lines.length === 1 ? ' item lançado' : ' itens lançados') + ' para ' + supplierName(sid) + '.');
     } catch(err){
-      console.error('Erro ao salvar lançamento', err);
-      alert('Não foi possível salvar.\n\nDetalhe técnico: ' + (err && err.message ? err.message : err));
+      console.error('Erro ao salvar lançamentos', err);
+      alert(friendlyDbError(err, 'Não foi possível salvar.'));
       btn.disabled = false;
     }
   });
@@ -3452,7 +3553,7 @@ var QRCode;
       check(await db.from('quotation_allocations').delete().eq('id', allocId), 'Remover lançamento');
     } catch(err){
       console.error('Erro ao remover lançamento', err);
-      alert('Não foi possível remover.\n\nDetalhe técnico: ' + (err && err.message ? err.message : err));
+      alert(friendlyDbError(err, 'Não foi possível remover.'));
       return;
     }
     item.allocations = item.allocations.filter(function(x){ return x.id !== allocId; });
@@ -3555,7 +3656,7 @@ var QRCode;
       }
     } catch(err){
       console.error('Erro ao gerar pedidos', err);
-      alert('Não foi possível gerar todos os pedidos.' + (created ? ' ' + created + ' já foi(ram) criado(s) — confira na aba Pedidos.' : '') + '\n\nDetalhe técnico: ' + (err && err.message ? err.message : err));
+      alert(friendlyDbError(err, 'Não foi possível gerar todos os pedidos.' + (created ? ' ' + created + ' já foi(ram) criado(s) — confira na aba Pedidos.' : '')));
       btn.disabled = false; btn.textContent = 'Tentar de novo';
       if(created){ renderCotacaoDetail(q.id); }
       return;
@@ -3570,7 +3671,7 @@ var QRCode;
   async function deleteQuotation(id){
     var q = quotationById(id); if(!q) return;
     var ordered = q.items.reduce(function(n, it){ return n + it.allocations.filter(function(a){ return a.orderId; }).length; }, 0);
-    if(!confirm('Excluir a cotação "' + q.title + '"?' + (ordered ? '\n\nOs valores que já viraram pedido continuam no histórico de preços.' : '') + '\nOs lançamentos que ainda não viraram pedido serão apagados.')) return;
+    if(!confirm('Excluir a ' + quotationName(q) + '?' + (ordered ? '\n\nOs valores que já viraram pedido continuam no histórico de preços.' : '') + '\nOs lançamentos que ainda não viraram pedido serão apagados.')) return;
     try{
       if(dbReady){
         var itemIds = q.items.map(function(it){ return it.id; });
@@ -3582,7 +3683,7 @@ var QRCode;
       }
     } catch(err){
       console.error('Erro ao excluir cotação', err);
-      alert('Não foi possível excluir a cotação.\n\nDetalhe técnico: ' + (err && err.message ? err.message : err));
+      alert(friendlyDbError(err, 'Não foi possível excluir a cotação.'));
       return;
     }
     QUOTATIONS = QUOTATIONS.filter(function(x){ return x.id !== id; });
@@ -3601,15 +3702,16 @@ var QRCode;
     else if(a === 'whats-cotacao'){ var q1 = quotationById(id); if(q1) openShareModal(q1, 'Enviar cotação por WhatsApp'); }
     else if(a === 'copiar-cotacao'){ var q2 = quotationById(id); if(q2) copyQuotationMessage(q2); }
     else if(a === 'excluir-cotacao'){ deleteQuotation(id); }
-    else if(a === 'alocar-item'){ openAllocModal(id, act.dataset.item); }
+    else if(a === 'alocar-item'){ openBulkModal(id, [act.dataset.item]); }
+    else if(a === 'bulk-alocar'){ var qb = quotationById(id); if(qb) openBulkModal(id, selectedItemIds(qb)); }
     else if(a === 'remover-alocacao'){ removeAllocation(id, act.dataset.item, act.dataset.alloc); }
     else if(a === 'gerar-pedidos'){ openGenModal(id); }
   });
 
   document.addEventListener('keydown', function(e){
     if(e.key !== 'Escape') return;
-    if(document.getElementById('alloc-lista').style.display === 'block'){ closeAllocLista(); return; }
-    if(document.getElementById('alloc-overlay').style.display === 'flex'){ closeAllocModal(); return; }
+    if(document.getElementById('bulk-lista').style.display === 'block'){ closeBulkLista(); return; }
+    if(document.getElementById('bulk-overlay').style.display === 'flex'){ closeBulkModal(); return; }
     if(document.getElementById('gen-overlay').style.display === 'flex'){ closeGenModal(); return; }
     if(document.getElementById('share-overlay').style.display === 'flex'){ closeShareModal(); return; }
     if(document.getElementById('fornecedor-form').style.display === 'block' || document.getElementById('produto-form').style.display === 'block') closeCadModals();
