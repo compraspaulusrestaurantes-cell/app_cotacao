@@ -3,6 +3,17 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#146C4E">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Paulu's">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" type="image/png" href="icon-192.png">
+<script>
+/* app instalável: o service worker guarda a última versão para abrir mesmo sem internet */
+if('serviceWorker' in navigator){ window.addEventListener('load', function(){ navigator.serviceWorker.register('sw.js').catch(function(){}); }); }
+</script>
 <script>
 /* Opened from a WhatsApp/QR link: never show any login screen, not even for a split second */
 if(/[?&](confirmar|pedido)=/.test(window.location.search)){ document.documentElement.className += ' link-mode'; }
@@ -936,6 +947,7 @@ html, body {
     <button class="navlink" data-nav="pedidos"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="9" width="13" height="9" rx="1"/><path d="M16 13h3l2 2v3h-5z"/><circle cx="7.5" cy="19" r="1.5"/><circle cx="17.5" cy="19" r="1.5"/></svg>Pedidos</button>
     <button class="navlink" data-nav="fornecedores"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="7" width="18" height="13" rx="2"/><path d="M8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>Cadastros</button>
     <button class="navlink" data-nav="dashboard"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"/><path d="M8 17V10"/><path d="M13 17V6"/><path d="M18 17v-4"/></svg>Dashboard</button>
+    <button class="navlink" id="install-btn" style="display:none; margin-bottom:8px;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12"/><path d="M7 11l5 5 5-5"/><path d="M4 20h16"/></svg>Instalar o app</button>
     <div class="sidebar-spacer"></div>
     <div class="sidebar-user">
       <div class="avatar">M</div>
@@ -1085,6 +1097,13 @@ html, body {
           </div>
         </div>
 
+        <h2 style="font-size:18px; margin-bottom:14px;">Desempenho dos fornecedores</h2>
+        <div class="tbl" id="dash-desempenho"></div>
+        <div style="font-size:11px; color:var(--ink-soft); margin:8px 2px 28px 2px; line-height:1.5;">
+          <b>Entregas com problema:</b> pedidos que chegaram parciais ou com devolução. <b>Atrasos:</b> entregues depois da data prevista (a partir de agora o app guarda quando a entrega é conferida) e pedidos que já passaram da data e ainda não chegaram.
+          <b>Variação de preço:</b> média de quanto o preço mudou entre o primeiro e o último valor lançado de cada produto com esse fornecedor (histórico completo).
+        </div>
+
         <h2 style="font-size:18px; margin-bottom:14px;">Mais comprados</h2>
         <div class="grid-products" id="dash-mais-comprados" style="margin-bottom:28px;"></div>
 
@@ -1144,6 +1163,7 @@ html, body {
           <button type="button" class="tab-seg active" data-cad-tab="fornecedores">Fornecedores <span class="tab-count" id="cad-count-fornecedores">0</span></button>
           <button type="button" class="tab-seg" data-cad-tab="produtos">Produtos <span class="tab-count" id="cad-count-produtos">0</span></button>
           <button type="button" class="tab-seg" data-cad-tab="historico">Histórico de preços</button>
+          <button type="button" class="tab-seg" data-cad-tab="revisao">Revisão <span class="tab-count" id="cad-count-revisao">0</span></button>
         </div>
 
         <!-- ===== FORNECEDORES ===== -->
@@ -1192,6 +1212,18 @@ html, body {
           </div>
           <div class="tbl" id="hist-tbl"></div>
           <div id="hist-more" style="text-align:center; margin-top:14px;"></div>
+        </div>
+
+        <!-- ===== REVISÃO: repetidos e sem WhatsApp ===== -->
+        <div id="cad-revisao" style="display:none;">
+          <div class="banner banner-green" style="margin-bottom:16px;">Aqui o app aponta cadastros repetidos e fornecedores sem WhatsApp, para você arrumar a base de uma vez. Ao juntar, nada se perde: pedidos, cotações e histórico de preços passam para o cadastro que ficar.</div>
+          <h2 style="font-size:16px; margin:0 0 10px 0;">Produtos repetidos</h2>
+          <div id="rev-prod-dup" style="margin-bottom:24px;"></div>
+          <h2 style="font-size:16px; margin:0 0 10px 0;">Fornecedores repetidos</h2>
+          <div id="rev-forn-dup" style="margin-bottom:24px;"></div>
+          <h2 style="font-size:16px; margin:0 0 10px 0;">Fornecedores sem WhatsApp</h2>
+          <div class="tbl" id="rev-forn-tel"></div>
+          <div id="rev-forn-tel-more" style="text-align:center; margin-top:14px;"></div>
         </div>
 
         <div class="modal-backdrop" id="cad-backdrop"></div>
@@ -2133,7 +2165,7 @@ var QRCode;
   var APP_BASE_URL = 'https://compraspaulusrestaurantes-cell.github.io/app_cotacao/';
   var DEFAULT_SUPPLIER_NAME = 'Distribuidora Bom Preço';
   var SUPPLIERS_SEED = [
-    { name:'Distribuidora Bom Preço', categories:['Mercearia','Carnes','Limpeza','Frango'], email:'bompreco@fornecedor.com.br', password:'demo1234' },
+    { name:'Distribuidora Bom Preço', categories:['Mercearia','Carnes','Limpeza','Frango'] },
     { name:'Aves & Cia Distribuidora', categories:['Carnes','Frango'] },
     { name:'Central de Carnes SP', categories:['Carnes','Frango'] },
     { name:'Grãos do Sul', categories:['Mercearia','Arroz'] }
@@ -2175,7 +2207,7 @@ var QRCode;
     var rows = res.data || [];
     if(rows.length === 0){
       var insertRes = check(await db.from('suppliers').insert(SUPPLIERS_SEED.map(function(s){
-        return { name:s.name, categories:s.categories, email:s.email || null, password:s.password || null };
+        return { name:s.name, categories:s.categories, email:s.email || null };
       })).select('id,name,email,phone,address,categories,brands'), 'Criar fornecedores iniciais');
       rows = insertRes.data || [];
     }
@@ -2237,18 +2269,18 @@ var QRCode;
     }
   }
 
-  var QUOTATION_SELECT = 'id,title,status,created_at, quotation_items(id,product_name,status,qty,product_id, quotation_allocations(id,supplier_id,qty,price,order_id,created_at))';
-  var QUOTATION_SELECT_BASIC = 'id,title,status,created_at, quotation_items(id,product_name,status,qty,product_id)';
+  var QUOTATION_SELECT = '*, quotation_items(*, quotation_allocations(*))';
+  var QUOTATION_SELECT_BASIC = '*, quotation_items(*)';
 
   function mapQuotationRow(r){
     return {
       id: r.id, number: r.number != null ? Number(r.number) : null, title: r.title || 'Cotação', status: r.status || 'aberta',
-      createdAt: r.created_at ? new Date(r.created_at) : null,
+      createdAt: r.created_at ? new Date(r.created_at) : null, createdBy: r.created_by || null,
       items: (r.quotation_items || []).map(function(it){
         return {
           id: it.id, name: it.product_name, qty: Number(it.qty) || 0, productId: it.product_id || null, status: it.status || 'aberta',
           allocations: (it.quotation_allocations || []).map(function(a){
-            return { id: a.id, supplierId: a.supplier_id, qty: Number(a.qty) || 0, price: Number(a.price) || 0, orderId: a.order_id || null, createdAt: a.created_at ? new Date(a.created_at) : null };
+            return { id: a.id, supplierId: a.supplier_id, qty: Number(a.qty) || 0, price: Number(a.price) || 0, orderId: a.order_id || null, createdAt: a.created_at ? new Date(a.created_at) : null, createdBy: a.created_by || null };
           })
         };
       })
@@ -2256,32 +2288,36 @@ var QRCode;
   }
 
   var numberReady = true;   // false until quotations.number exists in the database
+  var COLS = { number: false, qBy: false, oBy: false, delivered: false, aBy: false };   // optional columns created by the SQL update
+  async function probeColumn(table, col){ var r = await db.from(table).select(col).limit(1); return !r.error; }
+  async function probeColumns(){
+    var r = await Promise.all([
+      probeColumn('quotations', 'number'), probeColumn('quotations', 'created_by'),
+      probeColumn('orders', 'created_by'), probeColumn('orders', 'delivered_at'),
+      probeColumn('quotation_allocations', 'created_by')
+    ]);
+    COLS = { number: r[0], qBy: r[1], oBy: r[2], delivered: r[3], aBy: r[4] };
+  }
+  function quotationWhen(q){ return (q.createdAt ? fmtDateTime(q.createdAt) + ' · ' : '') + (q.createdBy ? 'por ' + escHtml(q.createdBy) + ' · ' : ''); }
   function quotationName(q){ return q.number ? 'Cotação #' + q.number : q.title; }
   function friendlyDbError(err, prefix){
     var msg = err && err.message ? err.message : String(err);
     if(/row-level security/i.test(msg)){
-      return prefix + '\n\nO Supabase está bloqueando a gravação nesta tabela (proteção RLS). Rode o arquivo cotacao_lancamentos.sql no SQL Editor do Supabase — ele libera a tabela — e tente de novo.\n\nDetalhe técnico: ' + msg;
+      return prefix + '\n\nO Supabase está bloqueando a gravação nesta tabela (proteção RLS). Rode o arquivo atualizacao_seguranca_e_recursos.sql no SQL Editor do Supabase — ele libera a tabela — e tente de novo.\n\nDetalhe técnico: ' + msg;
     }
     return prefix + '\n\nDetalhe técnico: ' + msg;
   }
 
   async function ensureQuotations(){
-    // Prefer the full read; fall back step by step when the SQL for the new columns/tables was not run yet
-    var attempts = [
-      { sel: QUOTATION_SELECT, alloc: true, number: true },
-      { sel: QUOTATION_SELECT, alloc: true, number: false },
-      { sel: QUOTATION_SELECT_BASIC, alloc: false, number: true },
-      { sel: QUOTATION_SELECT_BASIC, alloc: false, number: false }
-    ];
-    var res = null, used = null;
-    for(var i = 0; i < attempts.length; i++){
-      var at = attempts[i];
-      var sel = at.number ? at.sel.replace('id,title,status,created_at,', 'id,title,status,created_at,number,') : at.sel;
-      var r = await db.from('quotations').select(sel);
-      if(!r.error){ res = r; used = at; break; }
-      if(i === attempts.length - 1) check(r, 'Ler cotações');
+    var res = await db.from('quotations').select(QUOTATION_SELECT);
+    if(res.error){
+      // the allocation table is not there yet: still list the quotations so the app opens
+      res = check(await db.from('quotations').select(QUOTATION_SELECT_BASIC), 'Ler cotações');
+      allocReady = false;
+    } else {
+      allocReady = true;
     }
-    allocReady = used.alloc; numberReady = used.number;
+    numberReady = COLS.number;
     var list = (res.data || []).map(mapQuotationRow);
     if(!numberReady){
       // no number column yet: number them by order of creation so the screen still shows #1, #2...
@@ -2295,13 +2331,13 @@ var QRCode;
 
   function mapHistoryRow(a){
     return { id: a.id, quotationId: a.quotation_id, productId: a.product_id, productName: a.product_name, supplierId: a.supplier_id,
-             qty: Number(a.qty) || 0, price: Number(a.price) || 0, orderId: a.order_id || null, createdAt: a.created_at ? new Date(a.created_at) : null };
+             qty: Number(a.qty) || 0, price: Number(a.price) || 0, orderId: a.order_id || null, createdAt: a.created_at ? new Date(a.created_at) : null, createdBy: a.created_by || null };
   }
   // Last prices the buyer typed in (kept for the price history and to pre-fill the next quotation)
   async function loadPriceHistory(){
     HISTORY = [];
     if(!allocReady) return;
-    var res = await db.from('quotation_allocations').select('id,quotation_id,product_id,product_name,supplier_id,qty,price,order_id,created_at').order('created_at', { ascending: false }).limit(1000);
+    var res = await db.from('quotation_allocations').select('*').order('created_at', { ascending: false }).limit(1000);
     if(res.error){ console.error('Não foi possível ler o histórico de preços', res.error); return; }
     HISTORY = (res.data || []).map(mapHistoryRow);
     applyLastPrices();
@@ -2345,7 +2381,7 @@ var QRCode;
   var ORDERS = [];
 
   async function ensureOrdersList(){
-    var res = check(await db.from('orders').select('id,code,supplier_id,status,order_date,delivery_date,total,confirmed,receiver_note'), 'Ler pedidos');
+    var res = check(await db.from('orders').select('*'), 'Ler pedidos');
     ORDERS = (res.data || []).map(function(o){
       return Object.assign({}, o, { supplier_name: supplierNameById[o.supplier_id] || '—' });
     }).sort(function(a,b){ return (b.order_date || '').localeCompare(a.order_date || ''); });
@@ -2356,6 +2392,7 @@ var QRCode;
       await ensureSuppliers();
       await ensureProducts();
       await ensureSupplierProducts();
+      await probeColumns();
       await ensureQuotations();
       await loadPriceHistory();
       await ensureOrdersList();
@@ -2614,6 +2651,7 @@ var QRCode;
       fillPartialStats({ pedidos:0, pedidosSub:'de ' + delivered.length + ' entregue(s) no período', pct:'0%', pctSub:'nenhum pedido parcial', unidades:0, valor:money(0) });
       renderMaisComprados([]);
       renderCategoryPie([]);
+      renderSupplierPerformance(orders, []);
       return;
     }
     fillPartialStats({ pedidos:'…', pedidosSub:'carregando', pct:'…', pctSub:'carregando', unidades:'…', valor:'…' });
@@ -2650,6 +2688,7 @@ var QRCode;
     });
     renderMaisComprados(items);
     renderCategoryPie(items);
+    renderSupplierPerformance(orders, items);
   }
 
   /* ---------- Dashboard: gráficos (SVG desenhado à mão, sem bibliotecas) ---------- */
@@ -2697,6 +2736,52 @@ var QRCode;
   }
 
   // ----- ranking: fornecedores onde mais compramos -----
+  var PERF_COLS = 'minmax(190px,2.2fr) 80px 120px minmax(150px,1.5fr) minmax(150px,1.5fr) 120px';
+  function renderSupplierPerformance(orders, items){
+    var box = document.getElementById('dash-desempenho');
+    var itemsByOrder = {};
+    items.forEach(function(it){ (itemsByOrder[it.order_id] = itemsByOrder[it.order_id] || []).push(it); });
+    var today = dateInputValue(new Date());
+    var by = {};
+    orders.forEach(function(o){
+      var key = o.supplier_id || ('n:' + o.supplier_name);
+      var g = by[key] || (by[key] = { id: o.supplier_id, name: o.supplier_name || supplierName(o.supplier_id), orders: 0, total: 0, delivered: 0, problem: 0, late: 0, overdue: 0 });
+      g.orders++; g.total += Number(o.total) || 0;
+      var due = o.delivery_date ? String(o.delivery_date).slice(0, 10) : '';
+      if(isOrderDelivered(o)){
+        g.delivered++;
+        if((itemsByOrder[o.id] || []).some(function(i){ return i.receive_status === 'parcial' || i.receive_status === 'devolvido'; })) g.problem++;
+        if(o.delivered_at && due && dateInputValue(new Date(o.delivered_at)) > due) g.late++;
+      } else if(due && due < today){
+        g.overdue++;
+      }
+    });
+    var seq = {}, changes = {};
+    HISTORY.forEach(function(h){ if(h.productId) (seq[h.supplierId + '|' + h.productId] = seq[h.supplierId + '|' + h.productId] || []).push(h); });
+    Object.keys(seq).forEach(function(k){
+      var rows = seq[k].slice().sort(function(a, b){ return (a.createdAt ? a.createdAt.getTime() : 0) - (b.createdAt ? b.createdAt.getTime() : 0); });
+      if(rows.length < 2 || !(rows[0].price > 0)) return;
+      (changes[rows[0].supplierId] = changes[rows[0].supplierId] || []).push((rows[rows.length - 1].price - rows[0].price) / rows[0].price * 100);
+    });
+    var list = Object.keys(by).map(function(k){ return by[k]; }).sort(function(a, b){ return b.total - a.total; });
+    if(list.length === 0){ box.innerHTML = '<div class="tbl-empty">Sem pedidos no período.</div>'; return; }
+    var rowsHtml = list.map(function(g){
+      var ch = g.id ? changes[g.id] : null;
+      var avg = ch && ch.length ? ch.reduce(function(s2, v){ return s2 + v; }, 0) / ch.length : null;
+      var problem = g.delivered ? g.problem + ' de ' + g.delivered + ' (' + pctText(g.problem / g.delivered * 100) + ')' : '<span style="color:var(--ink-faint);">—</span>';
+      var lateParts = [];
+      if(g.late) lateParts.push(g.late + ' entregue(s) com atraso');
+      if(g.overdue) lateParts.push(g.overdue + ' em atraso agora');
+      var late = lateParts.length ? '<span style="color:var(--red); font-weight:600;">' + lateParts.join(' · ') + '</span>' : '<span style="color:var(--green);">nenhum</span>';
+      var variation = avg === null ? '<span style="color:var(--ink-faint);">—</span>'
+        : '<b style="color:' + (avg > 0.05 ? 'var(--red)' : avg < -0.05 ? 'var(--green)' : 'var(--ink-soft)') + ';">' + (avg > 0 ? '+' : '') + pctText(avg) + '</b>';
+      return '<div class="tbl-row" style="--cols:' + PERF_COLS + ';">' +
+        '<div class="tbl-main">' + escHtml(g.name) + '</div><div>' + g.orders + '</div><div>' + money(round2(g.total)) + '</div>' +
+        '<div' + (g.problem ? ' style="color:var(--amber-dark); font-weight:600;"' : '') + '>' + problem + '</div><div>' + late + '</div><div>' + variation + '</div></div>';
+    }).join('');
+    box.innerHTML = '<div class="tbl-head" style="--cols:' + PERF_COLS + ';"><div>Fornecedor</div><div>Pedidos</div><div>Comprado</div><div>Entregas com problema</div><div>Atrasos</div><div>Variação de preço</div></div>' + rowsHtml;
+  }
+
   function renderFornecedoresRank(orders){
     var box = document.getElementById('dash-fornecedores-rank');
     var by = {};
@@ -2800,7 +2885,7 @@ var QRCode;
       resumo.innerHTML = '';
       grafico.innerHTML = '<div class="tbl-empty">' + (allocReady
         ? 'Ainda não há preços lançados nas cotações. Quando você colocar o fornecedor e o preço dos itens, a evolução aparece aqui.'
-        : 'O histórico será ativado depois de rodar o arquivo cotacao_lancamentos.sql no Supabase.') + '</div>';
+        : 'O histórico será ativado depois de rodar o arquivo atualizacao_seguranca_e_recursos.sql no Supabase.') + '</div>';
       return;
     }
     var groups = priceSeries(dashProductId);
@@ -2921,7 +3006,7 @@ var QRCode;
   /* ---------- Cadastros: fornecedores, produtos e histórico de preços ---------- */
   var cadTab = 'fornecedores';
   var CAD_PAGE = 100;
-  var cadLimit = { fornecedores: CAD_PAGE, produtos: CAD_PAGE, historico: CAD_PAGE };
+  var cadLimit = { fornecedores: CAD_PAGE, produtos: CAD_PAGE, historico: CAD_PAGE, revisao: CAD_PAGE };
   var fornecedorSearchTerm = '', fornecedorCatFilter = '';
   var produtoSearchTerm = '', produtoCatFilter = '';
   var histSearchTerm = '', histSupplierFilter = '';
@@ -2930,7 +3015,7 @@ var QRCode;
   function showCadTab(tab){
     cadTab = tab;
     buyerRoot.querySelectorAll('[data-cad-tab]').forEach(function(b){ b.classList.toggle('active', b.dataset.cadTab === tab); });
-    ['fornecedores', 'produtos', 'historico'].forEach(function(t){
+    ['fornecedores', 'produtos', 'historico', 'revisao'].forEach(function(t){
       document.getElementById('cad-' + t).style.display = t === tab ? 'block' : 'none';
     });
     renderCad();
@@ -2941,6 +3026,9 @@ var QRCode;
     if(cadTab === 'fornecedores') renderFornecedoresTbl();
     if(cadTab === 'produtos') renderProdutosTbl();
     if(cadTab === 'historico') renderHistoricoTbl();
+    if(cadTab === 'revisao') renderRevisao();
+    var rc = revisaoCounts();
+    document.getElementById('cad-count-revisao').textContent = rc.prod + rc.forn + rc.tel;
   }
 
   function tblHtml(cols, heads, rows, emptyMsg){
@@ -3210,7 +3298,7 @@ var QRCode;
   }
 
   /* ----- Histórico de preços ----- */
-  var HIST_COLS = '120px minmax(220px,3fr) minmax(170px,2fr) 110px 110px 120px';
+  var HIST_COLS = '120px minmax(200px,3fr) minmax(160px,2fr) 100px 110px 110px minmax(90px,1fr)';
   function histProductName(h){
     if(h.productName) return h.productName;
     var p = h.productId ? PRODUCTS.filter(function(x){ return x.dbId === h.productId; })[0] : null;
@@ -3244,14 +3332,176 @@ var QRCode;
         '<div>' + fmtQty(h.qty) + ' ' + histUnit(h) + '</div>' +
         '<div class="tbl-main">' + money(h.price) + '</div>' +
         '<div>' + money(round2(h.qty * h.price)) + '</div>' +
+        '<div style="color:var(--ink-soft);">' + escHtml(h.createdBy || '—') + '</div>' +
       '</div>';
     });
-    document.getElementById('hist-tbl').innerHTML = tblHtml(HIST_COLS, ['Data', 'Produto', 'Fornecedor', 'Quantidade', 'Preço unit.', 'Total'], rows,
-      allocReady ? 'Ainda não há valores lançados. Eles aparecem aqui assim que você separar itens por fornecedor numa cotação.' : 'O histórico será ativado depois de rodar o arquivo cotacao_lancamentos.sql no Supabase.');
+    document.getElementById('hist-tbl').innerHTML = tblHtml(HIST_COLS, ['Data', 'Produto', 'Fornecedor', 'Quantidade', 'Preço unit.', 'Total', 'Lançado por'], rows,
+      allocReady ? 'Ainda não há valores lançados. Eles aparecem aqui assim que você separar itens por fornecedor numa cotação.' : 'O histórico será ativado depois de rodar o arquivo atualizacao_seguranca_e_recursos.sql no Supabase.');
     document.getElementById('hist-more').innerHTML = moreButton('historico', list.length, shown.length);
   }
   document.getElementById('hist-search').addEventListener('input', function(e){ histSearchTerm = e.target.value; cadLimit.historico = CAD_PAGE; renderHistoricoTbl(); });
   document.getElementById('hist-fornecedor').addEventListener('change', function(e){ histSupplierFilter = e.target.value; cadLimit.historico = CAD_PAGE; renderHistoricoTbl(); });
+
+  /* ----- Revisão: cadastros repetidos e fornecedores sem WhatsApp ----- */
+  var LEGAL_TOKENS = ['ltda', 'me', 'epp', 'eireli', 'mei', 'sa'];
+  function productKey(name){ return normalizeText(name).replace(/[^a-z0-9]/g, ''); }
+  function supplierKey(name){ return normalizeText(name).split(/[^a-z0-9]+/).filter(function(t){ return t && LEGAL_TOKENS.indexOf(t) === -1; }).join(''); }
+  var dedupIgnored = (function(){ try{ return JSON.parse(localStorage.getItem('paulus_dedup_ignored') || '[]'); } catch(e){ return []; } })();
+  function ignoreGroup(key){
+    if(dedupIgnored.indexOf(key) === -1) dedupIgnored.push(key);
+    try{ localStorage.setItem('paulus_dedup_ignored', JSON.stringify(dedupIgnored)); } catch(e){ /* ignore */ }
+  }
+  function productUsage(p){
+    var n = 0;
+    if(!p.dbId) return 0;
+    HISTORY.forEach(function(h){ if(h.productId === p.dbId) n++; });
+    QUOTATIONS.forEach(function(q){ q.items.forEach(function(it){ if(it.productId === p.dbId) n++; }); });
+    return n;
+  }
+  function supplierUsage(sp){
+    var n = ORDERS.filter(function(o){ return o.supplier_id === sp.id; }).length;
+    HISTORY.forEach(function(h){ if(h.supplierId === sp.id) n++; });
+    return n;
+  }
+  function dupGroups(list, keyFn, prefix){
+    var map = {};
+    list.forEach(function(x){ var k = keyFn(x.name); if(k) (map[k] = map[k] || []).push(x); });
+    return Object.keys(map).filter(function(k){ return map[k].length > 1 && dedupIgnored.indexOf(prefix + k) === -1; })
+      .map(function(k){ return { key: prefix + k, items: map[k] }; })
+      .sort(function(a, b){ return b.items.length - a.items.length || a.items[0].name.localeCompare(b.items[0].name, 'pt-BR'); });
+  }
+  function revisaoCounts(){
+    return { prod: dupGroups(PRODUCTS, productKey, 'p:').length, forn: dupGroups(SUPPLIERS, supplierKey, 's:').length, tel: SUPPLIERS.filter(function(x){ return !x.phone; }).length };
+  }
+
+  function dupCardHtml(g, idx, kind){
+    var isProd = kind === 'prod';
+    var usage = isProd ? productUsage : supplierUsage;
+    var ranked = g.items.slice().sort(function(a, b){ return usage(b) - usage(a) || ((b.imageUrl ? 1 : 0) - (a.imageUrl ? 1 : 0)); });
+    var units = {};
+    if(isProd) g.items.forEach(function(p){ units[p.unit || 'Unidade'] = true; });
+    var unitsDiffer = isProd && Object.keys(units).length > 1;
+    var rows = ranked.map(function(x, i){
+      var detail = isProd
+        ? escHtml(x.unit || 'Unidade') + ' · ' + escHtml(x.category || 'sem categoria') + ' · usado em ' + usage(x) + ' lançamento(s)/cotação(ões)'
+        : escHtml(x.phone || 'sem telefone') + ' · ' + escHtml(x.email || 'sem e-mail') + ' · ' + usage(x) + ' pedido(s)/lançamento(s)';
+      return '<label style="display:flex; gap:10px; align-items:flex-start; padding:9px 0; border-top:1px solid #F0EEE7; cursor:pointer;">' +
+        '<input type="radio" name="keep-' + idx + '" value="' + escHtml(x.id) + '"' + (i === 0 ? ' checked' : '') + ' style="margin-top:3px;">' +
+        '<span><b style="font-size:13.5px;">' + escHtml(x.name) + '</b><br><span style="font-size:12px; color:var(--ink-soft);">' + detail + '</span></span></label>';
+    }).join('');
+    return '<div class="card" style="margin-bottom:12px; padding:14px 18px;" data-dup-card="' + idx + '">' +
+      '<div style="font-size:12px; color:var(--ink-soft); margin-bottom:4px;">' + g.items.length + ' cadastros parecidos — marque o que deve <b>ficar</b>:</div>' + rows +
+      (unitsDiffer ? '<div class="banner banner-amber" style="margin:10px 0 0 0;">Atenção: as unidades são diferentes (' + Object.keys(units).join(' × ') + '). Se são produtos de verdade diferentes (ex.: pão por kg e por unidade), use "São diferentes".</div>' : '') +
+      '<div style="display:flex; gap:8px; margin-top:12px; flex-wrap:wrap;">' +
+        '<button type="button" class="btn btn-primary" data-action="rev-merge-' + kind + '" data-idx="' + idx + '" data-key="' + escHtml(g.key) + '">Juntar em um só</button>' +
+        '<button type="button" class="btn btn-ghost" data-action="rev-ignore" data-key="' + escHtml(g.key) + '">São diferentes (não mostrar de novo)</button>' +
+      '</div></div>';
+  }
+
+  var revGroups = { prod: [], forn: [] };
+  function renderRevisao(){
+    revGroups.prod = dupGroups(PRODUCTS, productKey, 'p:');
+    revGroups.forn = dupGroups(SUPPLIERS, supplierKey, 's:');
+    document.getElementById('rev-prod-dup').innerHTML = revGroups.prod.length
+      ? revGroups.prod.map(function(g, i){ return dupCardHtml(g, 'p' + i, 'prod'); }).join('')
+      : '<div class="tbl-empty" style="background:#fff; border:1px solid var(--line); border-radius:14px;">Nenhum produto repetido. ✔</div>';
+    document.getElementById('rev-forn-dup').innerHTML = revGroups.forn.length
+      ? revGroups.forn.map(function(g, i){ return dupCardHtml(g, 's' + i, 'forn'); }).join('')
+      : '<div class="tbl-empty" style="background:#fff; border:1px solid var(--line); border-radius:14px;">Nenhum fornecedor repetido. ✔</div>';
+    var noTel = SUPPLIERS.filter(function(x){ return !x.phone; }).sort(function(a, b){ return a.name.localeCompare(b.name, 'pt-BR'); });
+    var shown = noTel.slice(0, cadLimit.revisao || CAD_PAGE);
+    var COLS_TEL = 'minmax(220px,2fr) minmax(200px,2fr) 110px';
+    document.getElementById('rev-forn-tel').innerHTML = shown.length === 0
+      ? '<div class="tbl-empty">Todos os fornecedores têm telefone. ✔</div>'
+      : '<div class="tbl-head" style="--cols:' + COLS_TEL + ';"><div>Fornecedor</div><div>WhatsApp / telefone</div><div></div></div>' +
+        shown.map(function(x){
+          return '<div class="tbl-row" style="--cols:' + COLS_TEL + ';">' +
+            '<div><div class="tbl-main">' + escHtml(x.name) + '</div><div class="tbl-sub">' + escHtml(x.email || 'sem e-mail') + '</div></div>' +
+            '<div><input type="text" data-tel="' + escHtml(x.id) + '" placeholder="(11) 99999-9999" style="width:100%; border:1px solid var(--line); border-radius:8px; padding:8px 10px; font-size:13px;"></div>' +
+            '<div class="tbl-actions"><button type="button" class="tbl-btn" data-action="rev-save-tel" data-id="' + escHtml(x.id) + '">Salvar</button></div></div>';
+        }).join('');
+    document.getElementById('rev-forn-tel-more').innerHTML = moreButton('revisao', noTel.length, shown.length);
+  }
+
+  async function mergeProducts(keep, others){
+    for(var i = 0; i < others.length; i++){
+      var o = others[i];
+      check(await db.from('order_items').update({ product_id: keep.dbId }).eq('product_id', o.dbId), 'Juntar produtos (itens de pedido)');
+      check(await db.from('quotation_items').update({ product_id: keep.dbId, product_name: keep.name }).eq('product_id', o.dbId), 'Juntar produtos (itens de cotação)');
+      check(await db.from('supplier_products').update({ product_id: keep.dbId }).eq('product_id', o.dbId), 'Juntar produtos (preços)');
+      if(allocReady) check(await db.from('quotation_allocations').update({ product_id: keep.dbId, product_name: keep.name }).eq('product_id', o.dbId), 'Juntar produtos (histórico)');
+      check(await db.from('products').delete().eq('id', o.dbId), 'Excluir o produto repetido');
+      PRODUCTS = PRODUCTS.filter(function(p){ return p.id !== o.id; });
+      HISTORY.forEach(function(h){ if(h.productId === o.dbId){ h.productId = keep.dbId; h.productName = keep.name; } });
+      QUOTATIONS.forEach(function(q){ q.items.forEach(function(it){ if(it.productId === o.dbId){ it.productId = keep.dbId; it.name = keep.name; } }); });
+    }
+    applyLastPrices();
+  }
+  async function mergeSuppliers(keep, others){
+    var phone = keep.phone, email = keep.email, address = keep.address, cats = (keep.categories || []).slice();
+    for(var i = 0; i < others.length; i++){
+      var o = others[i];
+      check(await db.from('orders').update({ supplier_id: keep.id }).eq('supplier_id', o.id), 'Juntar fornecedores (pedidos)');
+      check(await db.from('supplier_products').update({ supplier_id: keep.id }).eq('supplier_id', o.id), 'Juntar fornecedores (preços)');
+      check(await db.from('quotation_bids').update({ supplier_id: keep.id }).eq('supplier_id', o.id), 'Juntar fornecedores (propostas antigas)');
+      check(await db.from('quotation_suppliers').delete().eq('supplier_id', o.id), 'Juntar fornecedores (convites antigos)');
+      if(allocReady) check(await db.from('quotation_allocations').update({ supplier_id: keep.id }).eq('supplier_id', o.id), 'Juntar fornecedores (histórico)');
+      phone = phone || o.phone; email = email || o.email; address = address || o.address;
+      (o.categories || []).forEach(function(c){ if(cats.indexOf(c) === -1) cats.push(c); });
+      ORDERS.forEach(function(ord){ if(ord.supplier_id === o.id){ ord.supplier_id = keep.id; ord.supplier_name = keep.name; } });
+      HISTORY.forEach(function(h){ if(h.supplierId === o.id) h.supplierId = keep.id; });
+      QUOTATIONS.forEach(function(q){ q.items.forEach(function(it){ it.allocations.forEach(function(a){ if(a.supplierId === o.id) a.supplierId = keep.id; }); }); });
+    }
+    var fill = { phone: phone || null, email: email || null, address: address || null, categories: cats };
+    check(await db.from('suppliers').update(fill).eq('id', keep.id), 'Completar o cadastro do fornecedor');
+    Object.assign(keep, fill);
+    for(var j = 0; j < others.length; j++){
+      check(await db.from('suppliers').delete().eq('id', others[j].id), 'Excluir o fornecedor repetido');
+      SUPPLIERS = SUPPLIERS.filter(function(x){ return x.id !== others[j].id; });
+      delete supplierIdByName[others[j].name]; delete supplierNameById[others[j].id];
+    }
+  }
+
+  buyerRoot.addEventListener('click', async function(e){
+    var act = e.target.closest('[data-action^="rev-"]');
+    if(!act) return;
+    var a = act.dataset.action;
+    if(a === 'rev-ignore'){ ignoreGroup(act.dataset.key); renderCad(); return; }
+    if(a === 'rev-save-tel'){
+      var input = buyerRoot.querySelector('[data-tel="' + act.dataset.id + '"]');
+      var tel = input ? input.value.trim() : '';
+      if(!tel){ alert('Digite o telefone.'); return; }
+      try{
+        check(await db.from('suppliers').update({ phone: tel }).eq('id', act.dataset.id), 'Salvar telefone');
+        var sp = SUPPLIERS.filter(function(x){ return x.id === act.dataset.id; })[0];
+        if(sp) sp.phone = tel;
+        renderCad();
+      } catch(err){ alert(friendlyDbError(err, 'Não foi possível salvar o telefone.')); }
+      return;
+    }
+    if(a === 'rev-merge-prod' || a === 'rev-merge-forn'){
+      var isProd = a === 'rev-merge-prod';
+      var group = (isProd ? revGroups.prod : revGroups.forn).filter(function(g){ return g.key === act.dataset.key; })[0];
+      if(!group) return;
+      var checked = buyerRoot.querySelector('[data-dup-card="' + act.dataset.idx + '"] input[type="radio"]:checked');
+      var keep = group.items.filter(function(x){ return checked && x.id === checked.value; })[0];
+      if(!keep){ alert('Marque qual cadastro deve ficar.'); return; }
+      var others = group.items.filter(function(x){ return x.id !== keep.id; });
+      if(!confirm('Juntar ' + group.items.length + ' cadastros em "' + keep.name + '"?\n\nTudo o que está ligado aos outros (pedidos, cotações, histórico de preços) passa para ele, e os outros são apagados. Não dá para desfazer.')) return;
+      act.disabled = true;
+      try{
+        if(isProd) await mergeProducts(keep, others); else await mergeSuppliers(keep, others);
+      } catch(err){
+        console.error('Erro ao juntar', err);
+        alert(friendlyDbError(err, 'Não foi possível juntar tudo. Nada foi perdido: pode tentar de novo.'));
+        act.disabled = false;
+        renderCad();
+        return;
+      }
+      showBuyerToast('Cadastros juntados em "' + keep.name + '".');
+      renderCad();
+    }
+  });
 
   buyerRoot.addEventListener('click', function(e){
     var tab = e.target.closest('[data-cad-tab]');
@@ -3358,13 +3608,13 @@ var QRCode;
     try{
       var now = new Date();
       var title = 'Cotação de ' + fmtDateTime(now);
-      var qIns = check(await db.from('quotations').insert({ title: title, status: 'aberta' }).select(numberReady ? 'id,created_at,number' : 'id,created_at').single(), 'Criar cotação');
+      var qIns = check(await db.from('quotations').insert(Object.assign({ title: title, status: 'aberta' }, COLS.qBy ? { created_by: currentBuyer.nome } : {})).select(numberReady ? 'id,created_at,number' : 'id,created_at').single(), 'Criar cotação');
       if(!qIns.data) throw new Error('A cotação não retornou id.');
       createdId = qIns.data.id;
       var rows = items.map(function(p){ return { quotation_id: createdId, product_name: p.name, status: 'aberta', qty: p.qty, product_id: p.dbId }; });
       var itemRes = check(await db.from('quotation_items').insert(rows).select('id,product_name,qty,product_id'), 'Criar itens da cotação');
       var q = {
-        id: createdId, title: title, status: 'aberta', createdAt: qIns.data.created_at ? new Date(qIns.data.created_at) : now,
+        id: createdId, title: title, status: 'aberta', createdAt: qIns.data.created_at ? new Date(qIns.data.created_at) : now, createdBy: currentBuyer.nome || null,
         number: (numberReady && qIns.data.number != null) ? Number(qIns.data.number) : (QUOTATIONS.reduce(function(m, x){ return Math.max(m, x.number || 0); }, 0) + 1),
         items: (itemRes.data || []).map(function(r){ return { id: r.id, name: r.product_name, qty: Number(r.qty) || 0, productId: r.product_id || null, status: 'aberta', allocations: [] }; })
       };
@@ -3397,7 +3647,7 @@ var QRCode;
     card.innerHTML =
       '<div class="row" style="justify-content:space-between; align-items:flex-start; gap:12px;">' +
         '<div style="min-width:0;"><div class="row-title">' + escHtml(quotationName(q)) + '</div>' +
-        '<div class="row-sub" style="margin-top:4px;">' + (q.createdAt ? fmtDateTime(q.createdAt) + ' · ' : '') + st.items + (st.items === 1 ? ' item' : ' itens') + ' · ' + escHtml(names.length > 90 ? names.slice(0, 90) + '…' : names) + '</div></div>' +
+        '<div class="row-sub" style="margin-top:4px;">' + quotationWhen(q) + st.items + (st.items === 1 ? ' item' : ' itens') + ' · ' + escHtml(names.length > 90 ? names.slice(0, 90) + '…' : names) + '</div></div>' +
         (open ? '<span class="badge badge-amber">Em aberto</span>' : '<span class="badge badge-gray">Encerrada</span>') +
       '</div>' +
       '<div class="progress" style="margin:12px 0 6px 0;"><div style="width:' + pct + '%;"></div></div>' +
@@ -3418,7 +3668,7 @@ var QRCode;
     var warn = document.getElementById('alloc-setup-warn');
     if(!allocReady){
       warn.style.display = 'block';
-      warn.textContent = 'Falta ativar o lançamento de fornecedores e preços: rode o arquivo cotacao_lancamentos.sql no SQL Editor do Supabase e recarregue a página.';
+      warn.textContent = 'Falta ativar o lançamento de fornecedores e preços: rode o arquivo atualizacao_seguranca_e_recursos.sql no SQL Editor do Supabase e recarregue a página.';
     } else {
       warn.style.display = 'none';
     }
@@ -3445,7 +3695,8 @@ var QRCode;
       '<div class="row-sub">' + fmtQty(a.qty) + ' ' + unit + ' × ' + money(a.price) + ' = <b>' + money(round2(a.qty * a.price)) + '</b></div></div>' +
       (a.orderId
         ? '<span class="badge badge-green">Pedido gerado</span>'
-        : '<button type="button" class="tbl-btn danger" data-action="remover-alocacao" data-id="' + q.id + '" data-item="' + item.id + '" data-alloc="' + a.id + '">Remover</button>') +
+        : '<div style="display:flex; gap:6px;"><button type="button" class="tbl-btn" data-action="editar-alocacao" data-id="' + q.id + '" data-item="' + item.id + '" data-alloc="' + a.id + '">Editar</button>' +
+          '<button type="button" class="tbl-btn danger" data-action="remover-alocacao" data-id="' + q.id + '" data-item="' + item.id + '" data-alloc="' + a.id + '">Remover</button></div>') +
     '</div>';
   }
   function itemCardHtml(q, item){
@@ -3508,7 +3759,7 @@ var QRCode;
       '<div class="card" style="margin-bottom:14px;">' +
         '<div style="display:flex; justify-content:space-between; align-items:flex-start; gap:12px; flex-wrap:wrap;">' +
           '<div><h2 style="font-size:19px;">' + escHtml(quotationName(q)) + '</h2>' +
-          '<div class="row-sub" style="margin-top:4px;">' + (q.createdAt ? fmtDateTime(q.createdAt) + ' · ' : '') + st.complete + ' de ' + st.items + ' itens com fornecedor definido' + (open ? '' : ' · cotação encerrada') + '</div></div>' +
+          '<div class="row-sub" style="margin-top:4px;">' + quotationWhen(q) + st.complete + ' de ' + st.items + ' itens com fornecedor definido' + (open ? '' : ' · cotação encerrada') + '</div></div>' +
           (open ? '<span class="badge badge-amber">Em aberto</span>' : '<span class="badge badge-gray">Encerrada</span>') +
         '</div>' +
         '<div class="progress" style="margin:14px 0;"><div style="width:' + pct + '%;"></div></div>' +
@@ -3576,8 +3827,8 @@ var QRCode;
       var it = r.item, unit = itemUnitLabel(it);
       return '<div style="padding:12px 0; border-top:1px solid #F0EEE7;">' +
         '<div style="display:flex; justify-content:space-between; gap:10px; align-items:flex-start;">' +
-          '<div><div style="font-weight:600; font-size:14px;">' + escHtml(it.name) + '</div><div class="row-sub">Pedido ' + fmtQty(it.qty) + ' ' + unit + ' · falta ' + fmtQty(remainingQty(it)) + ' ' + unit + '</div></div>' +
-          '<button type="button" data-action="bulk-remove-row" data-idx="' + i + '" style="background:none; border:none; color:var(--red); font-size:12px; text-decoration:underline; cursor:pointer;">Tirar</button>' +
+          '<div><div style="font-weight:600; font-size:14px;">' + escHtml(it.name) + '</div><div class="row-sub">Pedido ' + fmtQty(it.qty) + ' ' + unit + ' · falta ' + fmtQty(remainingQty(it) + (bulkCtx.edit ? bulkCtx.edit.ownQty : 0)) + ' ' + unit + '</div></div>' +
+          (bulkCtx.edit ? '' : '<button type="button" data-action="bulk-remove-row" data-idx="' + i + '" style="background:none; border:none; color:var(--red); font-size:12px; text-decoration:underline; cursor:pointer;">Tirar</button>') +
         '</div>' +
         '<div style="display:flex; gap:12px; flex-wrap:wrap; margin-top:8px; align-items:flex-end;">' +
           '<div class="field" style="flex:0 1 130px;"><label>Quantidade (' + unit + ')</label><input type="text" inputmode="decimal" data-bulk="qty" data-idx="' + i + '" value="' + escHtml(r.qtyText) + '"></div>' +
@@ -3649,7 +3900,7 @@ var QRCode;
   function closeBulkLista(){ document.getElementById('bulk-lista').style.display = 'none'; }
 
   function openBulkModal(qid, itemIds){
-    if(!allocReady){ alert('Antes de colocar fornecedor, rode o arquivo cotacao_lancamentos.sql no SQL Editor do Supabase e recarregue a página.'); return; }
+    if(!allocReady){ alert('Antes de colocar fornecedor, rode o arquivo atualizacao_seguranca_e_recursos.sql no SQL Editor do Supabase e recarregue a página.'); return; }
     var q = quotationById(qid); if(!q) return;
     var items = q.items.filter(function(it){ return itemIds.indexOf(it.id) > -1 && !itemIsComplete(it); });
     if(items.length === 0){ alert('Selecione ao menos um item que ainda falta separar.'); return; }
@@ -3661,8 +3912,56 @@ var QRCode;
     renderBulkEscolhido(); closeBulkLista();
     document.getElementById('bulk-warn').style.display = 'none';
     document.getElementById('bulk-save').disabled = false;
+    document.getElementById('bulk-save').textContent = 'Salvar lançamentos';
     applyBulkSupplierPrices();
     document.getElementById('bulk-overlay').style.display = 'flex';
+  }
+
+  // Change the supplier, quantity or price of a lançamento that has not become an order yet
+  function openEditAllocation(qid, itemId, allocId){
+    var q = quotationById(qid); if(!q) return;
+    var item = q.items.filter(function(i){ return i.id === itemId; })[0]; if(!item) return;
+    var a = item.allocations.filter(function(x){ return x.id === allocId; })[0]; if(!a) return;
+    if(a.orderId){ alert('Este lançamento já virou pedido. Para mexer nele, edite o pedido na aba Pedidos.'); return; }
+    bulkCtx = { qid: qid, edit: { allocId: allocId, ownQty: a.qty }, rows: [{ item: item, qtyText: fmtQtyInput(a.qty), priceText: fmtPriceInput(a.price), priceEdited: true, hint: '' }] };
+    document.getElementById('bulk-title').textContent = 'Editar lançamento';
+    document.getElementById('bulk-sub').textContent = quotationName(q) + ' — ' + item.name + ': mude o fornecedor, a quantidade ou o preço.';
+    document.getElementById('bulk-fornecedor').value = a.supplierId;
+    document.getElementById('bulk-busca').value = '';
+    renderBulkEscolhido(); closeBulkLista();
+    document.getElementById('bulk-warn').style.display = 'none';
+    document.getElementById('bulk-save').disabled = false;
+    document.getElementById('bulk-save').textContent = 'Salvar alterações';
+    applyBulkSupplierPrices();
+    document.getElementById('bulk-overlay').style.display = 'flex';
+  }
+  async function saveEditedAllocation(q, sid, btn){
+    var r = bulkCtx.rows[0], item = r.item;
+    var a = item.allocations.filter(function(x){ return x.id === bulkCtx.edit.allocId; })[0];
+    if(!a){ alert('Este lançamento não existe mais (outra pessoa pode ter removido).'); closeBulkModal(); renderCotacaoDetail(q.id); return; }
+    var qty = parseQtyInput(r.qtyText), price = parseMoneyFlexible(r.priceText);
+    if(!(qty > 0) || !(price > 0)){ alert('Confira a quantidade e o preço.'); return; }
+    var maxQty = remainingQty(item) + a.qty;
+    if(qty > maxQty + 1e-9 && !confirm('A quantidade (' + fmtQty(qty) + ') passa do que falta (' + fmtQty(maxQty) + '). Salvar mesmo assim?')) return;
+    btn.disabled = true;
+    try{
+      // only changes it while it is still waiting for an order (another buyer may have generated the order meanwhile)
+      var res = check(await db.from('quotation_allocations').update({ supplier_id: sid, qty: qty, price: price }).eq('id', a.id).is('order_id', null).select('id'), 'Editar lançamento');
+      if(!res.data || res.data.length === 0){
+        alert('Este lançamento já virou pedido (ou foi removido por outra pessoa), então não dá mais para editar aqui.');
+        closeBulkModal(); await syncFromServer({ force: true }); return;
+      }
+      a.supplierId = sid; a.qty = qty; a.price = price;
+      HISTORY.forEach(function(h){ if(h.id === a.id){ h.supplierId = sid; h.qty = qty; h.price = price; } });
+      applyLastPrices();
+      closeBulkModal();
+      renderCotacaoDetail(q.id);
+      showBuyerToast('Lançamento atualizado.');
+    } catch(err){
+      console.error('Erro ao editar lançamento', err);
+      alert(friendlyDbError(err, 'Não foi possível salvar.'));
+      btn.disabled = false;
+    }
   }
   function closeBulkModal(){ bulkCtx = null; closeBulkLista(); document.getElementById('bulk-overlay').style.display = 'none'; }
 
@@ -3703,6 +4002,7 @@ var QRCode;
     var q = quotationById(bulkCtx.qid); if(!q) return;
     var sid = bulkSupplierId();
     if(!sid){ alert('Escolha o fornecedor.'); return; }
+    if(bulkCtx.edit){ return saveEditedAllocation(q, sid, this); }
     if(bulkCtx.rows.length === 0){ alert('Não há itens para lançar.'); return; }
     var lines = [], bad = [], over = [];
     bulkCtx.rows.forEach(function(r){
@@ -3717,16 +4017,16 @@ var QRCode;
     var btn = this; btn.disabled = true;
     try{
       var ins = check(await db.from('quotation_allocations').insert(lines.map(function(l){
-        return { quotation_id: q.id, quotation_item_id: l.item.id, product_id: l.item.productId, product_name: l.item.name, supplier_id: sid, qty: l.qty, price: l.price };
+        return Object.assign({ quotation_id: q.id, quotation_item_id: l.item.id, product_id: l.item.productId, product_name: l.item.name, supplier_id: sid, qty: l.qty, price: l.price }, COLS.aBy ? { created_by: currentBuyer.nome } : {});
       })).select('id,created_at,quotation_item_id'), 'Salvar lançamentos');
       var byItem = {};
       (ins.data || []).forEach(function(r){ byItem[r.quotation_item_id] = r; });
       lines.forEach(function(l){
         var saved = byItem[l.item.id];
         var created = saved && saved.created_at ? new Date(saved.created_at) : new Date();
-        var a = { id: saved ? saved.id : null, supplierId: sid, qty: l.qty, price: l.price, orderId: null, createdAt: created };
+        var a = { id: saved ? saved.id : null, supplierId: sid, qty: l.qty, price: l.price, orderId: null, createdAt: created, createdBy: currentBuyer.nome || null };
         l.item.allocations.push(a);
-        HISTORY.unshift({ id: a.id, quotationId: q.id, productId: l.item.productId, productName: l.item.name, supplierId: sid, qty: l.qty, price: l.price, orderId: null, createdAt: created });
+        HISTORY.unshift({ id: a.id, quotationId: q.id, productId: l.item.productId, productName: l.item.name, supplierId: sid, qty: l.qty, price: l.price, orderId: null, createdAt: created, createdBy: currentBuyer.nome || null });
         delete cotSelected[l.item.id];
       });
       applyLastPrices();
@@ -3831,9 +4131,9 @@ var QRCode;
         }
         var code = nextOrderCode();
         var orderDate = new Date().toISOString().slice(0, 10);
-        var orderIns = check(await db.from('orders').insert({
+        var orderIns = check(await db.from('orders').insert(Object.assign({
           code: code, supplier_id: g.supplierId, status: 'enviado', order_date: orderDate, delivery_date: delivery, total: g.total
-        }).select('id').single(), 'Criar pedido');
+        }, COLS.oBy ? { created_by: currentBuyer.nome } : {})).select('id').single(), 'Criar pedido');
         if(!orderIns.data) throw new Error('O pedido não retornou id.');
         var orderId = orderIns.data.id;
         check(await db.from('order_items').insert(rows.map(function(r){ return { order_id: orderId, product_id: r.product_id, qty: r.qty, price: r.price, receive_status: 'pendente' }; })), 'Salvar itens do pedido');
@@ -3843,7 +4143,7 @@ var QRCode;
           HISTORY.forEach(function(h){ if(h.id === l.a.id) h.orderId = orderId; });
         });
         ORDERS.unshift({ id: orderId, code: code, supplier_id: g.supplierId, supplier_name: supplierName(g.supplierId), status: 'enviado',
-          order_date: orderDate, delivery_date: delivery, total: g.total, confirmed: false, receiver_note: null });
+          order_date: orderDate, delivery_date: delivery, total: g.total, confirmed: false, receiver_note: null, created_by: currentBuyer.nome || null });
         created++;
       }
       if(quotationIsDone(q)){
@@ -3901,6 +4201,7 @@ var QRCode;
     else if(a === 'excluir-cotacao'){ deleteQuotation(id); }
     else if(a === 'alocar-item'){ openBulkModal(id, [act.dataset.item]); }
     else if(a === 'bulk-alocar'){ var qb = quotationById(id); if(qb) openBulkModal(id, selectedItemIds(qb)); }
+    else if(a === 'editar-alocacao'){ openEditAllocation(id, act.dataset.item, act.dataset.alloc); }
     else if(a === 'remover-alocacao'){ removeAllocation(id, act.dataset.item, act.dataset.alloc); }
     else if(a === 'gerar-pedidos'){ openGenModal(id); }
   });
@@ -4167,7 +4468,7 @@ var QRCode;
       '<div class="row" style="justify-content:space-between; align-items:flex-start;">' +
         '<div>' +
           '<div class="row-title">' + order.code + ' · ' + order.supplier_name + '</div>' +
-          '<div class="row-sub">' + fmtDateStr(order.order_date) + ' · ' + money(Number(order.total) || 0) + '</div>' +
+          '<div class="row-sub">' + fmtDateStr(order.order_date) + ' · ' + money(Number(order.total) || 0) + (order.created_by ? ' · por ' + escHtml(order.created_by) : '') + '</div>' +
         '</div>' +
         '<span class="badge ' + badgeClass + '">' + (STATUS_LABELS[order.status] || order.status) + '</span>' +
       '</div>' +
@@ -4559,7 +4860,10 @@ var QRCode;
         var item = state.currentOrderItems[i];
         check(await db.from('order_items').update({ receive_status:item.receiveStatus, received_qty:item.receivedQty }).eq('id', item.itemId), 'Salvar item conferido');
       }
-      check(await db.from('orders').update({ receiver_note:note, confirmed:true, status:'entregue' }).eq('id', order.id), 'Atualizar pedido');
+      var firstDelivery = !order.confirmed && order.status !== 'entregue';
+      var deliveredNow = new Date().toISOString();
+      check(await db.from('orders').update(Object.assign({ receiver_note:note, confirmed:true, status:'entregue' }, (COLS.delivered && firstDelivery) ? { delivered_at: deliveredNow } : {})).eq('id', order.id), 'Atualizar pedido');
+      if(COLS.delivered && firstDelivery) order.delivered_at = deliveredNow;
     } catch(err){
       console.error('Erro ao salvar conferência no Supabase', err);
       btn.disabled = false; btn.textContent = originalLabel;
@@ -4602,16 +4906,22 @@ var QRCode;
   });
 
   /* ---------- Login ---------- */
-  // Buyer profiles (each one has the same access to the buyer panel)
-  var BUYERS = [
-    { email:'compras@paulusrestaurantes.com.br', senha:'paulus2026', nome:'Murillo', inicial:'M' },
-    { email:'açougue@paulusrestaurantes.com.br', senha:'paulus2026', nome:'Açougue', inicial:'A' }
-  ];
-  // Compare e-mails ignoring case and accents, so "acougue@..." and "açougue@..." both work
   // Text copied from WhatsApp / Word / PDF often carries invisible characters (zero-width spaces etc.): drop them
   function stripInvisible(v){ return String(v || '').replace(/[\u200B-\u200F\u202A-\u202E\u2060-\u2064\uFEFF]/g, ''); }
   function normalizeEmail(v){ return stripInvisible(v).replace(/\s+/g, '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, ''); }
-  var currentBuyer = BUYERS[0];
+  var deferredInstall = null;
+  window.addEventListener('beforeinstallprompt', function(e){
+    e.preventDefault(); deferredInstall = e;
+    document.getElementById('install-btn').style.display = 'flex';
+  });
+  window.addEventListener('appinstalled', function(){ deferredInstall = null; document.getElementById('install-btn').style.display = 'none'; });
+  document.getElementById('install-btn').addEventListener('click', async function(){
+    if(!deferredInstall) return;
+    deferredInstall.prompt();
+    try{ await deferredInstall.userChoice; } catch(err){ /* ignore */ }
+    deferredInstall = null; this.style.display = 'none';
+  });
+  var currentBuyer = { id: null, email: '', nome: '' };   // who is logged in (comes from the database, table profiles)
 
   function showBuyerToast(message){
     var toast = document.createElement('div');
@@ -4621,63 +4931,165 @@ var QRCode;
     setTimeout(function(){ toast.remove(); }, 5000);
   }
 
-  // Re-reads the orders so that a supplier's "Confirmar pedido" (done on the link we send by WhatsApp) shows up here.
-  async function refreshOrdersFromServer(){
-    if(!dbReady) return;
-    var before = {};
-    ORDERS.forEach(function(o){ before[o.id] = o.status; });
-    try{ await ensureOrdersList(); } catch(err){ console.error('Não foi possível atualizar os pedidos', err); return; }
-    if(state.viewingOrder){
-      var fresh = ORDERS.filter(function(o){ return o.id === state.viewingOrder.id; })[0];
-      if(fresh) state.viewingOrder = fresh;
+  /* ---------- Atualização automática: dois compradores podem trabalhar ao mesmo tempo ---------- */
+  var syncBusy = false, syncTick = 0;
+  function anyDialogOpen(){
+    var flexOpen = ['bulk-overlay', 'gen-overlay', 'share-overlay', 'review-overlay'].some(function(id){ var el = document.getElementById(id); return el && el.style.display === 'flex'; });
+    var blockOpen = ['fornecedor-form', 'produto-form', 'pedido-edit-form'].some(function(id){ var el = document.getElementById(id); return el && el.style.display === 'block'; });
+    return flexOpen || blockOpen;
+  }
+  function dataSignature(){
+    return JSON.stringify([
+      ORDERS.map(function(o){ return [o.id, o.status, o.total, o.confirmed, o.delivery_date]; }),
+      QUOTATIONS.map(function(q){ return [q.id, q.status, q.items.map(function(it){ return [it.id, it.qty, it.allocations.map(function(a){ return [a.id, a.supplierId, a.qty, a.price, a.orderId]; })]; })]; }),
+      HISTORY.length, SUPPLIERS.length, PRODUCTS.length
+    ]);
+  }
+  // suppliers/products are re-read too, but what the buyer already ticked on the Lista de compras stays as it was
+  async function refreshCatalogKeepingSelection(){
+    var keep = {};
+    PRODUCTS.forEach(function(p){ if(p.dbId) keep[p.dbId] = { selected: p.selected, qty: p.qty }; });
+    await ensureSuppliers();
+    await ensureProducts();
+    PRODUCTS.forEach(function(p){ var k = p.dbId ? keep[p.dbId] : null; if(k){ p.selected = k.selected; p.qty = k.qty; } });
+    applyLastPrices();
+  }
+  var pendingRedraw = false;
+  function redrawCurrentPage(){
+    var ae = document.activeElement;
+    if(ae && buyerRoot.contains(ae) && /^(INPUT|TEXTAREA|SELECT)$/.test(ae.tagName)) return false;   // never redraw under someone who is typing
+    if(state.page === 'cotacoes'){
+      var detailOpen = document.getElementById('cotacoes-detail-view').style.display !== 'none';
+      if(detailOpen && currentQuotationId && quotationById(currentQuotationId)) renderCotacaoDetail(currentQuotationId); else renderCotacoesList();
     }
-    var advanced = ORDERS.filter(function(o){ return before[o.id] && before[o.id] !== o.status && (o.status === 'confirmado' || o.status === 'a_caminho'); });
-    advanced.forEach(function(o){
-      showBuyerToast(o.supplier_name + (o.status === 'confirmado' ? ' confirmou o pedido ' : ' avisou que o pedido está a caminho: ') + o.code);
-    });
-    if(state.page === 'pedidos'){ if(state.viewingOrder){ showPedidosDetail(); } else { renderPedidosList(); } }
+    else if(state.page === 'pedidos'){ if(state.viewingOrder) showPedidosDetail(); else renderPedidosList(); }
     else if(state.page === 'home') renderHome();
     else if(state.page === 'dashboard') renderDashboard();
+    else if(state.page === 'fornecedores') renderCad();
+    return true;
   }
-  setInterval(function(){ if(document.getElementById('app').classList.contains('active')) refreshOrdersFromServer(); }, 30000);
-  window.addEventListener('focus', function(){ if(document.getElementById('app').classList.contains('active')) refreshOrdersFromServer(); });
+  async function syncFromServer(opts){
+    opts = opts || {};
+    if(syncBusy || !dbReady) return;
+    if(!document.getElementById('app').classList.contains('active')) return;
+    if(!opts.force && (document.hidden || anyDialogOpen())) return;
+    syncBusy = true;
+    try{
+      var before = dataSignature();
+      var beforeStatus = {}; ORDERS.forEach(function(o){ beforeStatus[o.id] = o.status; });
+      var beforeQ = {}; QUOTATIONS.forEach(function(q){ beforeQ[q.id] = true; });
+      await ensureOrdersList();
+      await ensureQuotations();
+      await loadPriceHistory();
+      if(opts.full) await refreshCatalogKeepingSelection();
+      if(state.viewingOrder){
+        var fresh = ORDERS.filter(function(o){ return o.id === state.viewingOrder.id; })[0];
+        if(fresh) state.viewingOrder = fresh;
+      }
+      ORDERS.filter(function(o){ return beforeStatus[o.id] && beforeStatus[o.id] !== o.status && (o.status === 'confirmado' || o.status === 'a_caminho'); })
+        .forEach(function(o){ showBuyerToast(o.supplier_name + (o.status === 'confirmado' ? ' confirmou o pedido ' : ' avisou que o pedido está a caminho: ') + o.code); });
+      QUOTATIONS.filter(function(q){ return !beforeQ[q.id] && q.createdBy && q.createdBy !== currentBuyer.nome; })
+        .forEach(function(q){ showBuyerToast(q.createdBy + ' criou a ' + quotationName(q)); });
+      if(dataSignature() !== before) pendingRedraw = true;
+      if(pendingRedraw && redrawCurrentPage()) pendingRedraw = false;   // waits until the person stops typing
+    } catch(err){
+      console.error('Não foi possível atualizar os dados', err);
+    } finally {
+      syncBusy = false;
+    }
+  }
+  setInterval(function(){ syncTick++; syncFromServer({ full: syncTick % 4 === 0 }); }, 20000);
+  window.addEventListener('focus', function(){ syncFromServer({ full: true }); });
+  document.addEventListener('visibilitychange', function(){ if(!document.hidden) syncFromServer({ full: true }); });
+
+  function showLoginScreen(message){
+    document.getElementById('app').classList.remove('active');
+    document.getElementById('login-screen').classList.add('active');
+    document.getElementById('login-senha').value = '';
+    document.getElementById('login-senha').type = 'password';
+    document.getElementById('login-toggle-senha').textContent = 'Mostrar senha';
+    var errorEl = document.getElementById('login-error');
+    if(message){ errorEl.textContent = message; errorEl.classList.add('show'); } else { errorEl.classList.remove('show'); }
+    dbReady = false;
+  }
+  function nameFromEmail(email){
+    var local = String(email || '').split('@')[0];
+    return local ? local.charAt(0).toUpperCase() + local.slice(1) : 'Comprador';
+  }
+  // Only people registered in the table "profiles" are buyers; any other account that exists gets nothing.
+  async function loadBuyerProfile(user){
+    var res = await db.from('profiles').select('nome').eq('id', user.id).maybeSingle();
+    if(res.error){
+      // the profiles table is not there yet (SQL not run): let the person in, with a name made from the e-mail
+      if(/profiles|schema cache|does not exist|relation/i.test(res.error.message || '')) return { id: user.id, email: user.email, nome: nameFromEmail(user.email) };
+      throw res.error;
+    }
+    if(!res.data) return null;
+    return { id: user.id, email: user.email, nome: res.data.nome };
+  }
+  var loggingOut = false;
+  async function enterApp(user){
+    var prof = await loadBuyerProfile(user);
+    if(!prof){ loggingOut = true; try{ await db.auth.signOut(); } catch(e){ /* ignore */ } loggingOut = false; throw new Error('no_profile'); }
+    currentBuyer = prof;
+    buyerRoot.querySelector('.sidebar-user .avatar').textContent = (prof.nome || '?').charAt(0).toUpperCase();
+    buyerRoot.querySelector('.sidebar-user-name').textContent = prof.nome;
+    await bootstrap();
+    document.getElementById('login-screen').classList.remove('active');
+    document.getElementById('app').classList.add('active');
+    goTo('home');
+  }
 
   document.getElementById('login-btn').addEventListener('click', async function(){
-    var email = document.getElementById('login-email').value;
+    var email = normalizeEmail(document.getElementById('login-email').value);   // accents removed: açougue@ -> acougue@
     var senha = stripInvisible(document.getElementById('login-senha').value).trim();
     var errorEl = document.getElementById('login-error');
-    if(!normalizeEmail(email) || !senha){
+    if(!email || !senha){
       errorEl.textContent = 'Preencha o e-mail e a senha.';
       errorEl.classList.add('show');
       return;
     }
-    var byEmail = BUYERS.filter(function(b){ return normalizeEmail(b.email) === normalizeEmail(email); })[0];
-    if(!byEmail){
-      errorEl.textContent = 'E-mail não encontrado. Confira se digitou certo (ex.: compras@paulusrestaurantes.com.br).';
-      errorEl.classList.add('show');
-      return;
-    }
-    if(byEmail.senha !== senha){
-      errorEl.textContent = 'Senha incorreta. Dica: use "Mostrar senha" para conferir o que foi digitado — o navegador pode ter preenchido uma senha antiga.';
-      errorEl.classList.add('show');
-      return;
-    }
-    var match = byEmail;
-    currentBuyer = match;
-    buyerRoot.querySelector('.sidebar-user .avatar').textContent = match.inicial;
-    buyerRoot.querySelector('.sidebar-user-name').textContent = match.nome;
-    document.getElementById('login-error').classList.remove('show');
+    errorEl.classList.remove('show');
     var btn = document.getElementById('login-btn');
     var originalLabel = btn.textContent;
-    btn.textContent = 'Conectando...';
+    btn.textContent = 'Entrando...';
     btn.disabled = true;
-    await bootstrap();
-    btn.disabled = false;
-    btn.textContent = originalLabel;
-    document.getElementById('login-screen').classList.remove('active');
-    document.getElementById('app').classList.add('active');
-    goTo('home');
+    try{
+      var res = await db.auth.signInWithPassword({ email: email, password: senha });
+      if(res.error){
+        var invalid = /invalid login credentials|invalid credentials/i.test(res.error.message || '');
+        errorEl.textContent = invalid
+          ? 'E-mail ou senha incorretos. Dica: use "Mostrar senha" para conferir o que foi digitado.'
+          : 'Não foi possível entrar agora: ' + res.error.message;
+        errorEl.classList.add('show');
+        return;
+      }
+      await enterApp(res.data.user);
+    } catch(err){
+      console.error('Erro no login', err);
+      errorEl.textContent = (err && err.message === 'no_profile')
+        ? 'Este e-mail não tem acesso ao painel de compras. Peça para liberarem o seu acesso.'
+        : 'Não foi possível entrar agora. Verifique a internet e tente de novo.';
+      errorEl.classList.add('show');
+    } finally {
+      btn.disabled = false;
+      btn.textContent = originalLabel;
+    }
   });
+
+  // if the session ends on its own (expired, signed out elsewhere) the screen goes back to the login
+  db.auth.onAuthStateChange(function(event){
+    if(event === 'SIGNED_OUT' && !loggingOut && document.getElementById('app').classList.contains('active')){
+      showLoginScreen('Sua sessão terminou. Entre novamente.');
+    }
+  });
+  // coming back to the site: no need to type the password again while the session is valid
+  (async function restoreSession(){
+    try{
+      var cur = await db.auth.getSession();
+      if(cur && cur.data && cur.data.session) await enterApp(cur.data.session.user);
+    } catch(err){ console.error('Não foi possível restaurar a sessão', err); }
+  })();
 
   // Enter key submits the login, and "Mostrar senha" lets the user see what is being typed
   ['login-email', 'login-senha'].forEach(function(id){
@@ -4692,14 +5104,13 @@ var QRCode;
     this.textContent = show ? 'Ocultar senha' : 'Mostrar senha';
   });
 
-  buyerRoot.addEventListener('click', function(e){
+  buyerRoot.addEventListener('click', async function(e){
     if(e.target.closest('[data-action="logout"]')){
-      document.getElementById('app').classList.remove('active');
-      document.getElementById('login-screen').classList.add('active');
+      loggingOut = true;
+      try{ await db.auth.signOut(); } catch(err){ console.error(err); }
+      loggingOut = false;
+      showLoginScreen('');
       document.getElementById('login-email').value = '';
-      document.getElementById('login-senha').value = '';
-      document.getElementById('login-senha').type = 'password';
-      document.getElementById('login-toggle-senha').textContent = 'Mostrar senha';
     }
   });
 
@@ -4745,17 +5156,16 @@ var QRCode;
   async function load(){
     showMessage('Carregando pedido...');
     try{
-      var orderRes = await db.from('orders').select('id,code,supplier_id,status,order_date,delivery_date,total,confirmed,receiver_note,suppliers(name)').eq('id', pedidoId).single();
-      if(!orderRes.data){ showMessage('Pedido não encontrado. Confira o link do QR code.'); return; }
-      order = orderRes.data;
-      order.supplier_name = order.suppliers ? order.suppliers.name : '—';
-
-      var itemsRes = await db.from('order_items').select('id,product_id,qty,price,receive_status,received_qty,products(name)').eq('order_id', pedidoId);
-      items = (itemsRes.data || []).map(function(row){
+      var res = await db.rpc('get_order_receiving', { p_order: pedidoId });
+      if(res.error) throw new Error(res.error.message);
+      var data = res.data;
+      if(!data){ showMessage('Pedido não encontrado. Confira o link do QR code.'); return; }
+      order = { id: data.id, code: data.code, status: data.status, confirmed: !!data.confirmed, delivery_date: data.delivery_date,
+                total: data.total, receiver_note: data.receiver_note, supplier_name: data.supplier_name || '—' };
+      items = (data.items || []).map(function(row){
         return {
-          itemId: row.id, name: row.products ? row.products.name : 'Produto',
-          qty: row.qty, price: Number(row.price),
-          receiveStatus: row.receive_status || 'pendente', receivedQty: row.received_qty
+          itemId: row.id, name: row.name || 'Produto', qty: Number(row.qty), price: Number(row.price),
+          receiveStatus: row.receive_status || 'pendente', receivedQty: row.received_qty == null ? null : Number(row.received_qty)
         };
       });
       render();
@@ -4804,21 +5214,22 @@ var QRCode;
 
   async function save(){
     if(isLocked()) return;
-    // the page may have been open for a while: ask the database before writing anything
-    try{
-      var latest = await db.from('orders').select('status,confirmed').eq('id', order.id).maybeSingle();
-      if(latest && latest.data){ order.status = latest.data.status; order.confirmed = !!latest.data.confirmed; }
-    } catch(e){ console.error(e); }
-    if(isLocked()){ render(); return; }
     var note = document.getElementById('pub-nota').value.trim();
     var btn = document.getElementById('pub-armazenar');
     btn.disabled = true; btn.textContent = 'Salvando...';
     try{
-      for(var i=0;i<items.length;i++){
-        var it = items[i];
-        await db.from('order_items').update({ receive_status:it.receiveStatus, received_qty:it.receivedQty }).eq('id', it.itemId);
+      var res = await db.rpc('save_order_receiving', {
+        p_order: order.id,
+        p_items: items.map(function(i){ return { id: i.itemId, receive_status: i.receiveStatus, received_qty: i.receivedQty }; }),
+        p_note: note
+      });
+      if(res.error) throw new Error(res.error.message);
+      var out = res.data || {};
+      if(!out.ok){
+        // somebody already registered this delivery: show it as it is now
+        if(out.reason === 'already_delivered'){ order.confirmed = true; order.status = 'entregue'; render(); return; }
+        throw new Error(out.reason || 'não salvou');
       }
-      await db.from('orders').update({ receiver_note:note, confirmed:true, status:'entregue' }).eq('id', order.id);
       order.confirmed = true; order.status = 'entregue';
       btn.textContent = 'Estoque atualizado';
       document.getElementById('pub-nota').disabled = true;
@@ -4924,25 +5335,15 @@ var QRCode;
   async function run(){
     screen('<div style="font-size:15px; color:#6B7A72;">Confirmando…</div>');
     try{
-      var o = await db.from('orders').select('id,code,status,confirmed').eq('id', orderId).single();
-      if(o.error || !o.data){ messageScreen('Pedido não encontrado. Confira o link que você recebeu.'); return; }
-      var order = o.data;
-
-      if(order.status === 'rascunho'){
+      var res = await db.rpc('confirm_order_link', { p_order: orderId });
+      if(res.error) throw new Error(res.error.message);
+      var d = res.data;
+      if(!d){ messageScreen('Pedido não encontrado. Confira o link que você recebeu.'); return; }
+      if(d.status === 'rascunho'){
         messageScreen('Este pedido ainda não foi liberado pela Paulu&#39;s. Tente abrir o link de novo mais tarde.', '#8A5A22');
         return;
       }
-      if(order.confirmed || order.status === 'entregue'){ okScreen(order.code, 'entrega concluída'); return; }
-
-      if(order.status === 'enviado'){
-        // moves forward only from "enviado", so it never overwrites a newer status
-        var up = await db.from('orders').update({ status: 'confirmado' }).eq('id', orderId).eq('status', 'enviado');
-        if(up.error) throw new Error(up.error.message);
-        // the database can ignore a blocked update without any error, so check that it really changed
-        var check = await db.from('orders').select('status').eq('id', orderId).single();
-        if(check.error || !check.data || check.data.status === 'enviado') throw new Error('A confirmação não foi gravada.');
-      }
-      okScreen(order.code, 'confirmado');
+      okScreen(d.code, (d.confirmed || d.status === 'entregue') ? 'entrega concluída' : 'confirmado');
     } catch(err){
       console.error(err);
       screen('<div style="font-size:15px; color:#C43D3D; margin-bottom:16px;">Não foi possível confirmar o pedido agora.</div>' +
