@@ -944,6 +944,51 @@ html, body {
 #buyer-root .cart-items { max-height:30vh }
 #buyer-root #page-lista.has-cart { padding-bottom:150px }
 }
+
+/* ---------- filtro por categoria (Lista de compras) ---------- */
+#buyer-root .chip-row { display:flex; flex-wrap:wrap; gap:8px; margin:0 0 16px 0 }
+#buyer-root .chip { background:#fff; border:1px solid var(--line); border-radius:999px; padding:7px 14px; font-size:12.5px; font-weight:600; color:var(--ink); cursor:pointer; font-family:inherit; white-space:nowrap }
+#buyer-root .chip .chip-n { color:var(--ink-faint); font-weight:500; margin-left:2px }
+#buyer-root .chip:hover { border-color:var(--green) }
+#buyer-root .chip.active { background:var(--green); border-color:var(--green); color:#fff }
+#buyer-root .chip.active .chip-n { color:#D5ECDF }
+@media (max-width: 880px) {
+#buyer-root .chip-row { flex-wrap:nowrap; overflow-x:auto; padding-bottom:6px; -webkit-overflow-scrolling:touch }
+}
+
+/* ---------- observação do produto ---------- */
+#buyer-root .obs-row { margin-top:8px }
+#buyer-root .obs-row input { width:100%; box-sizing:border-box; border:1px dashed var(--line); border-radius:8px; padding:7px 8px; font-size:12px; background:#fff; color:var(--ink) }
+#buyer-root .obs-row input:focus { border-style:solid; border-color:var(--green); outline:none }
+
+/* ---------- seletores (dropdowns) com visual novo ---------- */
+#buyer-root .dd { position:relative; min-width:200px; max-width:280px; flex:0 1 240px }
+#buyer-root .dd-btn { width:100%; display:flex; align-items:center; justify-content:space-between; gap:10px; background:#fff; border:1px solid var(--line); border-radius:12px; padding:11px 14px; font-size:13px; font-weight:500; color:var(--ink); cursor:pointer; font-family:inherit; text-align:left; transition:border-color .15s, box-shadow .15s, background .15s }
+#buyer-root .dd-btn:hover { border-color:var(--line-strong) }
+#buyer-root .dd.open .dd-btn, #buyer-root .dd-btn:focus-visible { border-color:var(--green); box-shadow:0 0 0 3px rgba(20,108,78,.14); outline:none }
+#buyer-root .dd-btn.active { border-color:var(--green); background:var(--green-tint); color:var(--green-dark); font-weight:600 }
+#buyer-root .dd-label { overflow:hidden; text-overflow:ellipsis; white-space:nowrap }
+#buyer-root .dd-chev { flex:0 0 auto; color:var(--ink-faint); transition:transform .2s }
+#buyer-root .dd.open .dd-chev { transform:rotate(180deg) }
+#buyer-root .dd-panel { display:none; position:absolute; left:0; top:100%; margin-top:6px; min-width:100%; width:max-content; max-width:min(340px, 92vw); max-height:300px; overflow-y:auto; background:#fff; border:1px solid var(--line); border-radius:14px; box-shadow:0 16px 40px rgba(23,50,42,.20); z-index:90; padding:6px; box-sizing:border-box }
+#buyer-root .dd-panel.open { display:block }
+#buyer-root .dd-suggest { width:100%; max-width:100% }
+#buyer-root .dd-search { width:100%; box-sizing:border-box; border:1px solid var(--line); border-radius:10px; padding:9px 11px; font-size:13px; margin-bottom:6px; outline:none; background:#fff }
+#buyer-root .dd-search:focus { border-color:var(--green) }
+#buyer-root .dd-opt { display:flex; align-items:center; justify-content:space-between; gap:10px; width:100%; text-align:left; background:none; border:none; border-radius:9px; padding:9px 11px; font-size:13px; color:var(--ink); cursor:pointer; font-family:inherit }
+#buyer-root .dd-opt:hover, #buyer-root .dd-opt:focus-visible { background:var(--green-tint); outline:none }
+#buyer-root .dd-opt.sel { background:var(--green-tint); color:var(--green-dark); font-weight:600 }
+#buyer-root .dd-opt .dd-tick { color:var(--green); display:inline-flex }
+#buyer-root .dd-opt.dd-new { color:var(--green-dark); font-weight:600; border:1px dashed #BBD9CA; margin-bottom:4px }
+#buyer-root .dd-empty { padding:12px; font-size:12px; color:var(--ink-soft); text-align:center }
+#buyer-root .chips-box { display:flex; flex-wrap:wrap; align-items:center; gap:6px; border:1px solid var(--line); border-radius:12px; padding:7px 10px; background:#fff; min-height:44px; cursor:text; box-sizing:border-box; width:100%; transition:border-color .15s, box-shadow .15s }
+#buyer-root .chips-box:focus-within { border-color:var(--green); box-shadow:0 0 0 3px rgba(20,108,78,.14) }
+#buyer-root .chip-tag { display:inline-flex; align-items:center; gap:6px; background:var(--green-tint); color:var(--green-dark); border-radius:999px; padding:5px 6px 5px 11px; font-size:12.5px; font-weight:600 }
+#buyer-root .chip-tag button { border:none; background:rgba(20,108,78,.14); color:var(--green-dark); width:18px; height:18px; border-radius:50%; cursor:pointer; line-height:1; font-size:13px; padding:0 }
+#buyer-root .chip-tag button:hover { background:rgba(20,108,78,.28) }
+#buyer-root .chips-in { flex:1 1 140px; min-width:120px; border:none !important; outline:none; font-size:13px; padding:4px 2px !important; background:transparent; width:auto !important }
+#buyer-root .modal-form .dd-panel, #buyer-root .overlay .dd-panel { z-index:95 }
+#buyer-root .cot-owner-dd .dd, #buyer-root #cot-owner-wrap .dd { flex:0 0 auto }
 </style>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
@@ -999,6 +1044,7 @@ html, body {
       <div class="avatar">M</div>
       <div>
         <div class="sidebar-user-name">Murillo</div>
+        <div class="sidebar-user-role" id="sidebar-role">Comprador</div>
         <button class="sidebar-user-logout" data-action="logout">Sair</button>
       </div>
     </div>
@@ -1209,6 +1255,7 @@ html, body {
           <label for="estoque-search" class="sr-only">Buscar produto</label>
           <input id="estoque-search" type="text" placeholder="Buscar produto">
         </div>
+        <div class="chip-row" id="lista-categorias" aria-label="Filtrar por categoria"></div>
         <div class="two-col">
           <div class="primary">
             <div class="product-grid" id="estoque-list"></div>
@@ -1332,7 +1379,7 @@ html, body {
             <div class="field" style="flex:1 1 240px;"><label for="ff-email">E-mail</label><input id="ff-email" type="email" placeholder="contato@fornecedor.com.br"></div>
             <div class="field" style="flex:1 1 240px;"><label for="ff-endereco">Endereço</label><input id="ff-endereco" type="text" placeholder="Rua, número, cidade"></div>
           </div>
-          <div class="field" style="margin-bottom:20px;"><label for="ff-categorias">Categorias (separadas por vírgula)</label><input id="ff-categorias" type="text" placeholder="Ex.: Carnes e frios, Laticínios"></div>
+          <div class="field" style="margin-bottom:20px;"><label for="ff-categorias">Categorias</label><input id="ff-categorias" type="text" placeholder="Ex.: Carnes e frios, Laticínios"></div>
           <button class="btn btn-primary" id="fornecedor-form-save">Salvar fornecedor</button>
           <button class="btn btn-ghost" id="fornecedor-form-cancel" style="margin-left:8px;">Cancelar</button>
         </div>
@@ -1377,6 +1424,10 @@ html, body {
               <button type="button" class="tab-seg" data-cot-tab="encerradas">Encerradas <span class="tab-count" id="cot-count-encerradas">0</span></button>
             </div>
             <button class="btn btn-primary" data-nav="lista">+ Nova cotação</button>
+          </div>
+          <div id="cot-owner-wrap" style="display:none; align-items:center; gap:10px; margin:0 0 14px 0;">
+            <label for="cot-owner-filter" style="font-size:12px; font-weight:600; color:var(--ink-soft);">Comprador</label>
+            <select id="cot-owner-filter" style="border:1px solid var(--line); border-radius:8px; padding:8px 12px; font-size:13px; background:#fff;"></select>
           </div>
           <div class="list" id="cotacoes-list"></div>
         </div>
@@ -1586,6 +1637,9 @@ html, body {
         <button type="button" class="modal-x" id="gen-close" aria-label="Fechar">&times;</button>
       </div>
       <div id="gen-list" style="margin:12px 0;"></div>
+      <label id="gen-close-wrap" style="display:none; align-items:flex-start; gap:10px; background:var(--amber-tint); border-radius:10px; padding:10px 12px; margin-bottom:12px; font-size:13px; cursor:pointer;">
+        <input type="checkbox" id="gen-close-too" style="margin-top:2px; width:18px; height:18px; flex:0 0 18px;"><span id="gen-close-text"></span>
+      </label>
       <div style="display:flex; justify-content:space-between; align-items:center; padding:12px 0; border-top:2px solid var(--line);">
         <span style="font-weight:700;">TOTAL DOS PEDIDOS</span>
         <span id="gen-total" style="font-size:22px; font-weight:700; font-family:'Fraunces',serif;">R$ 0,00</span>
@@ -2276,7 +2330,7 @@ var QRCode;
   var SUPABASE_URL = 'https://dqghwfrmodulnevzpgbw.supabase.co';
   var SUPABASE_KEY = 'sb_publishable_nNk6sJNE-7NzraHnjXliLQ_nRfeWtZb';
   var db = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-  var APP_VERSION = '2026-11-19 · versão 5';
+  var APP_VERSION = '2026-11-19 · versão 9';
   var APP_BASE_URL = 'https://compraspaulusrestaurantes-cell.github.io/app_cotacao/';
   var DEFAULT_SUPPLIER_NAME = 'Distribuidora Bom Preço';
   var SUPPLIERS_SEED = [
@@ -2410,7 +2464,7 @@ var QRCode;
       createdAt: r.created_at ? new Date(r.created_at) : null, createdBy: r.created_by || null,
       items: (r.quotation_items || []).map(function(it){
         return {
-          id: it.id, name: it.product_name, qty: Number(it.qty) || 0, productId: it.product_id || null, status: it.status || 'aberta',
+          id: it.id, name: it.product_name, qty: Number(it.qty) || 0, productId: it.product_id || null, status: it.status || 'aberta', obs: it.obs || '',
           allocations: (it.quotation_allocations || []).map(function(a){
             return { id: a.id, supplierId: a.supplier_id, qty: Number(a.qty) || 0, price: Number(a.price) || 0, orderId: a.order_id || null, createdAt: a.created_at ? new Date(a.created_at) : null, createdBy: a.created_by || null };
           })
@@ -2420,15 +2474,21 @@ var QRCode;
   }
 
   var numberReady = true;   // false until quotations.number exists in the database
-  var COLS = { number: false, qBy: false, oBy: false, delivered: false, aBy: false, pack: false };   // optional columns created by the SQL update
+  var COLS = { number: false, qBy: false, oBy: false, delivered: false, aBy: false, pack: false, obsQ: false, obsO: false };   // optional columns created by the SQL update
   async function probeColumn(table, col){ var r = await db.from(table).select(col).limit(1); return !r.error; }
   async function probeColumns(){
     var r = await Promise.all([
       probeColumn('quotations', 'number'), probeColumn('quotations', 'created_by'),
       probeColumn('orders', 'created_by'), probeColumn('orders', 'delivered_at'),
-      probeColumn('quotation_allocations', 'created_by'), probeColumn('products', 'pack_qty')
+      probeColumn('quotation_allocations', 'created_by'), probeColumn('products', 'pack_qty'),
+      probeColumn('quotation_items', 'obs'), probeColumn('order_items', 'obs')
     ]);
-    COLS = { number: r[0], qBy: r[1], oBy: r[2], delivered: r[3], aBy: r[4], pack: r[5] };
+    COLS = { number: r[0], qBy: r[1], oBy: r[2], delivered: r[3], aBy: r[4], pack: r[5], obsQ: r[6], obsO: r[7] };
+  }
+  // the observation text of the product (brand, type...) is optional; when the database has no column for it yet, it still goes in the message
+  function obsLine(text){ return String(text || '').replace(/\s+/g, ' ').trim(); }
+  function warnObsNotSaved(anyObs, columnReady){
+    if(anyObs && !columnReady) showBuyerToast('As observações foram na mensagem, mas para guardá-las no sistema rode o arquivo atualizacao_seguranca_e_recursos.sql.');
   }
   function quotationWhen(q){ return (q.createdAt ? fmtDateTime(q.createdAt) + ' · ' : '') + (q.createdBy ? 'por ' + escHtml(q.createdBy) + ' · ' : ''); }
   function quotationName(q){ return q.number ? 'Cotação #' + q.number : q.title; }
@@ -2456,9 +2516,14 @@ var QRCode;
       list.slice().sort(function(a, b){ return (a.createdAt ? a.createdAt.getTime() : 0) - (b.createdAt ? b.createdAt.getTime() : 0); })
         .forEach(function(q, idx){ q.number = idx + 1; });
     }
-    QUOTATIONS = list.sort(function(a, b){
+    QUOTATIONS = list.filter(canSeeQuotation).sort(function(a, b){
       return (b.createdAt ? b.createdAt.getTime() : 0) - (a.createdAt ? a.createdAt.getTime() : 0);
     });
+  }
+  // The screen of each buyer only shows his own quotations; the administrator sees everybody's.
+  // (Old quotations with no author stay visible to all, since nobody owns them.)
+  function canSeeQuotation(q){
+    return isAdmin() || !q.createdBy || normalizeText(q.createdBy) === normalizeText(currentBuyer.nome);
   }
 
   function mapHistoryRow(a){
@@ -3097,12 +3162,31 @@ var QRCode;
     renderDashboard();
   });
 
+  var listaCategory = '';   // '' = all categories
+  function renderCategoryChips(term){
+    var counts = {}, total = 0;
+    PRODUCTS.forEach(function(p){
+      if(term && normalizeText(p.name).indexOf(term) === -1) return;
+      var c = p.category || 'Sem categoria';
+      counts[c] = (counts[c] || 0) + 1; total++;
+    });
+    var cats = Object.keys(counts).sort(function(a, b){ return a.localeCompare(b, 'pt-BR'); });
+    if(listaCategory && cats.indexOf(listaCategory) === -1) cats.push(listaCategory);   // the chosen one stays visible even with 0 results
+    function chip(value, label, n){
+      return '<button type="button" class="chip' + (listaCategory === value ? ' active' : '') + '" data-lista-cat="' + escHtml(value) + '">' + escHtml(label) + ' <span class="chip-n">' + n + '</span></button>';
+    }
+    document.getElementById('lista-categorias').innerHTML = chip('', 'Todas', total) + cats.map(function(c){ return chip(c, c, counts[c] || 0); }).join('');
+  }
   function renderListaPage(){
     var list = document.getElementById('estoque-list');
     var term = normalizeText(document.getElementById('estoque-search').value).trim();
+    renderCategoryChips(term);
     list.innerHTML = '';
-    PRODUCTS.filter(function(p){ return !term || normalizeText(p.name).indexOf(term) > -1; })
-      .forEach(function(p){ list.appendChild(productCard(p)); });
+    var shown = PRODUCTS.filter(function(p){
+      return (!term || normalizeText(p.name).indexOf(term) > -1) && (!listaCategory || (p.category || 'Sem categoria') === listaCategory);
+    });
+    shown.forEach(function(p){ list.appendChild(productCard(p)); });
+    if(shown.length === 0) list.innerHTML = '<div style="grid-column:1/-1; text-align:center; color:var(--ink-soft); font-size:13px; padding:24px 0;">Nenhum produto encontrado' + (listaCategory ? ' nesta categoria' : '') + '.</div>';
     renderModeUI();
     renderCart();
   }
@@ -3170,6 +3254,160 @@ var QRCode;
         '<button type="button" class="tbl-btn danger" data-action="excluir-fornecedor" data-id="' + escHtml(s.id) + '">Excluir</button></div>' +
     '</div>';
   }
+  /* ---------- Seletores com visual novo (categorias e filtros) ----------
+     Os campos originais continuam no lugar (escondidos) e guardam o valor; estes componentes só mudam o que aparece na tela. */
+  var DD_CHEVRON = '<svg class="dd-chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M6 9l6 6 6-6"/></svg>';
+  var DD_TICK = '<span class="dd-tick"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8"><path d="M20 6L9 17l-5-5"/></svg></span>';
+  var ddOpen = null;   // { panel, root } of the dropdown that is open (only one at a time)
+  function openDd(panel, root){ if(ddOpen && ddOpen.panel !== panel) closeDd(); panel.classList.add('open'); root.classList.add('open'); ddOpen = { panel: panel, root: root }; }
+  function closeDd(){ if(ddOpen){ ddOpen.panel.classList.remove('open'); ddOpen.root.classList.remove('open'); ddOpen = null; } }
+  document.addEventListener('click', function(e){ if(ddOpen && !ddOpen.root.contains(e.target)) closeDd(); });
+  // Esc closes the dropdown first (and does not close the window behind it)
+  document.addEventListener('keydown', function(e){ if(e.key === 'Escape' && ddOpen){ closeDd(); e.stopPropagation(); } }, true);
+  function ddNode(tag, cls, html){ var n = document.createElement(tag); if(cls) n.className = cls; if(html != null) n.innerHTML = html; return n; }
+
+  // a <select> becomes a rounded button + a panel (with a search box when the list is long)
+  function enhanceSelect(sel){
+    if(!sel || sel.dataset.dd) return;
+    sel.dataset.dd = '1';
+    var root = ddNode('div', 'dd');
+    sel.parentNode.insertBefore(root, sel); root.appendChild(sel);
+    sel.style.display = 'none';
+    var btn = ddNode('button', 'dd-btn'); btn.type = 'button'; btn.setAttribute('aria-haspopup', 'listbox');
+    var panel = ddNode('div', 'dd-panel');
+    root.appendChild(btn); root.appendChild(panel);
+    function paintBtn(){
+      var o = sel.options[sel.selectedIndex];
+      btn.className = 'dd-btn' + (sel.value !== '' ? ' active' : '');
+      btn.innerHTML = '<span class="dd-label">' + escHtml(o ? o.textContent : '') + '</span>' + DD_CHEVRON;
+    }
+    function paintList(term){
+      var t = normalizeText(term || '').trim();
+      var opts = Array.prototype.slice.call(sel.options).filter(function(o){ return !t || normalizeText(o.textContent).indexOf(t) > -1; });
+      var search = sel.options.length > 8
+        ? '<input type="text" class="dd-search" placeholder="Buscar…" aria-label="Buscar na lista" value="' + escHtml(term || '') + '">' : '';
+      panel.innerHTML = search + (opts.length
+        ? opts.map(function(o){ return '<button type="button" class="dd-opt' + (o.value === sel.value ? ' sel' : '') + '" data-v="' + escHtml(o.value) + '"><span>' + escHtml(o.textContent) + '</span>' + (o.value === sel.value ? DD_TICK : '') + '</button>'; }).join('')
+        : '<div class="dd-empty">Nada encontrado.</div>');
+      var s = panel.querySelector('.dd-search');
+      if(s){ s.addEventListener('input', function(){ var pos = s.selectionStart; paintList(s.value); var n = panel.querySelector('.dd-search'); n.focus(); try{ n.setSelectionRange(pos, pos); } catch(e){ /* ignore */ } }); }
+    }
+    btn.addEventListener('click', function(){
+      if(root.classList.contains('open')){ closeDd(); return; }
+      paintList(''); openDd(panel, root);
+      var s = panel.querySelector('.dd-search'); if(s) s.focus();
+    });
+    panel.addEventListener('click', function(e){
+      var o = e.target.closest('.dd-opt'); if(!o) return;
+      sel.value = o.dataset.v;
+      sel.dispatchEvent(new Event('change', { bubbles: true }));
+      paintBtn(); closeDd(); btn.focus();
+    });
+    sel.addEventListener('change', paintBtn);
+    new MutationObserver(paintBtn).observe(sel, { childList: true, subtree: true, attributes: true });   // the app refills the list: keep the label right
+    paintBtn();
+  }
+
+  // a text field with a styled list of suggestions (replaces the browser's datalist); typing a new name is allowed
+  function enhanceSuggestInput(input, getOptions){
+    if(!input || input.dataset.dd) return;
+    input.dataset.dd = '1';
+    var host = input.parentNode; host.style.position = 'relative';
+    input.removeAttribute('list'); input.setAttribute('autocomplete', 'off');
+    var panel = ddNode('div', 'dd-panel dd-suggest'); host.appendChild(panel);
+    function paint(){
+      var typed = input.value.trim(), t = normalizeText(typed).trim();
+      var all = getOptions();
+      var shown = all.filter(function(o){ return !t || normalizeText(o).indexOf(t) > -1; });
+      var exact = all.some(function(o){ return normalizeText(o) === t; });
+      panel.innerHTML =
+        (t && !exact ? '<button type="button" class="dd-opt dd-new" data-v="' + escHtml(typed) + '">+ Usar a nova categoria “' + escHtml(typed) + '”</button>' : '') +
+        shown.map(function(o){ return '<button type="button" class="dd-opt' + (normalizeText(o) === t ? ' sel' : '') + '" data-v="' + escHtml(o) + '"><span>' + escHtml(o) + '</span>' + (normalizeText(o) === t ? DD_TICK : '') + '</button>'; }).join('') +
+        ((!shown.length && !(t && !exact)) ? '<div class="dd-empty">Nenhuma categoria cadastrada ainda. Digite o nome.</div>' : '');
+    }
+    function show(){ paint(); openDd(panel, host); }
+    input.addEventListener('focus', show); input.addEventListener('click', show); input.addEventListener('input', show);
+    input.addEventListener('keydown', function(e){ if(e.key === 'Enter' && panel.classList.contains('open')){ e.preventDefault(); closeDd(); } });
+    panel.addEventListener('mousedown', function(e){ e.preventDefault(); });   // keeps the focus in the field
+    panel.addEventListener('click', function(e){
+      var o = e.target.closest('.dd-opt'); if(!o) return;
+      input.value = o.dataset.v;
+      input.dispatchEvent(new Event('input', { bubbles: true })); input.dispatchEvent(new Event('change', { bubbles: true }));
+      closeDd();
+    });
+  }
+
+  // a comma-separated text field becomes "chips" (pills) with a list of suggestions; the original field keeps "A, B, C"
+  function enhanceChipInput(input, getOptions, placeholder){
+    if(!input || input.dataset.dd) return { refresh: function(){}, commit: function(){} };
+    input.dataset.dd = '1';
+    var host = input.parentNode; host.style.position = 'relative';
+    input.style.display = 'none';
+    var box = ddNode('div', 'chips-box');
+    var holder = ddNode('span', ''); holder.style.display = 'contents';
+    var text = ddNode('input', 'chips-in'); text.type = 'text'; text.setAttribute('autocomplete', 'off'); text.placeholder = placeholder || ''; text.setAttribute('aria-label', 'Adicionar categoria');
+    box.appendChild(holder); box.appendChild(text); host.appendChild(box);
+    var panel = ddNode('div', 'dd-panel dd-suggest'); host.appendChild(panel);
+    var items = [], syncing = false;
+    function norm(v){ return normalizeText(v).trim(); }
+    function parse(){
+      items = [];
+      input.value.split(',').forEach(function(c){ c = c.trim(); if(c && !items.some(function(x){ return norm(x) === norm(c); })) items.push(c); });
+    }
+    function write(){ syncing = true; input.value = items.join(', '); input.dispatchEvent(new Event('input', { bubbles: true })); syncing = false; }
+    function renderChips(){
+      holder.innerHTML = items.map(function(c, i){
+        return '<span class="chip-tag">' + escHtml(c) + '<button type="button" data-rm="' + i + '" aria-label="Tirar ' + escHtml(c) + '">&times;</button></span>';
+      }).join('');
+    }
+    function add(v){
+      v = String(v || '').trim(); if(!v) return;
+      var canon = getOptions().filter(function(o){ return norm(o) === norm(v); })[0] || v;   // reuse the spelling that already exists
+      if(items.some(function(x){ return norm(x) === norm(canon); })) return;
+      items.push(canon); write(); renderChips();
+    }
+    function paint(){
+      var typed = text.value.trim(), t = norm(typed);
+      var all = getOptions().filter(function(o){ return !items.some(function(x){ return norm(x) === norm(o); }); });
+      var shown = all.filter(function(o){ return !t || norm(o).indexOf(t) > -1; });
+      var exact = getOptions().some(function(o){ return norm(o) === t; });
+      panel.innerHTML =
+        (t && !exact ? '<button type="button" class="dd-opt dd-new" data-v="' + escHtml(typed) + '">+ Criar a categoria “' + escHtml(typed) + '”</button>' : '') +
+        shown.map(function(o){ return '<button type="button" class="dd-opt" data-v="' + escHtml(o) + '"><span>' + escHtml(o) + '</span></button>'; }).join('') +
+        ((!shown.length && !(t && !exact)) ? '<div class="dd-empty">Todas as categorias já foram escolhidas. Digite para criar outra.</div>' : '');
+    }
+    function show(){ paint(); openDd(panel, host); }
+    text.addEventListener('focus', show); text.addEventListener('click', show); text.addEventListener('input', show);
+    text.addEventListener('keydown', function(e){
+      if(e.key === 'Enter' || e.key === ','){ e.preventDefault(); add(text.value); text.value = ''; show(); }
+      else if(e.key === 'Backspace' && !text.value && items.length){ items.pop(); write(); renderChips(); show(); }
+    });
+    text.addEventListener('blur', function(){ if(text.value.trim()){ add(text.value); text.value = ''; } });   // do not lose what was typed
+    panel.addEventListener('mousedown', function(e){ e.preventDefault(); });
+    panel.addEventListener('click', function(e){
+      var o = e.target.closest('.dd-opt'); if(!o) return;
+      add(o.dataset.v); text.value = ''; show(); text.focus();
+    });
+    holder.addEventListener('click', function(e){
+      var rm = e.target.closest('[data-rm]'); if(!rm) return;
+      items.splice(Number(rm.dataset.rm), 1); write(); renderChips(); if(panel.classList.contains('open')) paint();
+    });
+    box.addEventListener('click', function(e){ if(e.target === box) text.focus(); });
+    function external(){ if(!syncing){ parse(); renderChips(); } }
+    input.addEventListener('input', external); input.addEventListener('change', external);
+    parse(); renderChips();
+    return {
+      refresh: function(){ parse(); renderChips(); text.value = ''; closeDd(); },
+      commit: function(){ if(text.value.trim()){ add(text.value); text.value = ''; } }
+    };
+  }
+  function allCategoryNames(){
+    return uniqueSorted([].concat.apply([], SUPPLIERS.map(function(s){ return s.categories || []; })).concat(PRODUCTS.map(function(p){ return p.category; }).filter(Boolean)));
+  }
+  ['fornecedor-cat-filter', 'produto-cat-filter', 'hist-fornecedor', 'cot-owner-filter', 'dash-month'].forEach(function(id){ enhanceSelect(document.getElementById(id)); });
+  enhanceSuggestInput(document.getElementById('pf-categoria'), function(){ return uniqueSorted(PRODUCTS.map(function(p){ return p.category; }).filter(Boolean)); });
+  var ffCats = enhanceChipInput(document.getElementById('ff-categorias'), allCategoryNames, 'Escolha na lista ou digite e aperte Enter');
+
   function renderFornecedoresTbl(){
     var cats = uniqueSorted([].concat.apply([], SUPPLIERS.map(function(s){ return s.categories || []; })));
     fornecedorCatFilter = fillFilterSelect(document.getElementById('fornecedor-cat-filter'), cats, 'Todas as categorias');
@@ -3201,6 +3439,7 @@ var QRCode;
     document.getElementById('ff-telefone').value = sup ? (sup.phone || '') : '';
     document.getElementById('ff-endereco').value = sup ? (sup.address || '') : '';
     document.getElementById('ff-categorias').value = sup ? (sup.categories || []).join(', ') : '';
+    ffCats.refresh();
     openCadModal('fornecedor-form');
     document.getElementById('ff-nome').focus();
   }
@@ -3213,6 +3452,7 @@ var QRCode;
   document.getElementById('fornecedor-cat-filter').addEventListener('change', function(e){ fornecedorCatFilter = e.target.value; cadLimit.fornecedores = CAD_PAGE; renderFornecedoresTbl(); });
 
   document.getElementById('fornecedor-form-save').addEventListener('click', async function(){
+    ffCats.commit();   // a category typed but not confirmed yet is kept
     var nome = document.getElementById('ff-nome').value.trim();
     if(!nome){ alert('Informe o nome do fornecedor.'); return; }
     var payload = {
@@ -3678,10 +3918,11 @@ var QRCode;
     q.items.forEach(function(it, i){
       var qtyText = fmtQty(it.qty) + ' ' + itemUnitLabel(it);
       if(compact){
-        lines.push('• ' + it.name + ' — ' + qtyText);
+        lines.push('• ' + it.name + ' — ' + qtyText + (it.obs ? ' (' + it.obs + ')' : ''));
       } else {
         lines.push(keycap(i + 1) + ' *' + it.name + '*');
         lines.push('      ' + qtyText);
+        if(it.obs) lines.push('      📝 ' + it.obs);
         lines.push('');
       }
     });
@@ -3752,14 +3993,19 @@ var QRCode;
       var qIns = check(await db.from('quotations').insert(Object.assign({ title: title, status: 'aberta' }, COLS.qBy ? { created_by: currentBuyer.nome } : {})).select(numberReady ? 'id,created_at,number' : 'id,created_at').single(), 'Criar cotação');
       if(!qIns.data) throw new Error('A cotação não retornou id.');
       createdId = qIns.data.id;
-      var rows = items.map(function(p){ return { quotation_id: createdId, product_name: p.name, status: 'aberta', qty: p.qty, product_id: p.dbId }; });
+      var noteByProduct = {};
+      var rows = items.map(function(p){
+        noteByProduct[p.dbId] = obsLine(p.noteText);
+        return Object.assign({ quotation_id: createdId, product_name: p.name, status: 'aberta', qty: p.qty, product_id: p.dbId }, (COLS.obsQ && obsLine(p.noteText)) ? { obs: obsLine(p.noteText) } : {});
+      });
       var itemRes = check(await db.from('quotation_items').insert(rows).select('id,product_name,qty,product_id'), 'Criar itens da cotação');
       var q = {
         id: createdId, title: title, status: 'aberta', createdAt: qIns.data.created_at ? new Date(qIns.data.created_at) : now, createdBy: currentBuyer.nome || null,
         number: (numberReady && qIns.data.number != null) ? Number(qIns.data.number) : (QUOTATIONS.reduce(function(m, x){ return Math.max(m, x.number || 0); }, 0) + 1),
-        items: (itemRes.data || []).map(function(r){ return { id: r.id, name: r.product_name, qty: Number(r.qty) || 0, productId: r.product_id || null, status: 'aberta', allocations: [] }; })
+        items: (itemRes.data || []).map(function(r){ return { id: r.id, name: r.product_name, qty: Number(r.qty) || 0, productId: r.product_id || null, status: 'aberta', obs: noteByProduct[r.product_id] || '', allocations: [] }; })
       };
       QUOTATIONS.unshift(q);
+      warnObsNotSaved(items.some(function(p){ return obsLine(p.noteText); }), COLS.obsQ);
       resetListaSelection();
       renderListaPage();
       btn.disabled = false; btn.textContent = label;
@@ -3802,6 +4048,9 @@ var QRCode;
     return card;
   }
 
+  var cotOwner = '';
+  var NO_OWNER = 'Sem autor';
+  document.getElementById('cot-owner-filter').addEventListener('change', function(){ cotOwner = this.value; renderCotacoesList(); });
   function renderCotacoesList(){
     document.getElementById('cotacoes-list-view').style.display = 'block';
     document.getElementById('cotacoes-detail-view').style.display = 'none';
@@ -3813,7 +4062,20 @@ var QRCode;
     } else {
       warn.style.display = 'none';
     }
-    var open = QUOTATIONS.filter(isQuotationOpen), closed = QUOTATIONS.filter(function(q){ return !isQuotationOpen(q); });
+    // administrator: choose whose quotations to see (all, or one buyer)
+    var ownerWrap = document.getElementById('cot-owner-wrap'), ownerSel = document.getElementById('cot-owner-filter');
+    if(isAdmin()){
+      var owners = [];
+      QUOTATIONS.forEach(function(q){ var n = q.createdBy || NO_OWNER; if(owners.indexOf(n) === -1) owners.push(n); });
+      owners.sort(function(a, b){ return a.localeCompare(b, 'pt-BR'); });
+      if(cotOwner && owners.indexOf(cotOwner) === -1) cotOwner = '';
+      ownerSel.innerHTML = '<option value="">Todos os compradores</option>' + owners.map(function(n){ return '<option value="' + escHtml(n) + '"' + (n === cotOwner ? ' selected' : '') + '>' + escHtml(n) + '</option>'; }).join('');
+      ownerWrap.style.display = 'flex';
+    } else {
+      cotOwner = ''; ownerWrap.style.display = 'none';
+    }
+    var visible = QUOTATIONS.filter(function(q){ return !cotOwner || (q.createdBy || NO_OWNER) === cotOwner; });
+    var open = visible.filter(isQuotationOpen), closed = visible.filter(function(q){ return !isQuotationOpen(q); });
     document.getElementById('cot-count-abertas').textContent = open.length;
     document.getElementById('cot-count-encerradas').textContent = closed.length;
     buyerRoot.querySelectorAll('[data-cot-tab]').forEach(function(b){ b.classList.toggle('active', b.dataset.cotTab === cotTab); });
@@ -3852,6 +4114,7 @@ var QRCode;
       '<div style="display:flex; justify-content:space-between; align-items:flex-start; gap:12px; flex-wrap:wrap;">' +
         '<div style="display:flex; gap:12px; align-items:flex-start; min-width:0; flex:1 1 260px;">' + check +
           '<div style="min-width:0;"><div class="row-title" style="font-size:15px;">' + escHtml(item.name) + '</div>' +
+          (item.obs ? '<div class="row-sub" style="margin-top:3px; color:var(--green-dark);">📝 ' + escHtml(item.obs) + '</div>' : '') +
           '<div class="row-sub" style="margin-top:4px;">Pedido: <b>' + fmtQty(item.qty) + ' ' + unit + '</b> · Separado: <b>' + fmtQty(alloc) + ' ' + unit + '</b> · ' +
           (done ? '<span style="color:var(--green); font-weight:600;">Completo ✔</span>' : '<span style="color:var(--amber-dark); font-weight:600;">Falta: ' + fmtQty(rem) + ' ' + unit + '</span>') + '</div></div>' +
         '</div>' +
@@ -3908,6 +4171,8 @@ var QRCode;
           '<button type="button" class="btn btn-ghost" data-action="whats-cotacao" data-id="' + q.id + '">Enviar via WhatsApp</button>' +
           '<button type="button" class="btn btn-ghost" data-action="copiar-cotacao" data-id="' + q.id + '">Copiar mensagem</button>' +
           (st.toOrderLines ? '<button type="button" class="btn btn-primary" data-action="gerar-pedidos" data-id="' + q.id + '">Gerar pedidos (' + supplierIds.length + ')</button>' : '') +
+          (open ? '<button type="button" class="btn btn-ghost" data-action="encerrar-cotacao" data-id="' + q.id + '">Encerrar cotação</button>'
+                : '<button type="button" class="btn btn-ghost" data-action="reabrir-cotacao" data-id="' + q.id + '">Reabrir cotação</button>') +
           '<button type="button" class="btn btn-ghost" data-action="excluir-cotacao" data-id="' + q.id + '" style="color:var(--red);">Excluir cotação</button>' +
         '</div>' +
       '</div>' +
@@ -4232,6 +4497,11 @@ var QRCode;
         '<input type="date" data-gen-date="' + escHtml(g.supplierId) + '" value="' + dateInputValue(dDefault) + '" style="border:1px solid var(--line); border-radius:8px; padding:7px 10px; font-size:13px;"></div></div>';
     }).join('');
     document.getElementById('gen-total').textContent = money(round2(groups.reduce(function(s, g){ return s + g.total; }, 0)));
+    // items that will still be missing after these orders: offer to close the quotation anyway
+    var missingAfter = q.items.filter(function(it){ return !itemIsComplete(it); }).length;
+    document.getElementById('gen-close-too').checked = false;
+    document.getElementById('gen-close-wrap').style.display = missingAfter ? 'flex' : 'none';
+    document.getElementById('gen-close-text').textContent = 'Encerrar a cotação depois de gerar os pedidos, mesmo faltando ' + missingAfter + (missingAfter === 1 ? ' item' : ' itens') + ' (o que faltou fica sem pedido).';
     document.getElementById('gen-confirm').disabled = false;
     document.getElementById('gen-confirm').textContent = 'Gerar ' + groups.length + (groups.length === 1 ? ' pedido' : ' pedidos');
     document.getElementById('gen-overlay').style.display = 'flex';
@@ -4266,6 +4536,8 @@ var QRCode;
       if(!dateVal){ alert('Informe a data de entrega prevista do pedido de ' + supplierName(groups[di].supplierId) + '.'); return; }
       dates[groups[di].supplierId] = dateVal;
     }
+    var closeToo = document.getElementById('gen-close-wrap').style.display !== 'none' && document.getElementById('gen-close-too').checked;
+    warnObsNotSaved(groups.some(function(g){ return g.lines.some(function(l){ return l.item.obs; }); }), COLS.obsO);
     var btn = this; btn.disabled = true; btn.textContent = 'Gerando...';
     var created = 0;
     try{
@@ -4274,7 +4546,7 @@ var QRCode;
         var rows = [];
         for(var li = 0; li < g.lines.length; li++){
           var pid = await ensureProductForItem(g.lines[li].item);
-          rows.push({ product_id: pid, qty: g.lines[li].a.qty, price: g.lines[li].a.price });
+          rows.push({ product_id: pid, qty: g.lines[li].a.qty, price: g.lines[li].a.price, obs: g.lines[li].item.obs || '' });
         }
         var code = nextOrderCode();
         var orderDate = new Date().toISOString().slice(0, 10);
@@ -4283,7 +4555,7 @@ var QRCode;
         }, COLS.oBy ? { created_by: currentBuyer.nome } : {})).select('id').single(), 'Criar pedido');
         if(!orderIns.data) throw new Error('O pedido não retornou id.');
         var orderId = orderIns.data.id;
-        check(await db.from('order_items').insert(rows.map(function(r){ return { order_id: orderId, product_id: r.product_id, qty: r.qty, price: r.price, receive_status: 'pendente' }; })), 'Salvar itens do pedido');
+        check(await db.from('order_items').insert(rows.map(function(r){ return Object.assign({ order_id: orderId, product_id: r.product_id, qty: r.qty, price: r.price, receive_status: 'pendente' }, (COLS.obsO && r.obs) ? { obs: r.obs } : {}); })), 'Salvar itens do pedido');
         check(await db.from('quotation_allocations').update({ order_id: orderId }).in('id', g.lines.map(function(l){ return l.a.id; })), 'Ligar lançamentos ao pedido');
         g.lines.forEach(function(l){
           l.a.orderId = orderId;
@@ -4293,7 +4565,7 @@ var QRCode;
           order_date: orderDate, delivery_date: dates[g.supplierId], total: g.total, confirmed: false, receiver_note: null, created_by: currentBuyer.nome || null });
         created++;
       }
-      if(quotationIsDone(q)){
+      if(quotationIsDone(q) || closeToo){
         check(await db.from('quotations').update({ status: 'encerrada' }).eq('id', q.id), 'Encerrar cotação');
         try{ await db.from('quotation_items').update({ status: 'encerrada' }).eq('quotation_id', q.id); } catch(e){ /* best effort */ }
         q.status = 'encerrada'; q.items.forEach(function(it){ it.status = 'encerrada'; });
@@ -4310,6 +4582,38 @@ var QRCode;
     state.viewingOrder = null;
     goTo('pedidos');
   });
+
+  /* ----- Encerrar / reabrir cotação (mesmo sem ter fechado todos os itens) ----- */
+  async function setQuotationClosed(id, close){
+    var q = quotationById(id); if(!q) return;
+    if(close){
+      var st = quotationStats(q);
+      if(st.toOrderLines > 0){
+        alert('Ainda há ' + st.toOrderLines + (st.toOrderLines === 1 ? ' lançamento' : ' lançamentos') + ' de fornecedor que não viraram pedido.\n\nGere os pedidos (ou remova esses lançamentos) antes de encerrar a cotação.');
+        return;
+      }
+      var pend = pendingItems(q);
+      var detail = pend.slice(0, 6).map(function(it){ return '• ' + it.name + ' (falta ' + fmtQty(remainingQty(it)) + ' ' + itemUnitLabel(it) + ')'; }).join('\n') + (pend.length > 6 ? '\n• e mais ' + (pend.length - 6) + '…' : '');
+      var msg = pend.length
+        ? 'Encerrar a ' + quotationName(q) + ' mesmo com ' + pend.length + (pend.length === 1 ? ' item' : ' itens') + ' sem fornecedor ou com quantidade faltando?\n\n' + detail + '\n\nEla vai para "Encerradas" e o que faltou fica sem pedido. Dá para reabrir depois.'
+        : 'Encerrar a ' + quotationName(q) + '?';
+      if(!confirm(msg)) return;
+    }
+    var newStatus = close ? 'encerrada' : 'aberta';
+    try{
+      if(dbReady){
+        check(await db.from('quotations').update({ status: newStatus }).eq('id', q.id), close ? 'Encerrar cotação' : 'Reabrir cotação');
+        try{ await db.from('quotation_items').update({ status: newStatus }).eq('quotation_id', q.id); } catch(e){ /* best effort */ }
+      }
+    } catch(err){
+      console.error('Erro ao mudar o estado da cotação', err);
+      alert(friendlyDbError(err, close ? 'Não foi possível encerrar a cotação.' : 'Não foi possível reabrir a cotação.'));
+      return;
+    }
+    q.status = newStatus; q.items.forEach(function(it){ it.status = newStatus; });
+    renderCotacaoDetail(q.id);
+    showBuyerToast(quotationName(q) + (close ? ' encerrada.' : ' reaberta.'));
+  }
 
   /* ----- Excluir cotação ----- */
   async function deleteQuotation(id){
@@ -4346,6 +4650,8 @@ var QRCode;
     else if(a === 'whats-cotacao'){ var q1 = quotationById(id); if(q1) openShareModal(q1, 'Enviar cotação por WhatsApp'); }
     else if(a === 'copiar-cotacao'){ var q2 = quotationById(id); if(q2) copyQuotationMessage(q2); }
     else if(a === 'excluir-cotacao'){ deleteQuotation(id); }
+    else if(a === 'encerrar-cotacao'){ setQuotationClosed(id, true); }
+    else if(a === 'reabrir-cotacao'){ setQuotationClosed(id, false); }
     else if(a === 'alocar-item'){ openBulkModal(id, [act.dataset.item]); }
     else if(a === 'bulk-alocar'){ var qb = quotationById(id); if(qb) openBulkModal(id, selectedItemIds(qb)); }
     else if(a === 'editar-alocacao'){ openEditAllocation(id, act.dataset.item, act.dataset.alloc); }
@@ -4510,6 +4816,9 @@ var QRCode;
     var cb = card.querySelector('[data-action="toggle-select"]'); cb.checked = !!p.selected;
     var qi = card.querySelector('[data-action="qty-input"]'); if(document.activeElement !== qi) qi.value = fmtQtyInput(p.qty);
     card.querySelector('[data-pack-note]').textContent = p.packNote || '';
+    var obsRow = card.querySelector('[data-obs-row]');
+    obsRow.style.display = p.selected ? 'block' : 'none';
+    var obsIn = obsRow.querySelector('input'); if(p.selected && document.activeElement !== obsIn) obsIn.value = p.noteText || '';
     var row = card.querySelector('[data-dp-row]');
     var show = listaMode === 'direto' && p.selected;
     row.style.display = show ? 'block' : 'none';
@@ -4550,6 +4859,9 @@ var QRCode;
         (isPackUnit(p.unit) ? '' : '<button type="button" class="pack-btn" data-action="pack-open" data-id="' + escHtml(p.id) + '" title="Contar por caixa, fardo, pacote..." aria-label="Contar por caixa ou fardo">' + BOX_SVG + '</button>') +
       '</div>' +
       '<div class="pack-note" data-pack-note></div>' +
+      '<div class="obs-row" data-obs-row style="display:none;">' +
+        '<input type="text" maxlength="140" data-action="obs-input" data-id="' + escHtml(p.id) + '" placeholder="Observação: marca, tipo…" aria-label="Observação de ' + escHtml(p.name) + '">' +
+      '</div>' +
       '<div class="dp-row" data-dp-row style="display:none;">' +
         '<label for="dp-' + escHtml(p.id) + '">Preço por ' + unit + ' (R$)</label>' +
         '<input id="dp-' + escHtml(p.id) + '" type="text" inputmode="decimal" data-action="dp-input" data-id="' + escHtml(p.id) + '" placeholder="0,00">' +
@@ -4583,7 +4895,8 @@ var QRCode;
         line += pr > 0 ? ' × ' + money(pr) + ' = <b>' + money(round2(p.qty * pr)) + '</b>' : ' · <span style="color:var(--red); font-weight:600;">sem preço</span>';
       }
       return '<div class="cart-row"><div style="min-width:0;"><div style="font-weight:600; word-break:break-word;">' + escHtml(p.name) + '</div>' +
-        '<div style="color:var(--ink-soft);">' + line + '</div></div>' +
+        '<div style="color:var(--ink-soft);">' + line + '</div>' +
+        (obsLine(p.noteText) ? '<div style="color:var(--green-dark); font-size:11.5px; margin-top:2px;">📝 ' + escHtml(obsLine(p.noteText)) + '</div>' : '') + '</div>' +
         '<button type="button" class="rm" data-action="cart-remove" data-id="' + escHtml(p.id) + '" aria-label="Tirar da lista">&times;</button></div>';
     }).join('');
     document.getElementById('cart-direto-extra').style.display = direto ? 'block' : 'none';
@@ -4614,7 +4927,7 @@ var QRCode;
   }
 
   function resetListaSelection(){
-    PRODUCTS.forEach(function(prod){ prod.selected = false; prod.qty = prod.recQty; prod.dpText = ''; prod.dpEdited = false; prod.packNote = ''; });
+    PRODUCTS.forEach(function(prod){ prod.selected = false; prod.qty = prod.recQty; prod.dpText = ''; prod.dpEdited = false; prod.packNote = ''; prod.noteText = ''; });
     var hid = document.getElementById('direto-fornecedor');
     if(hid){ hid.value = ''; renderDiretoEscolhido(); }
     var entrega = document.getElementById('lista-entrega'); if(entrega) entrega.value = '';
@@ -4689,7 +5002,7 @@ var QRCode;
     if(!orderIns.data) throw new Error('O pedido não retornou id.');
     var orderId = orderIns.data.id;
     check(await db.from('order_items').insert(finalItems.map(function(it){
-      return { order_id: orderId, product_id: it.productId, qty: it.qty, price: it.price, receive_status: 'pendente' };
+      return Object.assign({ order_id: orderId, product_id: it.productId, qty: it.qty, price: it.price, receive_status: 'pendente' }, (COLS.obsO && it.obs) ? { obs: it.obs } : {});
     })), 'Salvar itens do pedido direto');
     var newOrder = { id: orderId, code: code, supplier_id: supplier.id, supplier_name: supplier.name, status: 'enviado', order_date: orderDateStr,
       delivery_date: deliveryStr, total: total, confirmed: false, receiver_note: null, created_by: currentBuyer.nome || null };
@@ -4714,6 +5027,10 @@ var QRCode;
         showBuyerToast('Pedido criado, mas não consegui guardar os preços no histórico.');
       }
     }
+    warnObsNotSaved(finalItems.some(function(it){ return it.obs; }), COLS.obsO);
+    var directMap = {};   // keeps the notes of this order on screen even when the database still has no column for them
+    finalItems.forEach(function(it){ if(it.obs) directMap[it.productId] = it.obs; });
+    state.directObs = { orderId: orderId, map: directMap };
     resetListaSelection();
     await openOrder(newOrder);
     goTo('pedidos');
@@ -4732,7 +5049,7 @@ var QRCode;
     var delivery = document.getElementById('lista-entrega').value;
     if(!delivery){ alert('Informe a data de entrega prevista.'); return; }
     if(!dbReady){ alert('Sem conexão com o banco de dados agora. O pedido não foi salvo.'); return; }
-    var finalItems = items.map(function(p){ return { name: p.name, unit: p.unit, productId: p.dbId, qty: p.qty, price: dpPrice(p) }; });
+    var finalItems = items.map(function(p){ return { name: p.name, unit: p.unit, productId: p.dbId, qty: p.qty, price: dpPrice(p), obs: obsLine(p.noteText) }; });
     var total = round2(finalItems.reduce(function(sum, it){ return sum + it.qty * it.price; }, 0));
     if(!confirm('Fechar o pedido para ' + supplier.name + '?\n\n' + items.length + (items.length === 1 ? ' item' : ' itens') + ' · ' + money(total) + '\nEntrega prevista: ' + fmtDateStr(delivery))) return;
     var btn = this, label = btn.textContent;
@@ -4820,13 +5137,14 @@ var QRCode;
       return;
     }
     try{
-      var res = await db.from('order_items').select('id,product_id,qty,price,receive_status,received_qty,products(name,unit)').eq('order_id', orderId);
+      var res = await db.from('order_items').select('id,product_id,qty,price,receive_status,received_qty,' + (COLS.obsO ? 'obs,' : '') + 'products(name,unit)').eq('order_id', orderId);
+      var obsFallback = (state.directObs && state.directObs.orderId === orderId) ? state.directObs.map : {};
       state.currentOrderItems = (res.data || []).map(function(row){
         return {
           itemId: row.id, productId: row.product_id,
           name: row.products ? row.products.name : 'Produto',
           unit: row.products ? row.products.unit : null,
-          qty: row.qty, price: Number(row.price),
+          qty: row.qty, price: Number(row.price), obs: row.obs || obsFallback[row.product_id] || '',
           receiveStatus: row.receive_status || 'pendente', receivedQty: row.received_qty
         };
       });
@@ -4913,9 +5231,10 @@ var QRCode;
       var qtyText = fmtQty(it.qty) + ' ' + (UNIT_LABELS[it.unit] || 'un');
       var sub = '*' + money(it.qty * it.price) + '*';
       if(compact){
-        lines.push('• ' + it.name + ' — ' + qtyText + ' × ' + money(it.price) + ' = ' + sub);
+        lines.push('• ' + it.name + (it.obs ? ' (' + it.obs + ')' : '') + ' — ' + qtyText + ' × ' + money(it.price) + ' = ' + sub);
       } else {
         lines.push(keycap(i + 1) + ' *' + it.name + '*');
+        if(it.obs) lines.push('      📝 ' + it.obs);
         lines.push('      ' + qtyText + ' × ' + money(it.price) + ' = ' + sub);
         lines.push('');
       }
@@ -5162,6 +5481,7 @@ var QRCode;
       row.style.cssText = 'padding:7px 0; border-bottom:1px solid #F0EEE7;';
       row.innerHTML =
         '<div style="font-weight:600;">' + item.name + '</div>' +
+        (item.obs ? '<div style="font-size:11px; color:var(--ink-soft); font-style:italic;">' + escHtml(item.obs) + '</div>' : '') +
         '<div style="display:flex; justify-content:space-between; color:var(--ink-soft); margin-top:2px;">' +
           '<span>' + fmtQty(item.qty) + (UNIT_LABELS[item.unit] || 'un') + ' x ' + money(item.price) + '/' + (UNIT_LABELS[item.unit] || 'un') + '</span>' +
           '<span style="font-weight:600; color:var(--ink);">' + money(lineTotal) + '</span>' +
@@ -5240,7 +5560,7 @@ var QRCode;
     }
     row.innerHTML =
       '<div class="row" style="justify-content:space-between; margin-bottom:10px;">' +
-        '<div class="row-title">' + item.name + '</div>' +
+        '<div><div class="row-title">' + item.name + '</div>' + (item.obs ? '<div class="row-sub" style="color:var(--green-dark);">📝 ' + escHtml(item.obs) + '</div>' : '') + '</div>' +
         '<div class="row-sub">esperado: ' + fmtQty(item.qty) + ' ' + (UNIT_LABELS[item.unit] || 'un') + '</div>' +
       '</div>' +
       '<div style="display:flex; gap:8px; flex-wrap:wrap;">' +
@@ -5368,6 +5688,8 @@ var QRCode;
   buyerRoot.addEventListener('click', function(e){
     var modeBtn = e.target.closest('[data-lista-mode]');
     if(modeBtn){ setListaMode(modeBtn.dataset.listaMode); return; }
+    var catBtn = e.target.closest('[data-lista-cat]');
+    if(catBtn){ listaCategory = catBtn.dataset.listaCat; renderListaPage(); return; }
     if(e.target.closest('#cart-toggle')){
       if(window.matchMedia && window.matchMedia('(max-width: 880px)').matches) document.getElementById('lista-cart').classList.toggle('collapsed');
       return;
@@ -5406,6 +5728,12 @@ var QRCode;
   });
   // while typing a price: only the totals change (the field itself is never redrawn under the cursor)
   buyerRoot.addEventListener('input', function(e){
+    var obsEl = e.target.closest('[data-action="obs-input"]');
+    if(obsEl){
+      var po = PRODUCTS.filter(function(x){ return x.id === obsEl.dataset.id; })[0];
+      if(po){ po.noteText = obsEl.value; renderCart(); }
+      return;
+    }
     var el = e.target.closest('[data-action="dp-input"]');
     if(!el) return;
     var p = PRODUCTS.filter(function(x){ return x.id === el.dataset.id; })[0];
@@ -5433,7 +5761,8 @@ var QRCode;
     try{ await deferredInstall.userChoice; } catch(err){ /* ignore */ }
     deferredInstall = null; this.style.display = 'none';
   });
-  var currentBuyer = { id: null, email: '', nome: '' };   // who is logged in (comes from the database, table profiles)
+  var currentBuyer = { id: null, email: '', nome: '', papel: 'comprador' };
+  function isAdmin(){ return currentBuyer.papel === 'admin'; }   // who is logged in (comes from the database, table profiles)
 
   function showBuyerToast(message){
     var toast = document.createElement('div');
@@ -5530,14 +5859,16 @@ var QRCode;
   }
   // Only people registered in the table "profiles" are buyers; any other account that exists gets nothing.
   async function loadBuyerProfile(user){
-    var res = await db.from('profiles').select('nome').eq('id', user.id).maybeSingle();
+    var res = await db.from('profiles').select('nome,papel').eq('id', user.id).maybeSingle();
+    // the column "papel" (comprador / admin) only exists after the SQL update: without it everybody is a buyer
+    if(res.error && /papel/i.test(res.error.message || '')) res = await db.from('profiles').select('nome').eq('id', user.id).maybeSingle();
     if(res.error){
       // the profiles table is not there yet (SQL not run): let the person in, with a name made from the e-mail
-      if(/profiles|schema cache|does not exist|relation/i.test(res.error.message || '')) return { id: user.id, email: user.email, nome: nameFromEmail(user.email) };
+      if(/profiles|schema cache|does not exist|relation/i.test(res.error.message || '')) return { id: user.id, email: user.email, nome: nameFromEmail(user.email), papel: 'comprador' };
       throw res.error;
     }
     if(!res.data) return null;
-    return { id: user.id, email: user.email, nome: res.data.nome };
+    return { id: user.id, email: user.email, nome: res.data.nome, papel: res.data.papel === 'admin' ? 'admin' : 'comprador' };
   }
   var loggingOut = false;
   async function enterApp(user){
@@ -5546,6 +5877,7 @@ var QRCode;
     currentBuyer = prof;
     buyerRoot.querySelector('.sidebar-user .avatar').textContent = (prof.nome || '?').charAt(0).toUpperCase();
     buyerRoot.querySelector('.sidebar-user-name').textContent = prof.nome;
+    document.getElementById('sidebar-role').textContent = prof.papel === 'admin' ? 'Administrador' : 'Comprador';
     await bootstrap();
     document.getElementById('login-screen').classList.remove('active');
     document.getElementById('app').classList.add('active');
@@ -5676,7 +6008,7 @@ var QRCode;
                 total: data.total, receiver_note: data.receiver_note, supplier_name: data.supplier_name || '—' };
       items = (data.items || []).map(function(row){
         return {
-          itemId: row.id, name: row.name || 'Produto', qty: Number(row.qty), price: Number(row.price),
+          itemId: row.id, name: row.name || 'Produto', obs: row.obs || '', qty: Number(row.qty), price: Number(row.price),
           receiveStatus: row.receive_status || 'pendente', receivedQty: row.received_qty == null ? null : Number(row.received_qty)
         };
       });
@@ -5705,7 +6037,7 @@ var QRCode;
         '</div></div>';
     }
     return '<div style="background:#fff; border:1px solid ' + LINE + '; border-radius:12px; padding:14px;">' +
-      '<div style="display:flex; justify-content:space-between; margin-bottom:10px;"><span style="font-weight:600; font-size:14px;">' + item.name + '</span><span style="font-size:12px; color:' + SOFT + ';">esperado: ' + item.qty + '</span></div>' +
+      '<div style="display:flex; justify-content:space-between; margin-bottom:10px;"><span style="font-weight:600; font-size:14px;">' + item.name + (item.obs ? '<span style="display:block; font-weight:400; font-size:12px; color:' + SOFT + '; margin-top:2px;">📝 ' + String(item.obs).replace(/&/g,'&amp;').replace(/</g,'&lt;') + '</span>' : '') + '</span><span style="font-size:12px; color:' + SOFT + ';">esperado: ' + item.qty + '</span></div>' +
       '<div style="display:flex; gap:8px;">' + chip(item,'recebido','Recebido',GREEN) + chip(item,'parcial','Parcial',AMBER) + chip(item,'devolvido','Devolvido',RED) + '</div>' +
       extra +
     '</div>';
@@ -5834,18 +6166,47 @@ var QRCode;
   function esc(t){ return String(t == null ? '' : t).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
   function screen(inner){ root.innerHTML = '<div style="text-align:center; padding:24px; max-width:420px;">' + inner + '</div>'; }
 
-  function okScreen(code, note){
+  var MIN_WAIT = (typeof window.__confirmDelayMs === 'number') ? window.__confirmDelayMs : 2000;   // the "loading" lasts at least 2 s
+  function sleep(ms){ return new Promise(function(r){ setTimeout(r, ms); }); }
+  (function addStyles(){
+    var st = document.createElement('style');
+    st.textContent =
+      '@keyframes pp-spin{to{transform:rotate(360deg)}}' +
+      '@keyframes pp-pop{0%{transform:scale(.3);opacity:0}60%{transform:scale(1.12);opacity:1}100%{transform:scale(1);opacity:1}}' +
+      '@keyframes pp-draw{to{stroke-dashoffset:0}}' +
+      '@keyframes pp-rise{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}' +
+      '.pp-spin{animation:pp-spin .9s linear infinite;transform-origin:50% 50%}' +
+      '.pp-pop{animation:pp-pop .55s cubic-bezier(.2,1.3,.4,1) both}' +
+      '.pp-check{stroke-dasharray:24;stroke-dashoffset:24;animation:pp-draw .45s .4s ease-out forwards}' +
+      '.pp-rise{opacity:0;animation:pp-rise .45s ease-out forwards}' +
+      '@media (prefers-reduced-motion: reduce){.pp-pop,.pp-rise{animation:none;opacity:1}.pp-check{animation:none;stroke-dashoffset:0}.pp-spin{animation-duration:2.4s}}';
+    document.head.appendChild(st);
+  })();
+  function spinnerScreen(){
     screen(
-      '<div style="width:150px; height:150px; border-radius:50%; background:' + GREEN + '; margin:0 auto 20px auto; display:flex; align-items:center; justify-content:center;">' +
-        '<svg width="84" height="84" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>' +
+      '<div id="confirm-loading">' +
+        '<svg class="pp-spin" width="96" height="96" viewBox="0 0 50 50" style="display:block; margin:0 auto 22px auto;"><circle cx="25" cy="25" r="20" fill="none" stroke="#DCEFE4" stroke-width="5"/><circle cx="25" cy="25" r="20" fill="none" stroke="' + GREEN + '" stroke-width="5" stroke-linecap="round" stroke-dasharray="32 120"/></svg>' +
+        '<div style="font-size:16px; color:#5B6A62;">Confirmando o pedido…</div>' +
+      '</div>'
+    );
+  }
+  function okScreen(code, delivered){
+    var text = delivered
+      ? 'A entrega do pedido ' + esc(code || '') + ' já foi concluída.'
+      : 'O pedido ' + esc(code || '') + ' foi confirmado com sucesso.';
+    screen(
+      '<div class="pp-pop" style="width:150px; height:150px; border-radius:50%; background:' + GREEN + '; margin:0 auto 20px auto; display:flex; align-items:center; justify-content:center; box-shadow:0 12px 30px rgba(31,158,88,.35);">' +
+        '<svg width="84" height="84" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path class="pp-check" d="M20 6L9 17l-5-5"/></svg>' +
       '</div>' +
-      '<div id="confirm-ok" style="font-size:48px; font-weight:800; color:' + GREEN + '; letter-spacing:1px;">OK</div>'
+      '<div id="confirm-ok" class="pp-rise" style="font-size:48px; font-weight:800; color:' + GREEN + '; letter-spacing:1px; animation-delay:.7s;">OK</div>' +
+      '<div id="confirm-text" class="pp-rise" style="font-size:17px; color:#33423B; line-height:1.5; margin-top:8px; animation-delay:.95s;">' + text + '</div>'
     );
   }
   function messageScreen(text, color){ screen('<div id="confirm-msg" style="font-size:15px; color:' + (color || '#5B6A62') + '; line-height:1.5;">' + text + '</div>'); }
 
   async function run(){
-    screen('<div style="font-size:15px; color:#6B7A72;">Confirmando…</div>');
+    spinnerScreen();
+    var t0 = Date.now();
     try{
       var res = await db.rpc('confirm_order_link', { p_order: orderId });
       if(res.error) throw new Error(res.error.message);
@@ -5855,7 +6216,9 @@ var QRCode;
         messageScreen('Este pedido ainda não foi liberado pela Paulu&#39;s. Tente abrir o link de novo mais tarde.', '#8A5A22');
         return;
       }
-      okScreen(d.code, (d.confirmed || d.status === 'entregue') ? 'entrega concluída' : 'confirmado');
+      var wait = MIN_WAIT - (Date.now() - t0);
+      if(wait > 0) await sleep(wait);   // a little "loading" first, so it feels like the confirmation was really sent
+      okScreen(d.code, !!(d.confirmed || d.status === 'entregue'));
     } catch(err){
       console.error(err);
       screen('<div style="font-size:15px; color:#C43D3D; margin-bottom:16px;">Não foi possível confirmar o pedido agora.</div>' +
