@@ -1152,7 +1152,25 @@ html, body {
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4"><path d="M9 6l6 6-6 6"/></svg>
               </button>
               <div style="font-size:11px; color:var(--ink-soft); margin-top:10px; line-height:1.5;">Cria a cotação e já abre a mensagem pronta para enviar por WhatsApp. Os preços e fornecedores você lança depois, na aba Cotação.</div>
-              <button class="btn btn-ghost btn-block" id="lista-limpar" style="margin-top:14px;">Limpar seleção</button>
+              <div style="display:flex; align-items:center; gap:10px; margin:18px 0 14px 0;">
+                <div style="flex:1; height:1px; background:var(--line);"></div><span style="font-size:11px; color:var(--ink-faint);">OU</span><div style="flex:1; height:1px; background:var(--line);"></div>
+              </div>
+              <div style="font-size:13px; font-weight:600; margin-bottom:8px;">Fechar pedido direto</div>
+              <div id="direto-picker" style="position:relative; margin-bottom:10px;">
+                <input type="hidden" id="direto-fornecedor" value="">
+                <div id="direto-busca-wrap">
+                  <label for="direto-busca" class="sr-only">Buscar fornecedor</label>
+                  <input id="direto-busca" type="text" placeholder="Buscar fornecedor pelo nome" autocomplete="off" style="width:100%; box-sizing:border-box; border:1px solid var(--line); border-radius:10px; padding:11px 12px; font-size:13px; background:#fff;">
+                </div>
+                <div id="direto-escolhido" style="display:none; align-items:center; gap:10px; border:1px solid var(--green); background:var(--green-tint); border-radius:10px; padding:10px 12px;">
+                  <div id="direto-escolhido-nome" style="flex:1; font-size:13px; font-weight:600; color:var(--green-dark);"></div>
+                  <button type="button" id="direto-trocar" style="background:none; border:none; color:var(--green); font-size:12px; text-decoration:underline; cursor:pointer;">Trocar</button>
+                </div>
+                <div id="direto-lista" style="display:none; position:absolute; left:0; right:0; top:100%; margin-top:6px; max-height:300px; overflow-y:auto; background:#fff; border:1px solid var(--line); border-radius:12px; box-shadow:0 14px 32px rgba(23,50,42,.18); z-index:30;"></div>
+              </div>
+              <button class="btn btn-block" id="lista-fechar-direto" style="background:var(--amber); color:#fff;">Fechar pedido direto</button>
+              <div style="font-size:11px; color:var(--ink-soft); margin-top:10px; line-height:1.5;">Para quando você compra de um fornecedor só: escolha quem é, confira os valores e o pedido sai na hora, sem cotação.</div>
+              <button class="btn btn-ghost btn-block" id="lista-limpar" style="margin-top:16px;">Limpar seleção</button>
             </div>
           </div>
         </div>
@@ -1502,7 +1520,6 @@ html, body {
         <span style="font-weight:700;">TOTAL DOS PEDIDOS</span>
         <span id="gen-total" style="font-size:22px; font-weight:700; font-family:'Fraunces',serif;">R$ 0,00</span>
       </div>
-      <div class="field" style="max-width:240px; margin:8px 0 18px 0;"><label for="gen-entrega">Entrega prevista (todos)</label><input id="gen-entrega" type="date"></div>
       <div style="display:flex; gap:10px; flex-wrap:wrap;">
         <button class="btn btn-primary" id="gen-confirm">Gerar pedidos</button>
         <button class="btn btn-ghost" id="gen-cancel">Cancelar</button>
@@ -2164,7 +2181,7 @@ var QRCode;
   var SUPABASE_URL = 'https://dqghwfrmodulnevzpgbw.supabase.co';
   var SUPABASE_KEY = 'sb_publishable_nNk6sJNE-7NzraHnjXliLQ_nRfeWtZb';
   var db = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-  var APP_VERSION = '2026-11-19 · versão 3';
+  var APP_VERSION = '2026-11-19 · versão 4';
   var APP_BASE_URL = 'https://compraspaulusrestaurantes-cell.github.io/app_cotacao/';
   var DEFAULT_SUPPLIER_NAME = 'Distribuidora Bom Preço';
   var SUPPLIERS_SEED = [
@@ -4135,15 +4152,16 @@ var QRCode;
     var groups = groupsToOrder(q);
     if(groups.length === 0){ alert('Não há nada para gerar. Separe os itens por fornecedor primeiro.'); return; }
     genQuotationId = qid;
-    document.getElementById('gen-sub').textContent = 'Será criado 1 pedido para cada fornecedor abaixo, com os preços que você lançou.';
+    document.getElementById('gen-sub').textContent = 'Será criado 1 pedido para cada fornecedor abaixo, com os preços que você lançou. Defina a entrega de cada um.';
+    var dDefault = new Date(); dDefault.setDate(dDefault.getDate() + 2);
     document.getElementById('gen-list').innerHTML = groups.map(function(g){
-      return '<div style="padding:10px 0; border-bottom:1px solid #F0EEE7;">' +
+      return '<div style="padding:12px 0; border-bottom:1px solid #F0EEE7;">' +
         '<div style="display:flex; justify-content:space-between; gap:10px;"><b>' + escHtml(supplierName(g.supplierId)) + '</b><b>' + money(g.total) + '</b></div>' +
-        '<div class="row-sub" style="margin-top:3px;">' + g.lines.map(function(l){ return escHtml(l.item.name) + ' (' + fmtQty(l.a.qty) + ' ' + itemUnitLabel(l.item) + ' × ' + money(l.a.price) + ')'; }).join(' · ') + '</div></div>';
+        '<div class="row-sub" style="margin-top:3px;">' + g.lines.map(function(l){ return escHtml(l.item.name) + ' (' + fmtQty(l.a.qty) + ' ' + itemUnitLabel(l.item) + ' × ' + money(l.a.price) + ')'; }).join(' · ') + '</div>' +
+        '<div style="display:flex; align-items:center; gap:10px; margin-top:10px;"><label style="font-size:12px; font-weight:600; color:var(--ink-soft);">Entrega prevista deste pedido</label>' +
+        '<input type="date" data-gen-date="' + escHtml(g.supplierId) + '" value="' + dateInputValue(dDefault) + '" style="border:1px solid var(--line); border-radius:8px; padding:7px 10px; font-size:13px;"></div></div>';
     }).join('');
     document.getElementById('gen-total').textContent = money(round2(groups.reduce(function(s, g){ return s + g.total; }, 0)));
-    var d = new Date(); d.setDate(d.getDate() + 2);
-    document.getElementById('gen-entrega').value = dateInputValue(d);
     document.getElementById('gen-confirm').disabled = false;
     document.getElementById('gen-confirm').textContent = 'Gerar ' + groups.length + (groups.length === 1 ? ' pedido' : ' pedidos');
     document.getElementById('gen-overlay').style.display = 'flex';
@@ -4170,9 +4188,14 @@ var QRCode;
 
   document.getElementById('gen-confirm').addEventListener('click', async function(){
     var q = quotationById(genQuotationId); if(!q) return;
-    var delivery = document.getElementById('gen-entrega').value;
-    if(!delivery){ alert('Informe a data de entrega prevista.'); return; }
     var groups = groupsToOrder(q);
+    var dates = {};
+    for(var di = 0; di < groups.length; di++){
+      var dateInput = document.querySelector('#gen-list [data-gen-date="' + groups[di].supplierId + '"]');
+      var dateVal = dateInput ? dateInput.value : '';
+      if(!dateVal){ alert('Informe a data de entrega prevista do pedido de ' + supplierName(groups[di].supplierId) + '.'); return; }
+      dates[groups[di].supplierId] = dateVal;
+    }
     var btn = this; btn.disabled = true; btn.textContent = 'Gerando...';
     var created = 0;
     try{
@@ -4186,7 +4209,7 @@ var QRCode;
         var code = nextOrderCode();
         var orderDate = new Date().toISOString().slice(0, 10);
         var orderIns = check(await db.from('orders').insert(Object.assign({
-          code: code, supplier_id: g.supplierId, status: 'enviado', order_date: orderDate, delivery_date: delivery, total: g.total
+          code: code, supplier_id: g.supplierId, status: 'enviado', order_date: orderDate, delivery_date: dates[g.supplierId], total: g.total
         }, COLS.oBy ? { created_by: currentBuyer.nome } : {})).select('id').single(), 'Criar pedido');
         if(!orderIns.data) throw new Error('O pedido não retornou id.');
         var orderId = orderIns.data.id;
@@ -4197,7 +4220,7 @@ var QRCode;
           HISTORY.forEach(function(h){ if(h.id === l.a.id) h.orderId = orderId; });
         });
         ORDERS.unshift({ id: orderId, code: code, supplier_id: g.supplierId, supplier_name: supplierName(g.supplierId), status: 'enviado',
-          order_date: orderDate, delivery_date: delivery, total: g.total, confirmed: false, receiver_note: null, created_by: currentBuyer.nome || null });
+          order_date: orderDate, delivery_date: dates[g.supplierId], total: g.total, confirmed: false, receiver_note: null, created_by: currentBuyer.nome || null });
         created++;
       }
       if(quotationIsDone(q)){
@@ -4383,7 +4406,128 @@ var QRCode;
   // After an order is created the list starts clean again (nothing pre-selected, default quantities)
   function resetListaSelection(){
     PRODUCTS.forEach(function(prod){ prod.selected = false; prod.qty = prod.recQty; });
+    var hid = document.getElementById('direto-fornecedor');
+    if(hid){ hid.value = ''; renderDiretoEscolhido(); }
   }
+
+  /* ---------- Fechar pedido direto (sem passar pela cotação) ---------- */
+  function renderDiretoEscolhido(){
+    var hidden = document.getElementById('direto-fornecedor');
+    var chosen = SUPPLIERS.filter(function(x){ return x.id === hidden.value; })[0];
+    if(hidden.value && !chosen) hidden.value = '';
+    document.getElementById('direto-escolhido').style.display = chosen ? 'flex' : 'none';
+    document.getElementById('direto-busca-wrap').style.display = chosen ? 'none' : 'block';
+    if(chosen) document.getElementById('direto-escolhido-nome').textContent = chosen.name;
+  }
+  function renderDiretoLista(){
+    var term = normalizeText(document.getElementById('direto-busca').value).trim();
+    var cats = {};
+    selectedProducts().forEach(function(p){ if(p.category) cats[p.category] = true; });
+    var filtered = SUPPLIERS.slice().sort(function(a, b){ return a.name.localeCompare(b.name, 'pt-BR'); })
+      .filter(function(x){ return !term || normalizeText(x.name).indexOf(term) > -1; });
+    var sug = filtered.filter(function(x){ return (x.categories || []).some(function(c){ return cats[c]; }); });
+    var rest = filtered.filter(function(x){ return sug.indexOf(x) === -1; });
+    function row(x){
+      var cs = (x.categories || []).slice(0, 2).join(' · ');
+      return '<button type="button" data-action="escolher-direto" data-id="' + escHtml(x.id) + '" style="display:block; width:100%; text-align:left; background:none; border:none; border-bottom:1px solid #F0EEE7; padding:10px 12px; cursor:pointer;">' +
+        '<div style="font-size:13px; font-weight:600; color:var(--ink);">' + escHtml(x.name) + '</div>' +
+        (cs ? '<div style="font-size:11px; color:var(--ink-soft); margin-top:2px;">' + escHtml(cs) + '</div>' : '') + '</button>';
+    }
+    var out = '';
+    if(sug.length) out += supplierGroupHead('Da categoria dos produtos marcados (' + sug.length + ')') + sug.map(row).join('');
+    if(rest.length) out += supplierGroupHead((sug.length ? 'Outros fornecedores' : 'Todos os fornecedores') + ' (' + rest.length + ')') + rest.map(row).join('');
+    document.getElementById('direto-lista').innerHTML = out || '<div style="padding:16px; font-size:12px; color:var(--ink-soft); text-align:center;">Nenhum fornecedor encontrado.</div>';
+  }
+  function openDiretoLista(){ renderDiretoLista(); document.getElementById('direto-lista').style.display = 'block'; }
+  function closeDiretoLista(){ document.getElementById('direto-lista').style.display = 'none'; }
+  document.getElementById('direto-busca').addEventListener('focus', openDiretoLista);
+  document.getElementById('direto-busca').addEventListener('click', openDiretoLista);
+  document.getElementById('direto-busca').addEventListener('input', openDiretoLista);
+  document.getElementById('direto-busca').addEventListener('keydown', function(e){ if(e.key === 'Escape') closeDiretoLista(); });
+  document.getElementById('direto-trocar').addEventListener('click', function(){
+    document.getElementById('direto-fornecedor').value = '';
+    renderDiretoEscolhido();
+    var box = document.getElementById('direto-busca'); box.value = ''; box.focus(); openDiretoLista();
+  });
+  buyerRoot.addEventListener('click', function(e){
+    var pick = e.target.closest('[data-action="escolher-direto"]');
+    if(pick){
+      document.getElementById('direto-fornecedor').value = pick.dataset.id;
+      document.getElementById('direto-busca').value = '';
+      closeDiretoLista(); renderDiretoEscolhido();
+      return;
+    }
+    if(!e.target.closest('#direto-picker')) closeDiretoLista();
+  });
+
+  document.getElementById('lista-fechar-direto').addEventListener('click', function(){
+    var items = selectedProducts().filter(function(p){ return p.dbId; });
+    if(items.length === 0){ alert('Marque ao menos um produto antes de fechar o pedido.'); return; }
+    var noQty = items.filter(function(p){ return !(p.qty > 0); });
+    if(noQty.length){ alert('Confira a quantidade de: ' + noQty.map(function(p){ return p.name; }).join(', ') + '.'); return; }
+    var supplierId = document.getElementById('direto-fornecedor').value;
+    var supplier = SUPPLIERS.filter(function(x){ return x.id === supplierId; })[0];
+    if(!supplier){ alert('Escolha o fornecedor deste pedido.'); return; }
+    if(!dbReady){ alert('Sem conexão com o banco de dados agora. O pedido não foi salvo.'); return; }
+
+    // price suggestion: the last price paid to THIS supplier; otherwise the last one paid to anyone
+    var reviewItems = items.map(function(p){
+      var same = lastPriceFor(p.dbId, supplierId), any = same ? null : lastPriceFor(p.dbId);
+      var price = same ? same.price : (any ? any.price : (Number(p.price) || 0));
+      var note = '';
+      if(!same) note = any
+        ? 'Ainda não há compra deste produto com este fornecedor. Coloquei o último preço pago (' + money(any.price) + ' · ' + supplierName(any.supplierId) + '). Confira.'
+        : 'Ainda não há histórico de preço deste produto. Informe o valor combinado.';
+      return { name: p.name, unit: p.unit, productId: p.dbId, qty: p.qty, price: price, missingPrice: !same, refNote: note };
+    });
+    var dDelivery = new Date(); dDelivery.setDate(dDelivery.getDate() + 2);
+    openOrderReview({
+      title: 'Fechar pedido direto',
+      subtitle: 'Fornecedor: ' + supplier.name + ' — confira as quantidades e os valores. O pedido sai na hora, sem cotação.',
+      items: reviewItems,
+      deliveryDate: dateInputValue(dDelivery),
+      confirmLabel: 'Confirmar e gerar pedido',
+      onConfirm: async function(finalItems, deliveryStr, total){
+        var code = nextOrderCode();
+        var orderDateStr = new Date().toISOString().slice(0, 10);
+        var orderIns = check(await db.from('orders').insert(Object.assign({
+          code: code, supplier_id: supplierId, status: 'enviado', order_date: orderDateStr, delivery_date: deliveryStr, total: total
+        }, COLS.oBy ? { created_by: currentBuyer.nome } : {})).select('id').single(), 'Criar pedido direto');
+        if(!orderIns.data) throw new Error('O pedido não retornou id.');
+        var orderId = orderIns.data.id;
+        check(await db.from('order_items').insert(finalItems.map(function(it){
+          return { order_id: orderId, product_id: it.productId, qty: it.qty, price: it.price, receive_status: 'pendente' };
+        })), 'Salvar itens do pedido direto');
+        var newOrder = { id: orderId, code: code, supplier_id: supplierId, supplier_name: supplier.name, status: 'enviado', order_date: orderDateStr,
+          delivery_date: deliveryStr, total: total, confirmed: false, receiver_note: null, created_by: currentBuyer.nome || null };
+        ORDERS.unshift(newOrder);
+        // what was paid also goes to the price history (it is a real purchase), without belonging to any quotation
+        if(allocReady){
+          try{
+            var hist = check(await db.from('quotation_allocations').insert(finalItems.map(function(it){
+              return Object.assign({ quotation_id: null, quotation_item_id: null, product_id: it.productId, product_name: it.name, supplier_id: supplierId, qty: it.qty, price: it.price, order_id: orderId },
+                COLS.aBy ? { created_by: currentBuyer.nome } : {});
+            })).select('id,created_at,product_id'), 'Guardar no histórico de preços');
+            var byProduct = {};
+            (hist.data || []).forEach(function(r){ byProduct[r.product_id] = r; });
+            finalItems.forEach(function(it){
+              var saved = byProduct[it.productId];
+              HISTORY.unshift({ id: saved ? saved.id : null, quotationId: null, productId: it.productId, productName: it.name, supplierId: supplierId, qty: it.qty, price: it.price,
+                orderId: orderId, createdAt: saved && saved.created_at ? new Date(saved.created_at) : new Date(), createdBy: currentBuyer.nome || null });
+            });
+            applyLastPrices();
+          } catch(err){
+            console.error('O pedido foi criado, mas o histórico de preços não foi salvo', err);
+            showBuyerToast('Pedido criado, mas não consegui guardar os preços no histórico.');
+          }
+        }
+        resetListaSelection();
+        await openOrder(newOrder);
+        goTo('pedidos');
+        showBuyerToast('Pedido ' + code + ' gerado para ' + supplier.name + '.');
+      }
+    });
+  });
 
   async function loadOrderItems(orderId){
     if(!dbReady || !orderId){
@@ -4677,6 +4821,8 @@ var QRCode;
       QUOTATIONS.forEach(function(q){ q.items.forEach(function(it){ it.allocations.forEach(function(a){ if(a.orderId === order3.id) unlinkedIds.push(a.id); }); }); });
       try{
         if(dbReady){
+          // price lines of a DIRECT order (no quotation) go away with the order; the ones from a quotation are released instead
+          if(allocReady) check(await db.from('quotation_allocations').delete().eq('order_id', order3.id).is('quotation_id', null), 'Apagar o histórico do pedido direto');
           if(allocReady && unlinkedIds.length) check(await db.from('quotation_allocations').update({ order_id: null }).eq('order_id', order3.id), 'Soltar lançamentos do pedido');
           check(await db.from('order_items').delete().eq('order_id', order3.id), 'Excluir itens do pedido');
           check(await db.from('orders').delete().eq('id', order3.id), 'Excluir pedido');
@@ -4687,6 +4833,7 @@ var QRCode;
         alert(friendlyDbError(err, 'Não foi possível excluir o pedido.'));
         return;
       }
+      HISTORY = HISTORY.filter(function(h){ return !(h.orderId === order3.id && !h.quotationId); });
       await releaseAllocationsOfOrder(order3.id);
       ORDERS = ORDERS.filter(function(o){ return o.id !== order3.id; });
       if(state.viewingOrder && state.viewingOrder.id === order3.id) state.viewingOrder = null;
