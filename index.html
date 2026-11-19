@@ -900,6 +900,50 @@ html, body {
 #buyer-root .tbl-row { grid-template-columns:1fr !important; gap:6px }
 #buyer-root .tbl-actions { justify-content:flex-start }
 }
+
+/* ---------- Lista de compras: modos, cartões, menu flutuante ---------- */
+#buyer-root .mode-switch { display:flex; gap:12px; flex-wrap:wrap; margin-bottom:16px }
+#buyer-root .mode-card { flex:1 1 280px; text-align:left; background:#fff; border:2px solid var(--line); border-radius:14px; padding:14px 18px; cursor:pointer; display:flex; flex-direction:column; gap:4px; font-family:inherit; color:var(--ink) }
+#buyer-root .mode-card.active { border-color:var(--green); background:var(--green-tint) }
+#buyer-root .mode-card.active[data-lista-mode="direto"] { border-color:var(--amber); background:var(--amber-tint) }
+#buyer-root .mode-title { font-weight:700; font-size:15px }
+#buyer-root .mode-sub { font-size:12px; color:var(--ink-soft); line-height:1.4 }
+#buyer-root .product-grid { grid-template-columns:repeat(auto-fill, minmax(172px, 1fr)) }
+#buyer-root .product-card-qty { align-items:center; gap:6px }
+#buyer-root .stepper { gap:4px; padding:3px 4px }
+#buyer-root .stepper button { width:24px; height:24px; font-size:14px }
+#buyer-root .stepper-input { width:42px }
+#buyer-root .pack-btn { width:32px; height:32px; border-radius:8px; border:1px solid var(--line); background:#fff; cursor:pointer; display:inline-flex; align-items:center; justify-content:center; flex:0 0 auto; padding:0 }
+#buyer-root .pack-btn:hover { border-color:var(--green); background:var(--green-tint) }
+#buyer-root .pack-note { font-size:10.5px; color:var(--green); text-align:center; margin-top:6px; min-height:0 }
+#buyer-root .pack-note:empty { display:none }
+#buyer-root .dp-row { margin-top:8px }
+#buyer-root .dp-row label { font-size:10.5px; color:var(--ink-soft); display:block; margin-bottom:3px }
+#buyer-root .dp-row input { width:100%; box-sizing:border-box; border:1px solid var(--amber); border-radius:8px; padding:7px 8px; font-size:13px; font-weight:600; text-align:right; background:#fff }
+#buyer-root .dp-sub { font-size:10.5px; color:var(--ink-soft); margin-top:3px; text-align:right }
+#buyer-root .dp-hint { font-size:10.5px; color:var(--amber-dark); margin-top:3px; line-height:1.3 }
+#buyer-root .link-btn { background:none; border:none; padding:0; color:var(--green); text-decoration:underline; font-size:10.5px; cursor:pointer; font-family:inherit }
+#buyer-root .cart-panel { position:sticky; top:20px; padding:0 !important; overflow:hidden }
+#buyer-root .cart-head { width:100%; display:flex; justify-content:space-between; align-items:center; gap:10px; padding:14px 18px; background:none; border:none; cursor:default; text-align:left; font-family:inherit; color:var(--ink) }
+#buyer-root .cart-title { font-size:15px; font-weight:700 }
+#buyer-root .cart-sub { font-size:12px; color:var(--ink-soft) }
+#buyer-root .cart-head-total { font-family:'Fraunces',serif; font-weight:700; font-size:16px }
+#buyer-root .cart-chevron { display:none }
+#buyer-root .cart-body { padding:0 18px 18px 18px }
+#buyer-root .cart-items { max-height:36vh; overflow-y:auto; margin:4px 0 12px 0 }
+#buyer-root .cart-row { display:flex; justify-content:space-between; gap:8px; align-items:flex-start; padding:8px 0; border-top:1px solid #F0EEE7; font-size:12.5px }
+#buyer-root .cart-row .rm { background:none; border:none; color:var(--red); font-size:18px; line-height:1; cursor:pointer; padding:0 2px }
+#buyer-root .cart-empty { font-size:12.5px; color:var(--ink-soft); padding:6px 0 14px 0; line-height:1.5 }
+@media (max-width: 880px) {
+#buyer-root .cart-panel { position:fixed; left:0; right:0; bottom:var(--bottomnav-h); top:auto; z-index:45; border-radius:16px 16px 0 0; border-bottom:none; box-shadow:0 -10px 30px rgba(15,30,25,.22); max-height:78vh; overflow-y:auto; display:none }
+#buyer-root .cart-panel.has-items { display:block }
+#buyer-root .cart-head { cursor:pointer }
+#buyer-root .cart-chevron { display:block; transition:transform .2s }
+#buyer-root .cart-panel.collapsed .cart-chevron { transform:rotate(180deg) }
+#buyer-root .cart-panel.collapsed .cart-body { display:none }
+#buyer-root .cart-items { max-height:30vh }
+#buyer-root #page-lista.has-cart { padding-bottom:150px }
+}
 </style>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
@@ -1130,7 +1174,36 @@ html, body {
 
       <!-- ================= ESTOQUE / LISTA PARA COMPRAR ================= -->
       <section class="page" id="page-lista">
-        <p style="font-size:13px; color:var(--ink-soft); margin:-8px 0 16px 0; max-width:560px;">Marque os produtos, ajuste as quantidades e crie a cotação. Depois é só enviar a lista pelo WhatsApp para os fornecedores.</p>
+        <div class="mode-switch" id="lista-modos">
+          <button type="button" class="mode-card active" data-lista-mode="cotacao">
+            <span class="mode-title">Abrir cotação</span>
+            <span class="mode-sub">Marco os produtos e mando a lista pelo WhatsApp para os fornecedores. Os preços eu lanço depois.</span>
+          </button>
+          <button type="button" class="mode-card" data-lista-mode="direto">
+            <span class="mode-title">Fechar pedido direto</span>
+            <span class="mode-sub">Compro de um fornecedor só: marco os produtos e já coloco o valor de cada um.</span>
+          </button>
+        </div>
+
+        <div id="lista-direto-bar" style="display:none; margin-bottom:16px;">
+          <div class="card" style="padding:14px 18px; border-color:var(--amber);">
+            <div style="font-size:13px; font-weight:600; margin-bottom:8px;">Fornecedor deste pedido</div>
+            <div id="direto-picker" style="position:relative; max-width:460px;">
+              <input type="hidden" id="direto-fornecedor" value="">
+              <div id="direto-busca-wrap">
+                <label for="direto-busca" class="sr-only">Buscar fornecedor</label>
+                <input id="direto-busca" type="text" placeholder="Buscar fornecedor pelo nome" autocomplete="off" style="width:100%; box-sizing:border-box; border:1px solid var(--line); border-radius:10px; padding:11px 12px; font-size:13px; background:#fff;">
+              </div>
+              <div id="direto-escolhido" style="display:none; align-items:center; gap:10px; border:1px solid var(--amber); background:var(--amber-tint); border-radius:10px; padding:10px 12px;">
+                <div id="direto-escolhido-nome" style="flex:1; font-size:13px; font-weight:600; color:var(--amber-dark);"></div>
+                <button type="button" id="direto-trocar" style="background:none; border:none; color:var(--amber-dark); font-size:12px; text-decoration:underline; cursor:pointer;">Trocar</button>
+              </div>
+              <div id="direto-lista" style="display:none; position:absolute; left:0; right:0; top:100%; margin-top:6px; max-height:300px; overflow-y:auto; background:#fff; border:1px solid var(--line); border-radius:12px; box-shadow:0 14px 32px rgba(23,50,42,.18); z-index:30;"></div>
+            </div>
+            <div style="font-size:12px; color:var(--ink-soft); margin-top:8px;">Escolha o fornecedor primeiro: o app já sugere o último preço pago a ele em cada produto que você marcar.</div>
+          </div>
+        </div>
+
         <div class="search">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--ink-faint)" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
           <label for="estoque-search" class="sr-only">Buscar produto</label>
@@ -1141,36 +1214,33 @@ html, body {
             <div class="product-grid" id="estoque-list"></div>
           </div>
           <div class="side">
-            <div class="card" style="position:sticky; top:20px;">
-              <h2 style="font-size:15px; margin-bottom:16px;">Resumo da lista</h2>
-              <div class="row" style="justify-content:space-between; margin-bottom:8px;"><span style="font-size:13px; color:var(--ink-soft);">Itens selecionados</span><span id="lista-count" style="font-size:13px; font-weight:600;">0</span></div>
-              <div class="row" style="justify-content:space-between; margin-bottom:8px;"><span style="font-size:13px; color:var(--ink-soft);">Unidades</span><span id="lista-units" style="font-size:13px; font-weight:600;">0</span></div>
-              <div style="height:1px; background:var(--line); margin:10px 0;"></div>
-              <div class="row" style="justify-content:space-between; margin-bottom:18px;"><span style="font-size:14px; font-weight:600;">Estimativa (último preço)</span><span id="lista-total" style="font-size:18px; font-weight:700; font-family:'Fraunces',serif;">R$ 0,00</span></div>
-              <button class="btn btn-primary btn-block" id="lista-criar-cotacao">
-                Criar cotação e enviar
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4"><path d="M9 6l6 6-6 6"/></svg>
+            <div class="card cart-panel" id="lista-cart">
+              <button type="button" class="cart-head" id="cart-toggle" aria-label="Abrir ou fechar a lista selecionada">
+                <div>
+                  <div class="cart-title" id="cart-title">Cotação</div>
+                  <div class="cart-sub"><span id="lista-count">0</span> itens · <span id="lista-units">0</span> un.</div>
+                </div>
+                <div style="display:flex; align-items:center; gap:10px;">
+                  <div class="cart-head-total" id="cart-head-total"></div>
+                  <svg class="cart-chevron" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--ink-soft)" stroke-width="2.2"><path d="M6 15l6-6 6 6"/></svg>
+                </div>
               </button>
-              <div style="font-size:11px; color:var(--ink-soft); margin-top:10px; line-height:1.5;">Cria a cotação e já abre a mensagem pronta para enviar por WhatsApp. Os preços e fornecedores você lança depois, na aba Cotação.</div>
-              <div style="display:flex; align-items:center; gap:10px; margin:18px 0 14px 0;">
-                <div style="flex:1; height:1px; background:var(--line);"></div><span style="font-size:11px; color:var(--ink-faint);">OU</span><div style="flex:1; height:1px; background:var(--line);"></div>
-              </div>
-              <div style="font-size:13px; font-weight:600; margin-bottom:8px;">Fechar pedido direto</div>
-              <div id="direto-picker" style="position:relative; margin-bottom:10px;">
-                <input type="hidden" id="direto-fornecedor" value="">
-                <div id="direto-busca-wrap">
-                  <label for="direto-busca" class="sr-only">Buscar fornecedor</label>
-                  <input id="direto-busca" type="text" placeholder="Buscar fornecedor pelo nome" autocomplete="off" style="width:100%; box-sizing:border-box; border:1px solid var(--line); border-radius:10px; padding:11px 12px; font-size:13px; background:#fff;">
+              <div class="cart-body">
+                <div class="cart-empty" id="cart-empty">Marque os produtos ao lado: eles aparecem aqui.</div>
+                <div class="cart-items" id="cart-items"></div>
+                <div id="cart-direto-extra" style="display:none;">
+                  <div class="field" style="margin-bottom:10px;"><label for="lista-entrega">Entrega prevista</label><input id="lista-entrega" type="date"></div>
+                  <div style="display:flex; justify-content:space-between; align-items:center; padding:10px 0; border-top:2px solid var(--line); margin-bottom:12px;">
+                    <span style="font-weight:700;">TOTAL</span>
+                    <span id="cart-total" style="font-size:20px; font-weight:700; font-family:'Fraunces',serif;">R$ 0,00</span>
+                  </div>
                 </div>
-                <div id="direto-escolhido" style="display:none; align-items:center; gap:10px; border:1px solid var(--green); background:var(--green-tint); border-radius:10px; padding:10px 12px;">
-                  <div id="direto-escolhido-nome" style="flex:1; font-size:13px; font-weight:600; color:var(--green-dark);"></div>
-                  <button type="button" id="direto-trocar" style="background:none; border:none; color:var(--green); font-size:12px; text-decoration:underline; cursor:pointer;">Trocar</button>
-                </div>
-                <div id="direto-lista" style="display:none; position:absolute; left:0; right:0; top:100%; margin-top:6px; max-height:300px; overflow-y:auto; background:#fff; border:1px solid var(--line); border-radius:12px; box-shadow:0 14px 32px rgba(23,50,42,.18); z-index:30;"></div>
+                <div id="cart-cotacao-extra" class="row" style="justify-content:space-between; margin-bottom:12px;"><span style="font-size:12px; color:var(--ink-soft);">Estimativa (último preço)</span><span id="lista-total" style="font-size:14px; font-weight:700;">R$ 0,00</span></div>
+                <button class="btn btn-primary btn-block" id="lista-criar-cotacao">Fechar cotação e enviar</button>
+                <button class="btn btn-block" id="lista-fechar-direto" style="background:var(--amber); color:#fff; display:none;">Fechar pedido</button>
+                <div id="cart-help" style="font-size:11px; color:var(--ink-soft); margin-top:10px; line-height:1.5;"></div>
+                <button class="btn btn-ghost btn-block" id="lista-limpar" style="margin-top:12px;">Limpar seleção</button>
               </div>
-              <button class="btn btn-block" id="lista-fechar-direto" style="background:var(--amber); color:#fff;">Fechar pedido direto</button>
-              <div style="font-size:11px; color:var(--ink-soft); margin-top:10px; line-height:1.5;">Para quando você compra de um fornecedor só: escolha quem é, confira os valores e o pedido sai na hora, sem cotação.</div>
-              <button class="btn btn-ghost btn-block" id="lista-limpar" style="margin-top:16px;">Limpar seleção</button>
             </div>
           </div>
         </div>
@@ -1523,6 +1593,31 @@ html, body {
       <div style="display:flex; gap:10px; flex-wrap:wrap;">
         <button class="btn btn-primary" id="gen-confirm">Gerar pedidos</button>
         <button class="btn btn-ghost" id="gen-cancel">Cancelar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= CONTAR POR CAIXA / FARDO / PACOTE ================= -->
+  <div class="overlay" id="pack-overlay">
+    <div class="card" style="width:min(460px,100%); margin:auto;">
+      <div class="row" style="justify-content:space-between; align-items:flex-start; margin-bottom:10px;">
+        <div><h2 id="pack-title" style="font-size:19px;">Contar por embalagem</h2><div class="row-sub" id="pack-sub"></div></div>
+        <button type="button" class="modal-x" id="pack-close" aria-label="Fechar">&times;</button>
+      </div>
+      <div style="display:flex; gap:12px; flex-wrap:wrap; margin-bottom:12px;">
+        <div class="field" style="flex:1 1 130px;"><label for="pack-count">Quantas embalagens?</label><input id="pack-count" type="text" inputmode="decimal" value="1"></div>
+        <div class="field" style="flex:1 1 150px;"><label for="pack-type">Embalagem</label>
+          <select id="pack-type" style="width:100%; border:1px solid var(--line); border-radius:8px; padding:10px 12px; font-size:13px;">
+            <option value="Caixa">Caixa</option><option value="Fardo">Fardo</option><option value="Pacote">Pacote</option><option value="Saco">Saco</option>
+          </select>
+        </div>
+      </div>
+      <div class="field" style="margin-bottom:14px;"><label for="pack-per" id="pack-per-label">Cada caixa vem com</label><input id="pack-per" type="text" inputmode="decimal" placeholder="Ex.: 12"></div>
+      <div id="pack-result" style="background:var(--green-tint); border-radius:12px; padding:14px 16px; font-size:15px; font-weight:700; color:var(--green-dark); margin-bottom:12px; text-align:center;">Informe quanto vem em cada embalagem</div>
+      <label style="display:flex; gap:8px; align-items:flex-start; font-size:12px; color:var(--ink-soft); margin-bottom:16px; cursor:pointer;"><input type="checkbox" id="pack-remember" checked style="margin-top:2px;"><span id="pack-remember-label">Lembrar essa embalagem deste produto</span></label>
+      <div style="display:flex; gap:10px; flex-wrap:wrap;">
+        <button class="btn btn-primary" id="pack-apply" disabled>Usar na lista</button>
+        <button class="btn btn-ghost" id="pack-cancel">Cancelar</button>
       </div>
     </div>
   </div>
@@ -2181,7 +2276,7 @@ var QRCode;
   var SUPABASE_URL = 'https://dqghwfrmodulnevzpgbw.supabase.co';
   var SUPABASE_KEY = 'sb_publishable_nNk6sJNE-7NzraHnjXliLQ_nRfeWtZb';
   var db = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-  var APP_VERSION = '2026-11-19 · versão 4';
+  var APP_VERSION = '2026-11-19 · versão 5';
   var APP_BASE_URL = 'https://compraspaulusrestaurantes-cell.github.io/app_cotacao/';
   var DEFAULT_SUPPLIER_NAME = 'Distribuidora Bom Preço';
   var SUPPLIERS_SEED = [
@@ -2237,12 +2332,12 @@ var QRCode;
   }
 
   async function ensureProducts(){
-    var res = check(await db.from('products').select('id,name,category,unit,image_url'), 'Ler produtos');
+    var res = check(await db.from('products').select('*'), 'Ler produtos');
     var rows = res.data || [];
     if(rows.length === 0){
       var insertRes = check(await db.from('products').insert(PRODUCTS.map(function(p){
         return { name:p.name, category:p.category, unit:p.unit };
-      })).select('id,name,category,unit,image_url'), 'Criar produtos iniciais');
+      })).select('*'), 'Criar produtos iniciais');
       rows = insertRes.data || [];
     }
     // Each product on screen is tied to its database row by the row's ID, never by name:
@@ -2252,6 +2347,7 @@ var QRCode;
     function applyRow(p, row){
       p.dbId = row.id; p.name = row.name; if(row.category) p.category = row.category;
       p.unit = row.unit || p.unit; p.unitLabel = UNIT_LABELS[p.unit] || 'un'; p.imageUrl = row.image_url || null;
+      p.packType = row.pack_type || p.packType || null; p.packQty = row.pack_qty != null ? Number(row.pack_qty) : (p.packQty || null);
       claimed[row.id] = true;
     }
     PRODUCTS.forEach(function(p){
@@ -2279,6 +2375,7 @@ var QRCode;
       PRODUCTS.push({
         id:r.id, dbId:r.id, name:r.name, category:r.category || 'Mercearia', brand:'',
         unit:r.unit || 'Unidade', unitLabel:UNIT_LABELS[r.unit] || 'un', imageUrl:r.image_url || null,
+        packType:r.pack_type || null, packQty:r.pack_qty != null ? Number(r.pack_qty) : null,
         recQty:1, qty:1, price:0, obs:'', available:true, selected:false,
         receiveStatus:'pendente', receivedQty:null
       });
@@ -2323,15 +2420,15 @@ var QRCode;
   }
 
   var numberReady = true;   // false until quotations.number exists in the database
-  var COLS = { number: false, qBy: false, oBy: false, delivered: false, aBy: false };   // optional columns created by the SQL update
+  var COLS = { number: false, qBy: false, oBy: false, delivered: false, aBy: false, pack: false };   // optional columns created by the SQL update
   async function probeColumn(table, col){ var r = await db.from(table).select(col).limit(1); return !r.error; }
   async function probeColumns(){
     var r = await Promise.all([
       probeColumn('quotations', 'number'), probeColumn('quotations', 'created_by'),
       probeColumn('orders', 'created_by'), probeColumn('orders', 'delivered_at'),
-      probeColumn('quotation_allocations', 'created_by')
+      probeColumn('quotation_allocations', 'created_by'), probeColumn('products', 'pack_qty')
     ]);
-    COLS = { number: r[0], qBy: r[1], oBy: r[2], delivered: r[3], aBy: r[4] };
+    COLS = { number: r[0], qBy: r[1], oBy: r[2], delivered: r[3], aBy: r[4], pack: r[5] };
   }
   function quotationWhen(q){ return (q.createdAt ? fmtDateTime(q.createdAt) + ' · ' : '') + (q.createdBy ? 'por ' + escHtml(q.createdBy) + ' · ' : ''); }
   function quotationName(q){ return q.number ? 'Cotação #' + q.number : q.title; }
@@ -3000,41 +3097,14 @@ var QRCode;
     renderDashboard();
   });
 
-  function productCard(p){
-    var card = document.createElement('div');
-    card.className = 'product-card' + (p.selected ? ' selected' : '');
-    card.innerHTML =
-      '<label class="product-card-select">' +
-        '<input type="checkbox" ' + (p.selected ? 'checked' : '') + ' aria-label="Selecionar ' + p.name + '" data-id="' + p.id + '" data-action="toggle-select">' +
-      '</label>' +
-      '<div class="product-card-photo">' +
-        (p.imageUrl
-          ? '<img src="' + p.imageUrl + '" alt="' + p.name + '" style="width:100%; height:100%; object-fit:cover; border-radius:10px;">'
-          : '<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--green)" stroke-width="1.6"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>') +
-      '</div>' +
-      '<div class="product-card-name">' + p.name + '</div>' +
-      '<div class="product-card-price">' + money(p.price) + ' / ' + (p.unitLabel || 'un') + '.</div>' +
-      '<div class="product-card-qty">' +
-        '<div class="stepper">' +
-          '<button type="button" data-id="' + p.id + '" data-action="qty-dec" aria-label="Diminuir quantidade">–</button>' +
-          '<input type="text" inputmode="decimal" class="stepper-input" value="' + fmtQtyInput(p.qty) + '" data-id="' + p.id + '" data-action="qty-input" aria-label="Quantidade de ' + p.name + '">' +
-          '<button type="button" data-id="' + p.id + '" data-action="qty-inc" aria-label="Aumentar quantidade">+</button>' +
-        '</div>' +
-      '</div>';
-    return card;
-  }
-
   function renderListaPage(){
     var list = document.getElementById('estoque-list');
     var term = normalizeText(document.getElementById('estoque-search').value).trim();
     list.innerHTML = '';
     PRODUCTS.filter(function(p){ return !term || normalizeText(p.name).indexOf(term) > -1; })
       .forEach(function(p){ list.appendChild(productCard(p)); });
-
-    var items = selectedProducts();
-    document.getElementById('lista-count').textContent = items.length;
-    document.getElementById('lista-units').textContent = fmtQty(cartUnits());
-    document.getElementById('lista-total').textContent = money(cartTotal());
+    renderModeUI();
+    renderCart();
   }
   document.getElementById('estoque-search').addEventListener('input', renderListaPage);
 
@@ -4285,6 +4355,7 @@ var QRCode;
 
   document.addEventListener('keydown', function(e){
     if(e.key !== 'Escape') return;
+    if(document.getElementById('pack-overlay').style.display === 'flex'){ closePackDialog(); return; }
     if(document.getElementById('bulk-lista').style.display === 'block'){ closeBulkLista(); return; }
     if(document.getElementById('bulk-overlay').style.display === 'flex'){ closeBulkModal(); return; }
     if(document.getElementById('gen-overlay').style.display === 'flex'){ closeGenModal(); return; }
@@ -4404,13 +4475,152 @@ var QRCode;
   });
 
   // After an order is created the list starts clean again (nothing pre-selected, default quantities)
-  function resetListaSelection(){
-    PRODUCTS.forEach(function(prod){ prod.selected = false; prod.qty = prod.recQty; });
-    var hid = document.getElementById('direto-fornecedor');
-    if(hid){ hid.value = ''; renderDiretoEscolhido(); }
+  /* ---------- Lista de compras: modo (cotação / pedido direto), cartões, menu flutuante e embalagem ---------- */
+  var BOX_SVG = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--green)" stroke-width="1.8"><path d="M3 7l9-4 9 4v10l-9 4-9-4V7z"/><path d="M3 7l9 4 9-4"/><path d="M12 11v10"/></svg>';
+  var listaMode = 'cotacao';
+  var PACK_TYPES = ['Caixa', 'Fardo', 'Pacote', 'Saco'];
+  function isPackUnit(unit){ return PACK_TYPES.indexOf(unit) > -1; }
+  function directSupplierId(){ var h = document.getElementById('direto-fornecedor'); return h ? h.value : ''; }
+  function dpPrice(p){ return parseMoneyFlexible(p.dpText); }
+
+  // price typed on the card (pedido direto): starts as the last price paid to the chosen supplier, unless the buyer already typed one
+  function applyDirectPriceSuggestion(p){
+    if(p.dpEdited || !p.dbId) return;
+    var sid = directSupplierId();
+    var h = sid ? lastPriceFor(p.dbId, sid) : null;
+    p.dpText = h ? fmtPriceInput(h.price) : '';
+  }
+  function applyDirectSuggestionsToSelected(){ PRODUCTS.forEach(function(p){ if(p.selected) applyDirectPriceSuggestion(p); }); }
+  function directHintHtml(p){
+    var sid = directSupplierId();
+    if(!sid) return 'Escolha o fornecedor lá em cima para ver o último preço.';
+    var same = lastPriceFor(p.dbId, sid);
+    if(same) return 'Último com este fornecedor: ' + money(same.price) + (same.createdAt ? ' · ' + fmtDate(same.createdAt).slice(0, 5) : '');
+    var any = lastPriceFor(p.dbId);
+    if(any) return 'Sem compra com este fornecedor. Último pago: ' + money(any.price) + ' (' + escHtml(supplierName(any.supplierId)) + ') <button type="button" class="link-btn" data-action="dp-use" data-id="' + escHtml(p.id) + '">usar</button>';
+    return 'Sem histórico: informe o preço.';
+  }
+  function dpSubText(p){
+    var pr = dpPrice(p);
+    return pr > 0 ? fmtQty(p.qty) + ' × ' + money(pr) + ' = ' + money(round2(p.qty * pr)) : '';
   }
 
-  /* ---------- Fechar pedido direto (sem passar pela cotação) ---------- */
+  function updateCard(card, p){
+    card.classList.toggle('selected', !!p.selected);
+    var cb = card.querySelector('[data-action="toggle-select"]'); cb.checked = !!p.selected;
+    var qi = card.querySelector('[data-action="qty-input"]'); if(document.activeElement !== qi) qi.value = fmtQtyInput(p.qty);
+    card.querySelector('[data-pack-note]').textContent = p.packNote || '';
+    var row = card.querySelector('[data-dp-row]');
+    var show = listaMode === 'direto' && p.selected;
+    row.style.display = show ? 'block' : 'none';
+    if(show){
+      var inp = row.querySelector('[data-action="dp-input"]'); if(document.activeElement !== inp) inp.value = p.dpText || '';
+      row.querySelector('[data-dp-sub]').textContent = dpSubText(p);
+      row.querySelector('[data-dp-hint]').innerHTML = directHintHtml(p);
+    }
+  }
+  function refreshProduct(p){
+    var c = document.querySelector('#estoque-list [data-card="' + p.id + '"]');
+    if(c) updateCard(c, p);
+    renderCart();
+  }
+
+  function productCard(p){
+    var card = document.createElement('div');
+    card.className = 'product-card' + (p.selected ? ' selected' : '');
+    card.dataset.card = p.id;
+    var unit = UNIT_LABELS[p.unit] || 'un';
+    card.innerHTML =
+      '<label class="product-card-select">' +
+        '<input type="checkbox" ' + (p.selected ? 'checked' : '') + ' aria-label="Selecionar ' + escHtml(p.name) + '" data-id="' + escHtml(p.id) + '" data-action="toggle-select">' +
+      '</label>' +
+      '<div class="product-card-photo">' +
+        (p.imageUrl
+          ? '<img src="' + escHtml(p.imageUrl) + '" alt="' + escHtml(p.name) + '" style="width:100%; height:100%; object-fit:cover; border-radius:10px;">'
+          : '<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--green)" stroke-width="1.6"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>') +
+      '</div>' +
+      '<div class="product-card-name">' + escHtml(p.name) + '</div>' +
+      '<div class="product-card-price">' + money(p.price) + ' / ' + unit + '.</div>' +
+      '<div class="product-card-qty">' +
+        '<div class="stepper">' +
+          '<button type="button" data-id="' + escHtml(p.id) + '" data-action="qty-dec" aria-label="Diminuir quantidade">–</button>' +
+          '<input type="text" inputmode="decimal" class="stepper-input" value="' + fmtQtyInput(p.qty) + '" data-id="' + escHtml(p.id) + '" data-action="qty-input" aria-label="Quantidade de ' + escHtml(p.name) + '">' +
+          '<button type="button" data-id="' + escHtml(p.id) + '" data-action="qty-inc" aria-label="Aumentar quantidade">+</button>' +
+        '</div>' +
+        (isPackUnit(p.unit) ? '' : '<button type="button" class="pack-btn" data-action="pack-open" data-id="' + escHtml(p.id) + '" title="Contar por caixa, fardo, pacote..." aria-label="Contar por caixa ou fardo">' + BOX_SVG + '</button>') +
+      '</div>' +
+      '<div class="pack-note" data-pack-note></div>' +
+      '<div class="dp-row" data-dp-row style="display:none;">' +
+        '<label for="dp-' + escHtml(p.id) + '">Preço por ' + unit + ' (R$)</label>' +
+        '<input id="dp-' + escHtml(p.id) + '" type="text" inputmode="decimal" data-action="dp-input" data-id="' + escHtml(p.id) + '" placeholder="0,00">' +
+        '<div class="dp-sub" data-dp-sub></div>' +
+        '<div class="dp-hint" data-dp-hint></div>' +
+      '</div>';
+    updateCard(card, p);
+    return card;
+  }
+
+  /* ----- floating list of what is selected (right side on the computer, bottom bar on the phone) ----- */
+  function directTotal(){
+    return round2(selectedProducts().reduce(function(sum, p){ var pr = dpPrice(p); return sum + (pr > 0 ? p.qty * pr : 0); }, 0));
+  }
+  function renderCart(){
+    var cart = document.getElementById('lista-cart');
+    var sel = selectedProducts();
+    var direto = listaMode === 'direto';
+    cart.classList.toggle('has-items', sel.length > 0);
+    document.getElementById('page-lista').classList.toggle('has-cart', sel.length > 0);
+    document.getElementById('cart-title').textContent = direto ? 'Pedido direto' : 'Cotação';
+    document.getElementById('lista-count').textContent = sel.length;
+    document.getElementById('lista-units').textContent = fmtQty(cartUnits());
+    document.getElementById('cart-head-total').textContent = direto && sel.length ? money(directTotal()) : '';
+    document.getElementById('cart-empty').style.display = sel.length ? 'none' : 'block';
+    document.getElementById('cart-items').innerHTML = sel.map(function(p){
+      var unit = UNIT_LABELS[p.unit] || 'un';
+      var line = fmtQty(p.qty) + ' ' + unit;
+      if(direto){
+        var pr = dpPrice(p);
+        line += pr > 0 ? ' × ' + money(pr) + ' = <b>' + money(round2(p.qty * pr)) + '</b>' : ' · <span style="color:var(--red); font-weight:600;">sem preço</span>';
+      }
+      return '<div class="cart-row"><div style="min-width:0;"><div style="font-weight:600; word-break:break-word;">' + escHtml(p.name) + '</div>' +
+        '<div style="color:var(--ink-soft);">' + line + '</div></div>' +
+        '<button type="button" class="rm" data-action="cart-remove" data-id="' + escHtml(p.id) + '" aria-label="Tirar da lista">&times;</button></div>';
+    }).join('');
+    document.getElementById('cart-direto-extra').style.display = direto ? 'block' : 'none';
+    document.getElementById('cart-cotacao-extra').style.display = direto ? 'none' : 'flex';
+    document.getElementById('lista-criar-cotacao').style.display = direto ? 'none' : 'block';
+    var fechar = document.getElementById('lista-fechar-direto');
+    fechar.style.display = direto ? 'block' : 'none';
+    fechar.textContent = 'Fechar pedido' + (direto && sel.length ? ' · ' + money(directTotal()) : '');
+    document.getElementById('cart-total').textContent = money(directTotal());
+    document.getElementById('lista-total').textContent = money(cartTotal());
+    document.getElementById('cart-help').textContent = direto
+      ? 'O pedido sai na hora, sem cotação, com os preços que você colocou nos produtos.'
+      : 'Cria a cotação e já abre a mensagem pronta para enviar por WhatsApp. Os preços e fornecedores você lança depois, na aba Cotação.';
+    var entrega = document.getElementById('lista-entrega');
+    if(!entrega.value){ var d = new Date(); d.setDate(d.getDate() + 2); entrega.value = dateInputValue(d); }
+  }
+
+  function renderModeUI(){
+    buyerRoot.querySelectorAll('[data-lista-mode]').forEach(function(b){ b.classList.toggle('active', b.dataset.listaMode === listaMode); });
+    document.getElementById('lista-direto-bar').style.display = listaMode === 'direto' ? 'block' : 'none';
+    renderDiretoEscolhido();
+  }
+  function setListaMode(mode){
+    if(mode === listaMode) return;
+    listaMode = mode;
+    if(mode === 'direto') applyDirectSuggestionsToSelected();
+    renderListaPage();
+  }
+
+  function resetListaSelection(){
+    PRODUCTS.forEach(function(prod){ prod.selected = false; prod.qty = prod.recQty; prod.dpText = ''; prod.dpEdited = false; prod.packNote = ''; });
+    var hid = document.getElementById('direto-fornecedor');
+    if(hid){ hid.value = ''; renderDiretoEscolhido(); }
+    var entrega = document.getElementById('lista-entrega'); if(entrega) entrega.value = '';
+  }
+
+  /* ----- supplier of the direct order ----- */
   function renderDiretoEscolhido(){
     var hidden = document.getElementById('direto-fornecedor');
     var chosen = SUPPLIERS.filter(function(x){ return x.id === hidden.value; })[0];
@@ -4440,6 +4650,14 @@ var QRCode;
   }
   function openDiretoLista(){ renderDiretoLista(); document.getElementById('direto-lista').style.display = 'block'; }
   function closeDiretoLista(){ document.getElementById('direto-lista').style.display = 'none'; }
+  function onDirectSupplierChanged(){
+    PRODUCTS.forEach(function(p){ if(p.selected && !p.dpEdited) applyDirectPriceSuggestion(p); });
+    document.querySelectorAll('#estoque-list [data-card]').forEach(function(card){
+      var p = PRODUCTS.filter(function(x){ return x.id === card.dataset.card; })[0];
+      if(p) updateCard(card, p);
+    });
+    renderCart();
+  }
   document.getElementById('direto-busca').addEventListener('focus', openDiretoLista);
   document.getElementById('direto-busca').addEventListener('click', openDiretoLista);
   document.getElementById('direto-busca').addEventListener('input', openDiretoLista);
@@ -4447,6 +4665,7 @@ var QRCode;
   document.getElementById('direto-trocar').addEventListener('click', function(){
     document.getElementById('direto-fornecedor').value = '';
     renderDiretoEscolhido();
+    onDirectSupplierChanged();
     var box = document.getElementById('direto-busca'); box.value = ''; box.focus(); openDiretoLista();
   });
   buyerRoot.addEventListener('click', function(e){
@@ -4454,79 +4673,143 @@ var QRCode;
     if(pick){
       document.getElementById('direto-fornecedor').value = pick.dataset.id;
       document.getElementById('direto-busca').value = '';
-      closeDiretoLista(); renderDiretoEscolhido();
+      closeDiretoLista(); renderDiretoEscolhido(); onDirectSupplierChanged();
       return;
     }
     if(!e.target.closest('#direto-picker')) closeDiretoLista();
   });
 
-  document.getElementById('lista-fechar-direto').addEventListener('click', function(){
+  /* ----- creating the direct order ----- */
+  async function createDirectOrder(supplier, finalItems, deliveryStr, total){
+    var code = nextOrderCode();
+    var orderDateStr = new Date().toISOString().slice(0, 10);
+    var orderIns = check(await db.from('orders').insert(Object.assign({
+      code: code, supplier_id: supplier.id, status: 'enviado', order_date: orderDateStr, delivery_date: deliveryStr, total: total
+    }, COLS.oBy ? { created_by: currentBuyer.nome } : {})).select('id').single(), 'Criar pedido direto');
+    if(!orderIns.data) throw new Error('O pedido não retornou id.');
+    var orderId = orderIns.data.id;
+    check(await db.from('order_items').insert(finalItems.map(function(it){
+      return { order_id: orderId, product_id: it.productId, qty: it.qty, price: it.price, receive_status: 'pendente' };
+    })), 'Salvar itens do pedido direto');
+    var newOrder = { id: orderId, code: code, supplier_id: supplier.id, supplier_name: supplier.name, status: 'enviado', order_date: orderDateStr,
+      delivery_date: deliveryStr, total: total, confirmed: false, receiver_note: null, created_by: currentBuyer.nome || null };
+    ORDERS.unshift(newOrder);
+    // what was paid also goes to the price history (it is a real purchase), without belonging to any quotation
+    if(allocReady){
+      try{
+        var hist = check(await db.from('quotation_allocations').insert(finalItems.map(function(it){
+          return Object.assign({ quotation_id: null, quotation_item_id: null, product_id: it.productId, product_name: it.name, supplier_id: supplier.id, qty: it.qty, price: it.price, order_id: orderId },
+            COLS.aBy ? { created_by: currentBuyer.nome } : {});
+        })).select('id,created_at,product_id'), 'Guardar no histórico de preços');
+        var byProduct = {};
+        (hist.data || []).forEach(function(r){ byProduct[r.product_id] = r; });
+        finalItems.forEach(function(it){
+          var saved = byProduct[it.productId];
+          HISTORY.unshift({ id: saved ? saved.id : null, quotationId: null, productId: it.productId, productName: it.name, supplierId: supplier.id, qty: it.qty, price: it.price,
+            orderId: orderId, createdAt: saved && saved.created_at ? new Date(saved.created_at) : new Date(), createdBy: currentBuyer.nome || null });
+        });
+        applyLastPrices();
+      } catch(err){
+        console.error('O pedido foi criado, mas o histórico de preços não foi salvo', err);
+        showBuyerToast('Pedido criado, mas não consegui guardar os preços no histórico.');
+      }
+    }
+    resetListaSelection();
+    await openOrder(newOrder);
+    goTo('pedidos');
+    showBuyerToast('Pedido ' + code + ' gerado para ' + supplier.name + '.');
+  }
+
+  document.getElementById('lista-fechar-direto').addEventListener('click', async function(){
     var items = selectedProducts().filter(function(p){ return p.dbId; });
     if(items.length === 0){ alert('Marque ao menos um produto antes de fechar o pedido.'); return; }
+    var supplier = SUPPLIERS.filter(function(x){ return x.id === directSupplierId(); })[0];
+    if(!supplier){ alert('Escolha o fornecedor deste pedido (no topo da página).'); document.getElementById('direto-busca').focus(); return; }
     var noQty = items.filter(function(p){ return !(p.qty > 0); });
     if(noQty.length){ alert('Confira a quantidade de: ' + noQty.map(function(p){ return p.name; }).join(', ') + '.'); return; }
-    var supplierId = document.getElementById('direto-fornecedor').value;
-    var supplier = SUPPLIERS.filter(function(x){ return x.id === supplierId; })[0];
-    if(!supplier){ alert('Escolha o fornecedor deste pedido.'); return; }
+    var noPrice = items.filter(function(p){ return !(dpPrice(p) > 0); });
+    if(noPrice.length){ alert('Coloque o preço de: ' + noPrice.map(function(p){ return p.name; }).join(', ') + '.'); return; }
+    var delivery = document.getElementById('lista-entrega').value;
+    if(!delivery){ alert('Informe a data de entrega prevista.'); return; }
     if(!dbReady){ alert('Sem conexão com o banco de dados agora. O pedido não foi salvo.'); return; }
+    var finalItems = items.map(function(p){ return { name: p.name, unit: p.unit, productId: p.dbId, qty: p.qty, price: dpPrice(p) }; });
+    var total = round2(finalItems.reduce(function(sum, it){ return sum + it.qty * it.price; }, 0));
+    if(!confirm('Fechar o pedido para ' + supplier.name + '?\n\n' + items.length + (items.length === 1 ? ' item' : ' itens') + ' · ' + money(total) + '\nEntrega prevista: ' + fmtDateStr(delivery))) return;
+    var btn = this, label = btn.textContent;
+    btn.disabled = true; btn.textContent = 'Gerando pedido...';
+    try{
+      await createDirectOrder(supplier, finalItems, delivery, total);
+    } catch(err){
+      console.error('Erro ao fechar pedido direto', err);
+      alert(friendlyDbError(err, 'Não foi possível fechar o pedido.'));
+    } finally {
+      btn.disabled = false; btn.textContent = label;
+    }
+  });
 
-    // price suggestion: the last price paid to THIS supplier; otherwise the last one paid to anyone
-    var reviewItems = items.map(function(p){
-      var same = lastPriceFor(p.dbId, supplierId), any = same ? null : lastPriceFor(p.dbId);
-      var price = same ? same.price : (any ? any.price : (Number(p.price) || 0));
-      var note = '';
-      if(!same) note = any
-        ? 'Ainda não há compra deste produto com este fornecedor. Coloquei o último preço pago (' + money(any.price) + ' · ' + supplierName(any.supplierId) + '). Confira.'
-        : 'Ainda não há histórico de preço deste produto. Informe o valor combinado.';
-      return { name: p.name, unit: p.unit, productId: p.dbId, qty: p.qty, price: price, missingPrice: !same, refNote: note };
-    });
-    var dDelivery = new Date(); dDelivery.setDate(dDelivery.getDate() + 2);
-    openOrderReview({
-      title: 'Fechar pedido direto',
-      subtitle: 'Fornecedor: ' + supplier.name + ' — confira as quantidades e os valores. O pedido sai na hora, sem cotação.',
-      items: reviewItems,
-      deliveryDate: dateInputValue(dDelivery),
-      confirmLabel: 'Confirmar e gerar pedido',
-      onConfirm: async function(finalItems, deliveryStr, total){
-        var code = nextOrderCode();
-        var orderDateStr = new Date().toISOString().slice(0, 10);
-        var orderIns = check(await db.from('orders').insert(Object.assign({
-          code: code, supplier_id: supplierId, status: 'enviado', order_date: orderDateStr, delivery_date: deliveryStr, total: total
-        }, COLS.oBy ? { created_by: currentBuyer.nome } : {})).select('id').single(), 'Criar pedido direto');
-        if(!orderIns.data) throw new Error('O pedido não retornou id.');
-        var orderId = orderIns.data.id;
-        check(await db.from('order_items').insert(finalItems.map(function(it){
-          return { order_id: orderId, product_id: it.productId, qty: it.qty, price: it.price, receive_status: 'pendente' };
-        })), 'Salvar itens do pedido direto');
-        var newOrder = { id: orderId, code: code, supplier_id: supplierId, supplier_name: supplier.name, status: 'enviado', order_date: orderDateStr,
-          delivery_date: deliveryStr, total: total, confirmed: false, receiver_note: null, created_by: currentBuyer.nome || null };
-        ORDERS.unshift(newOrder);
-        // what was paid also goes to the price history (it is a real purchase), without belonging to any quotation
-        if(allocReady){
-          try{
-            var hist = check(await db.from('quotation_allocations').insert(finalItems.map(function(it){
-              return Object.assign({ quotation_id: null, quotation_item_id: null, product_id: it.productId, product_name: it.name, supplier_id: supplierId, qty: it.qty, price: it.price, order_id: orderId },
-                COLS.aBy ? { created_by: currentBuyer.nome } : {});
-            })).select('id,created_at,product_id'), 'Guardar no histórico de preços');
-            var byProduct = {};
-            (hist.data || []).forEach(function(r){ byProduct[r.product_id] = r; });
-            finalItems.forEach(function(it){
-              var saved = byProduct[it.productId];
-              HISTORY.unshift({ id: saved ? saved.id : null, quotationId: null, productId: it.productId, productName: it.name, supplierId: supplierId, qty: it.qty, price: it.price,
-                orderId: orderId, createdAt: saved && saved.created_at ? new Date(saved.created_at) : new Date(), createdBy: currentBuyer.nome || null });
-            });
-            applyLastPrices();
-          } catch(err){
-            console.error('O pedido foi criado, mas o histórico de preços não foi salvo', err);
-            showBuyerToast('Pedido criado, mas não consegui guardar os preços no histórico.');
-          }
-        }
-        resetListaSelection();
-        await openOrder(newOrder);
-        goTo('pedidos');
-        showBuyerToast('Pedido ' + code + ' gerado para ' + supplier.name + '.');
-      }
-    });
+  /* ----- counting by box / bundle / pack: the app converts to units, kilos or liters ----- */
+  var packCtx = null;
+  function packPlural(type, n){ var w = type.toLowerCase(); return Math.abs(n - 1) < 1e-9 ? w : w + 's'; }
+  function packSaved(p){
+    if(p.packType && p.packQty) return { type: p.packType, per: p.packQty };
+    try{
+      var raw = localStorage.getItem('paulus_pack_' + p.dbId);
+      if(raw){ var o = JSON.parse(raw); if(o && o.per) return { type: o.type || 'Caixa', per: Number(o.per) }; }
+    } catch(e){ /* ignore */ }
+    return null;
+  }
+  async function savePack(p){
+    try{ localStorage.setItem('paulus_pack_' + p.dbId, JSON.stringify({ type: p.packType, per: p.packQty })); } catch(e){ /* ignore */ }
+    if(COLS.pack && dbReady && p.dbId){
+      try{ await db.from('products').update({ pack_type: p.packType, pack_qty: p.packQty }).eq('id', p.dbId); } catch(e){ console.error('Não foi possível guardar a embalagem', e); }
+    }
+  }
+  function updatePackResult(){
+    if(!packCtx) return;
+    var p = packCtx.p, unit = UNIT_LABELS[p.unit] || 'un';
+    var type = document.getElementById('pack-type').value;
+    var n = parseQtyInput(document.getElementById('pack-count').value), per = parseQtyInput(document.getElementById('pack-per').value);
+    document.getElementById('pack-per-label').textContent = 'Cada ' + type.toLowerCase() + ' vem com quantos ' + unit + '?';
+    var total = (n > 0 && per > 0) ? round3(n * per) : 0;
+    document.getElementById('pack-result').textContent = total > 0
+      ? fmtQty(n) + ' ' + packPlural(type, n) + ' × ' + fmtQty(per) + ' ' + unit + ' = ' + fmtQty(total) + ' ' + unit
+      : 'Informe quanto vem em cada ' + type.toLowerCase();
+    var apply = document.getElementById('pack-apply');
+    apply.disabled = !(total > 0);
+    apply.textContent = total > 0 ? 'Usar ' + fmtQty(total) + ' ' + unit + ' na lista' : 'Usar na lista';
+  }
+  function openPackDialog(p){
+    var saved = packSaved(p);
+    packCtx = { p: p };
+    document.getElementById('pack-title').textContent = p.name;
+    document.getElementById('pack-sub').textContent = 'Este produto é contado em ' + (UNIT_LABELS[p.unit] || 'un') + '. Diga quantas embalagens você quer e o app faz a conta.';
+    document.getElementById('pack-count').value = '1';
+    document.getElementById('pack-type').value = saved ? saved.type : 'Caixa';
+    document.getElementById('pack-per').value = saved ? fmtQtyInput(saved.per) : '';
+    document.getElementById('pack-remember').checked = true;
+    updatePackResult();
+    document.getElementById('pack-overlay').style.display = 'flex';
+    (saved ? document.getElementById('pack-count') : document.getElementById('pack-per')).focus();
+  }
+  function closePackDialog(){ packCtx = null; document.getElementById('pack-overlay').style.display = 'none'; }
+  ['pack-count', 'pack-per'].forEach(function(id){ document.getElementById(id).addEventListener('input', updatePackResult); });
+  document.getElementById('pack-type').addEventListener('change', updatePackResult);
+  document.getElementById('pack-close').addEventListener('click', closePackDialog);
+  document.getElementById('pack-cancel').addEventListener('click', closePackDialog);
+  document.getElementById('pack-overlay').addEventListener('click', function(e){ if(e.target === this) closePackDialog(); });
+  document.getElementById('pack-apply').addEventListener('click', function(){
+    if(!packCtx) return;
+    var p = packCtx.p, unit = UNIT_LABELS[p.unit] || 'un';
+    var type = document.getElementById('pack-type').value;
+    var n = parseQtyInput(document.getElementById('pack-count').value), per = parseQtyInput(document.getElementById('pack-per').value);
+    if(!(n > 0 && per > 0)) return;
+    p.qty = round3(n * per);
+    p.selected = true;
+    p.packNote = fmtQty(n) + ' ' + packPlural(type, n) + ' × ' + fmtQty(per) + ' ' + unit;
+    if(document.getElementById('pack-remember').checked){ p.packType = type; p.packQty = per; savePack(p); }
+    applyDirectPriceSuggestion(p);
+    closePackDialog();
+    refreshProduct(p);
   });
 
   async function loadOrderItems(orderId){
@@ -5081,29 +5364,55 @@ var QRCode;
     renderResumoMes();
   });
 
-  /* ---------- Event delegation for product actions ---------- */
+  /* ---------- Lista de compras: cliques e digitação (os cartões se atualizam no lugar, sem redesenhar a lista toda) ---------- */
   buyerRoot.addEventListener('click', function(e){
+    var modeBtn = e.target.closest('[data-lista-mode]');
+    if(modeBtn){ setListaMode(modeBtn.dataset.listaMode); return; }
+    if(e.target.closest('#cart-toggle')){
+      if(window.matchMedia && window.matchMedia('(max-width: 880px)').matches) document.getElementById('lista-cart').classList.toggle('collapsed');
+      return;
+    }
     var btn = e.target.closest('[data-action]');
     if(!btn) return;
-    var id = btn.dataset.id;
-    var p = PRODUCTS.filter(function(x){ return x.id === id; })[0];
+    var p = PRODUCTS.filter(function(x){ return x.id === btn.dataset.id; })[0];
     if(!p) return;
-    if(btn.dataset.action === 'qty-inc'){ p.qty = Math.round((p.qty + 1) * 1000) / 1000; renderPage(state.page); }
-    if(btn.dataset.action === 'qty-dec'){ p.qty = Math.max(0, Math.round((p.qty - 1) * 1000) / 1000); renderPage(state.page); }
+    var a = btn.dataset.action;
+    if(a === 'qty-inc'){ p.qty = Math.round((p.qty + 1) * 1000) / 1000; p.packNote = ''; refreshProduct(p); }
+    else if(a === 'qty-dec'){ p.qty = Math.max(0, Math.round((p.qty - 1) * 1000) / 1000); p.packNote = ''; refreshProduct(p); }
+    else if(a === 'pack-open'){ openPackDialog(p); }
+    else if(a === 'dp-use'){ var any = lastPriceFor(p.dbId); if(any){ p.dpText = fmtPriceInput(any.price); p.dpEdited = true; refreshProduct(p); } }
+    else if(a === 'cart-remove'){ p.selected = false; refreshProduct(p); }
   });
 
   buyerRoot.addEventListener('change', function(e){
     var el = e.target.closest('[data-action]');
     if(!el) return;
-    var id = el.dataset.id;
-    var p = PRODUCTS.filter(function(x){ return x.id === id; })[0];
+    var p = PRODUCTS.filter(function(x){ return x.id === el.dataset.id; })[0];
     if(!p) return;
-    if(el.dataset.action === 'toggle-select'){ p.selected = el.checked; renderPage(state.page); }
-    if(el.dataset.action === 'qty-input'){
+    var a = el.dataset.action;
+    if(a === 'toggle-select'){ p.selected = el.checked; if(p.selected) applyDirectPriceSuggestion(p); refreshProduct(p); }
+    else if(a === 'qty-input'){
       var qn = parseQtyInput(el.value);
-      if(qn !== null) p.qty = qn;   // text that is not a number: go back to the previous quantity
-      renderPage(state.page);
+      if(qn !== null){ p.qty = qn; p.packNote = ''; }   // text that is not a number: go back to the previous quantity
+      el.value = fmtQtyInput(p.qty);
+      refreshProduct(p);
     }
+    else if(a === 'dp-input'){
+      p.dpText = el.value; p.dpEdited = true;
+      var pr = parseMoneyFlexible(el.value);
+      if(pr !== null && pr > 0){ p.dpText = fmtPriceInput(pr); el.value = p.dpText; }
+      refreshProduct(p);
+    }
+  });
+  // while typing a price: only the totals change (the field itself is never redrawn under the cursor)
+  buyerRoot.addEventListener('input', function(e){
+    var el = e.target.closest('[data-action="dp-input"]');
+    if(!el) return;
+    var p = PRODUCTS.filter(function(x){ return x.id === el.dataset.id; })[0];
+    if(!p) return;
+    p.dpText = el.value; p.dpEdited = true;
+    var sub = el.closest('[data-dp-row]').querySelector('[data-dp-sub]'); if(sub) sub.textContent = dpSubText(p);
+    renderCart();
   });
 
   /* ---------- Login ---------- */
@@ -5137,7 +5446,7 @@ var QRCode;
   /* ---------- Atualização automática: dois compradores podem trabalhar ao mesmo tempo ---------- */
   var syncBusy = false, syncTick = 0;
   function anyDialogOpen(){
-    var flexOpen = ['bulk-overlay', 'gen-overlay', 'share-overlay', 'review-overlay'].some(function(id){ var el = document.getElementById(id); return el && el.style.display === 'flex'; });
+    var flexOpen = ['bulk-overlay', 'gen-overlay', 'share-overlay', 'review-overlay', 'pack-overlay'].some(function(id){ var el = document.getElementById(id); return el && el.style.display === 'flex'; });
     var blockOpen = ['fornecedor-form', 'produto-form', 'pedido-edit-form'].some(function(id){ var el = document.getElementById(id); return el && el.style.display === 'block'; });
     return flexOpen || blockOpen;
   }
