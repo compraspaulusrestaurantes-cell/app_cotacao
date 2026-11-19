@@ -1250,12 +1250,17 @@ html, body {
           </div>
         </div>
 
-        <div class="search">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--ink-faint)" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
-          <label for="estoque-search" class="sr-only">Buscar produto</label>
-          <input id="estoque-search" type="text" placeholder="Buscar produto">
+        <div style="display:flex; gap:12px; flex-wrap:wrap; align-items:center; margin-bottom:16px;">
+          <div class="search" style="margin-bottom:0; flex:1 1 240px;">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--ink-faint)" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+            <label for="estoque-search" class="sr-only">Buscar produto</label>
+            <input id="estoque-search" type="text" placeholder="Buscar produto">
+          </div>
+          <div>
+            <label for="lista-cat-filter" class="sr-only">Filtrar por categoria</label>
+            <select id="lista-cat-filter"><option value="">Todas as categorias</option></select>
+          </div>
         </div>
-        <div class="chip-row" id="lista-categorias" aria-label="Filtrar por categoria"></div>
         <div class="two-col">
           <div class="primary">
             <div class="product-grid" id="estoque-list"></div>
@@ -2330,7 +2335,7 @@ var QRCode;
   var SUPABASE_URL = 'https://dqghwfrmodulnevzpgbw.supabase.co';
   var SUPABASE_KEY = 'sb_publishable_nNk6sJNE-7NzraHnjXliLQ_nRfeWtZb';
   var db = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-  var APP_VERSION = '2026-11-19 · versão 9';
+  var APP_VERSION = '2026-11-19 · versão 10';
   var APP_BASE_URL = 'https://compraspaulusrestaurantes-cell.github.io/app_cotacao/';
   var DEFAULT_SUPPLIER_NAME = 'Distribuidora Bom Preço';
   var SUPPLIERS_SEED = [
@@ -3162,28 +3167,37 @@ var QRCode;
     renderDashboard();
   });
 
-  var listaCategory = '';   // '' = all categories
-  function renderCategoryChips(term){
-    var counts = {}, total = 0;
+  var listaCategory = '';   // '' = all categories; otherwise the normalized name (so "Mercearia" and "MERCEARIA" are the same group)
+  function catKey(c){ return normalizeText(c || 'Sem categoria').trim(); }
+  function renderCategorySelect(term){
+    var counts = {}, spellings = {}, total = 0;
     PRODUCTS.forEach(function(p){
+      var raw = p.category || 'Sem categoria', k = catKey(raw);
+      (spellings[k] = spellings[k] || {})[raw] = (spellings[k][raw] || 0) + 1;   // spelling: from all products
       if(term && normalizeText(p.name).indexOf(term) === -1) return;
-      var c = p.category || 'Sem categoria';
-      counts[c] = (counts[c] || 0) + 1; total++;
+      counts[k] = (counts[k] || 0) + 1; total++;                                  // count: only what matches the search
     });
-    var cats = Object.keys(counts).sort(function(a, b){ return a.localeCompare(b, 'pt-BR'); });
-    if(listaCategory && cats.indexOf(listaCategory) === -1) cats.push(listaCategory);   // the chosen one stays visible even with 0 results
-    function chip(value, label, n){
-      return '<button type="button" class="chip' + (listaCategory === value ? ' active' : '') + '" data-lista-cat="' + escHtml(value) + '">' + escHtml(label) + ' <span class="chip-n">' + n + '</span></button>';
+    function label(k){
+      var sp = spellings[k]; if(!sp) return k;
+      return Object.keys(sp).sort(function(x, y){ return (sp[y] - sp[x]) || x.localeCompare(y, 'pt-BR'); })[0];   // the spelling used the most
     }
-    document.getElementById('lista-categorias').innerHTML = chip('', 'Todas', total) + cats.map(function(c){ return chip(c, c, counts[c] || 0); }).join('');
+    var keys = Object.keys(counts);
+    if(listaCategory && keys.indexOf(listaCategory) === -1) keys.push(listaCategory);   // the chosen one stays in the list even with 0 results
+    keys.sort(function(x, y){ return label(x).localeCompare(label(y), 'pt-BR'); });
+    var sel = document.getElementById('lista-cat-filter');
+    sel.innerHTML = '<option value="">Todas as categorias (' + total + ')</option>' + keys.map(function(k){
+      return '<option value="' + escHtml(k) + '">' + escHtml(label(k)) + ' (' + (counts[k] || 0) + ')</option>';
+    }).join('');
+    sel.value = listaCategory;
   }
+  document.getElementById('lista-cat-filter').addEventListener('change', function(){ listaCategory = this.value; renderListaPage(); });
   function renderListaPage(){
     var list = document.getElementById('estoque-list');
     var term = normalizeText(document.getElementById('estoque-search').value).trim();
-    renderCategoryChips(term);
+    renderCategorySelect(term);
     list.innerHTML = '';
     var shown = PRODUCTS.filter(function(p){
-      return (!term || normalizeText(p.name).indexOf(term) > -1) && (!listaCategory || (p.category || 'Sem categoria') === listaCategory);
+      return (!term || normalizeText(p.name).indexOf(term) > -1) && (!listaCategory || catKey(p.category) === listaCategory);
     });
     shown.forEach(function(p){ list.appendChild(productCard(p)); });
     if(shown.length === 0) list.innerHTML = '<div style="grid-column:1/-1; text-align:center; color:var(--ink-soft); font-size:13px; padding:24px 0;">Nenhum produto encontrado' + (listaCategory ? ' nesta categoria' : '') + '.</div>';
@@ -3404,7 +3418,7 @@ var QRCode;
   function allCategoryNames(){
     return uniqueSorted([].concat.apply([], SUPPLIERS.map(function(s){ return s.categories || []; })).concat(PRODUCTS.map(function(p){ return p.category; }).filter(Boolean)));
   }
-  ['fornecedor-cat-filter', 'produto-cat-filter', 'hist-fornecedor', 'cot-owner-filter', 'dash-month'].forEach(function(id){ enhanceSelect(document.getElementById(id)); });
+  ['fornecedor-cat-filter', 'produto-cat-filter', 'hist-fornecedor', 'cot-owner-filter', 'dash-month', 'lista-cat-filter'].forEach(function(id){ enhanceSelect(document.getElementById(id)); });
   enhanceSuggestInput(document.getElementById('pf-categoria'), function(){ return uniqueSorted(PRODUCTS.map(function(p){ return p.category; }).filter(Boolean)); });
   var ffCats = enhanceChipInput(document.getElementById('ff-categorias'), allCategoryNames, 'Escolha na lista ou digite e aperte Enter');
 
@@ -5688,8 +5702,6 @@ var QRCode;
   buyerRoot.addEventListener('click', function(e){
     var modeBtn = e.target.closest('[data-lista-mode]');
     if(modeBtn){ setListaMode(modeBtn.dataset.listaMode); return; }
-    var catBtn = e.target.closest('[data-lista-cat]');
-    if(catBtn){ listaCategory = catBtn.dataset.listaCat; renderListaPage(); return; }
     if(e.target.closest('#cart-toggle')){
       if(window.matchMedia && window.matchMedia('(max-width: 880px)').matches) document.getElementById('lista-cart').classList.toggle('collapsed');
       return;
