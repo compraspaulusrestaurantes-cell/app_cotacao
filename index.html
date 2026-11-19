@@ -2225,11 +2225,26 @@ var QRCode;
       })).select('id,name,category,unit,image_url'), 'Criar produtos iniciais');
       rows = insertRes.data || [];
     }
-    var byName = {};
-    rows.forEach(function(r){ byName[r.name] = r; });
+    // Each product on screen is tied to its database row by the row's ID, never by name:
+    // two different products may have exactly the same name (e.g. "PAO FRANCES" sold by kg and by unit).
+    var byId = {}, claimed = {};
+    rows.forEach(function(r){ byId[r.id] = r; });
+    function applyRow(p, row){
+      p.dbId = row.id; p.name = row.name; if(row.category) p.category = row.category;
+      p.unit = row.unit || p.unit; p.unitLabel = UNIT_LABELS[p.unit] || 'un'; p.imageUrl = row.image_url || null;
+      claimed[row.id] = true;
+    }
     PRODUCTS.forEach(function(p){
-      var row = byName[p.name];
-      if(row){ p.dbId = row.id; if(row.unit) p.unit = row.unit; p.unitLabel = UNIT_LABELS[p.unit] || 'un'; p.imageUrl = row.image_url || null; }
+      var row = p.dbId ? byId[p.dbId] : null;
+      if(row) applyRow(p, row); else p.dbId = null;      // no row any more (deleted by someone else)
+    });
+    // seed/demo entries that don't know their row yet: take the first row with that name that nobody else owns
+    var freeByName = {};
+    rows.forEach(function(r){ if(!claimed[r.id]) (freeByName[r.name] = freeByName[r.name] || []).push(r); });
+    PRODUCTS.forEach(function(p){
+      if(p.dbId) return;
+      var list = freeByName[p.name];
+      if(list && list.length) applyRow(p, list.shift());
     });
     if(rows.length > 0){
       // Drop demo/seed products that don't exist in the real database anymore
@@ -3426,6 +3441,7 @@ var QRCode;
   async function mergeProducts(keep, others){
     for(var i = 0; i < others.length; i++){
       var o = others[i];
+      if(o.dbId === keep.dbId){ PRODUCTS = PRODUCTS.filter(function(p){ return p.id !== o.id; }); continue; }   // same database row listed twice: nothing to move
       check(await db.from('order_items').update({ product_id: keep.dbId }).eq('product_id', o.dbId), 'Juntar produtos (itens de pedido)');
       check(await db.from('quotation_items').update({ product_id: keep.dbId, product_name: keep.name }).eq('product_id', o.dbId), 'Juntar produtos (itens de cotação)');
       check(await db.from('supplier_products').update({ product_id: keep.dbId }).eq('product_id', o.dbId), 'Juntar produtos (preços)');
@@ -3495,6 +3511,7 @@ var QRCode;
         console.error('Erro ao juntar', err);
         alert(friendlyDbError(err, 'Não foi possível juntar tudo. Nada foi perdido: pode tentar de novo.'));
         act.disabled = false;
+        try{ await refreshCatalogKeepingSelection(); } catch(e2){ console.error(e2); }
         renderCad();
         return;
       }
