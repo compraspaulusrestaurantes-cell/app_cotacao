@@ -1074,14 +1074,37 @@ html, body {
           </div>
         </div>
 
+                <div style="display:flex; gap:16px; flex-wrap:wrap; margin-bottom:28px; align-items:stretch;">
+          <div class="card" style="flex:1 1 440px;">
+            <h2 style="font-size:16px; margin-bottom:14px;">Gasto por categoria</h2>
+            <div id="dash-pizza"></div>
+          </div>
+          <div class="card" style="flex:1 1 380px;">
+            <h2 style="font-size:16px; margin-bottom:14px;">Fornecedores que mais compramos</h2>
+            <div id="dash-fornecedores-rank"></div>
+          </div>
+        </div>
+
         <h2 style="font-size:18px; margin-bottom:14px;">Mais comprados</h2>
         <div class="grid-products" id="dash-mais-comprados" style="margin-bottom:28px;"></div>
 
-        <h2 style="font-size:18px; margin-bottom:14px;">Cotações abertas agora</h2>
-        <div class="list" id="dash-cotacoes-abertas-list" style="margin-bottom:28px;"></div>
-
-        <h2 style="font-size:18px; margin-bottom:14px;">Cotações encerradas</h2>
-        <div class="list" id="dash-cotacoes-encerradas-list"></div>
+        <h2 style="font-size:18px; margin-bottom:14px;">Evolução de preço por produto</h2>
+        <div class="card">
+          <div class="field" style="max-width:460px; margin-bottom:14px;">
+            <label for="dash-prod-busca">Produto</label>
+            <div id="dash-prod-picker" style="position:relative;">
+              <input type="hidden" id="dash-prod-id" value="">
+              <div id="dash-prod-busca-wrap"><input id="dash-prod-busca" type="text" placeholder="Buscar produto que já tem preço lançado" autocomplete="off"></div>
+              <div id="dash-prod-escolhido" style="display:none; align-items:center; gap:10px; border:1px solid var(--green); background:var(--green-tint); border-radius:10px; padding:10px 12px;">
+                <div id="dash-prod-escolhido-nome" style="flex:1; font-size:13px; font-weight:600; color:var(--green-dark);"></div>
+                <button type="button" id="dash-prod-trocar" style="background:none; border:none; color:var(--green); font-size:12px; text-decoration:underline; cursor:pointer;">Trocar</button>
+              </div>
+              <div id="dash-prod-lista" style="display:none; position:absolute; left:0; right:0; top:100%; margin-top:6px; max-height:300px; overflow-y:auto; background:#fff; border:1px solid var(--line); border-radius:12px; box-shadow:0 14px 32px rgba(23,50,42,.18); z-index:30;"></div>
+            </div>
+          </div>
+          <div id="dash-preco-resumo"></div>
+          <div id="dash-preco-grafico"></div>
+        </div>
       </section>
 
       <!-- ================= ESTOQUE / LISTA PARA COMPRAR ================= -->
@@ -2590,12 +2613,13 @@ var QRCode;
     if(!dbReady || ids.length === 0){
       fillPartialStats({ pedidos:0, pedidosSub:'de ' + delivered.length + ' entregue(s) no período', pct:'0%', pctSub:'nenhum pedido parcial', unidades:0, valor:money(0) });
       renderMaisComprados([]);
+      renderCategoryPie([]);
       return;
     }
     fillPartialStats({ pedidos:'…', pedidosSub:'carregando', pct:'…', pctSub:'carregando', unidades:'…', valor:'…' });
     var items = [];
     try{
-      var res = check(await db.from('order_items').select('id,order_id,product_id,qty,price,receive_status,received_qty,products(name)').in('order_id', ids), 'Ler itens dos pedidos');
+      var res = check(await db.from('order_items').select('id,order_id,product_id,qty,price,receive_status,received_qty,products(name,unit,category)').in('order_id', ids), 'Ler itens dos pedidos');
       items = res.data || [];
     } catch(err){
       console.error('Erro ao carregar números do dashboard', err);
@@ -2625,7 +2649,210 @@ var QRCode;
       valor: money(missingValue)
     });
     renderMaisComprados(items);
+    renderCategoryPie(items);
   }
+
+  /* ---------- Dashboard: gráficos (SVG desenhado à mão, sem bibliotecas) ---------- */
+  var CHART_COLORS = ['#146C4E', '#C97A2B', '#2F8F9D', '#8E5BA8', '#C43D3D', '#7A9E3D', '#D4A72C', '#5B6A62'];
+  var dashProductId = '';
+
+  function pctText(v){ return v.toLocaleString('pt-BR', { maximumFractionDigits: 1 }) + '%'; }
+
+  // ----- pizza: gasto por categoria -----
+  function pieSvg(slices, total){
+    var size = 200, c = size / 2, r = c - 4, ang = -Math.PI / 2, out = '';
+    if(slices.length === 1){
+      out = '<circle cx="' + c + '" cy="' + c + '" r="' + r + '" fill="' + slices[0].color + '"><title>' + escHtml(slices[0].label) + ' — ' + money(slices[0].value) + ' (100%)</title></circle>';
+    } else {
+      slices.forEach(function(sl){
+        var frac = sl.value / total, a2 = ang + frac * 2 * Math.PI;
+        var x1 = c + r * Math.cos(ang), y1 = c + r * Math.sin(ang), x2 = c + r * Math.cos(a2), y2 = c + r * Math.sin(a2);
+        out += '<path d="M' + c + ' ' + c + ' L' + x1.toFixed(2) + ' ' + y1.toFixed(2) + ' A' + r + ' ' + r + ' 0 ' + (frac > 0.5 ? 1 : 0) + ' 1 ' + x2.toFixed(2) + ' ' + y2.toFixed(2) + ' Z" fill="' + sl.color + '" stroke="#fff" stroke-width="2"><title>' + escHtml(sl.label) + ' — ' + money(sl.value) + ' (' + pctText(frac * 100) + ')</title></path>';
+        ang = a2;
+      });
+    }
+    return '<svg viewBox="0 0 200 200" width="200" height="200" role="img" aria-label="Gráfico de pizza: gasto por categoria" style="flex:0 0 auto; max-width:100%;">' + out + '</svg>';
+  }
+  function renderCategoryPie(items){
+    var box = document.getElementById('dash-pizza');
+    var byCat = {};
+    items.forEach(function(it){
+      var cat = (it.products && it.products.category) || 'Sem categoria';
+      byCat[cat] = (byCat[cat] || 0) + (Number(it.qty) || 0) * (Number(it.price) || 0);
+    });
+    var rows = Object.keys(byCat).map(function(k){ return { label: k, value: round2(byCat[k]) }; })
+      .filter(function(r){ return r.value > 0; }).sort(function(a, b){ return b.value - a.value; });
+    if(rows.length === 0){ box.innerHTML = '<div class="tbl-empty">Sem compras no período.</div>'; return; }
+    var top = rows.slice(0, 7), rest = rows.slice(7);
+    if(rest.length) top.push({ label: 'Outras categorias', value: round2(rest.reduce(function(sum, r){ return sum + r.value; }, 0)), other: true });
+    var total = top.reduce(function(sum, r){ return sum + r.value; }, 0);
+    top.forEach(function(sl, i){ sl.color = sl.other ? '#B7C2BB' : CHART_COLORS[i % CHART_COLORS.length]; });
+    var legend = top.map(function(sl){
+      return '<div style="display:flex; align-items:center; gap:8px; padding:5px 0; font-size:13px;">' +
+        '<span style="width:12px; height:12px; border-radius:3px; background:' + sl.color + '; flex:0 0 12px;"></span>' +
+        '<span style="flex:1; min-width:0;">' + escHtml(sl.label) + '</span>' +
+        '<b>' + money(sl.value) + '</b><span style="width:52px; text-align:right; color:var(--ink-soft);">' + pctText(sl.value / total * 100) + '</span></div>';
+    }).join('');
+    box.innerHTML = '<div style="display:flex; gap:22px; align-items:center; flex-wrap:wrap;">' + pieSvg(top, total) + '<div style="flex:1 1 220px; min-width:0;">' + legend + '</div></div>';
+  }
+
+  // ----- ranking: fornecedores onde mais compramos -----
+  function renderFornecedoresRank(orders){
+    var box = document.getElementById('dash-fornecedores-rank');
+    var by = {};
+    orders.forEach(function(o){
+      var id = o.supplier_id || ('n:' + o.supplier_name);
+      var g = by[id] || (by[id] = { name: o.supplier_name || supplierName(o.supplier_id), total: 0, count: 0 });
+      g.total += Number(o.total) || 0; g.count++;
+    });
+    var rows = Object.keys(by).map(function(k){ by[k].total = round2(by[k].total); return by[k]; })
+      .filter(function(r){ return r.total > 0; }).sort(function(a, b){ return b.total - a.total; }).slice(0, 8);
+    if(rows.length === 0){ box.innerHTML = '<div class="tbl-empty">Sem pedidos no período.</div>'; return; }
+    var max = rows[0].total;
+    box.innerHTML = rows.map(function(r, i){
+      return '<div style="padding:7px 0;">' +
+        '<div style="display:flex; justify-content:space-between; gap:10px; font-size:13px; margin-bottom:4px;">' +
+          '<span style="min-width:0; word-break:break-word;"><b>' + (i + 1) + '.</b> ' + escHtml(r.name) + ' <span style="color:var(--ink-soft);">· ' + r.count + (r.count === 1 ? ' pedido' : ' pedidos') + '</span></span>' +
+          '<b style="white-space:nowrap;">' + money(r.total) + '</b></div>' +
+        '<div class="progress" style="height:10px;"><div style="width:' + Math.max(3, Math.round(r.total / max * 100)) + '%; background:' + CHART_COLORS[i % CHART_COLORS.length] + ';"></div></div>' +
+      '</div>';
+    }).join('');
+  }
+
+  // ----- evolução de preço de um produto, cotação por cotação -----
+  function productsWithHistory(){
+    var map = {};
+    HISTORY.forEach(function(h){
+      if(!h.productId) return;
+      var m = map[h.productId] || (map[h.productId] = { id: h.productId, name: histProductName(h), n: 0, groups: {} });
+      m.n++; m.groups[h.quotationId || ('d' + (h.createdAt ? dateInputValue(h.createdAt) : '?'))] = true;
+    });
+    return Object.keys(map).map(function(k){ map[k].cotacoes = Object.keys(map[k].groups).length; return map[k]; })
+      .sort(function(a, b){ return a.name.localeCompare(b.name, 'pt-BR'); });
+  }
+  function priceSeries(productId){
+    var rows = HISTORY.filter(function(h){ return h.productId === productId; })
+      .sort(function(a, b){ return (a.createdAt ? a.createdAt.getTime() : 0) - (b.createdAt ? b.createdAt.getTime() : 0); });
+    var groups = [], index = {};
+    rows.forEach(function(h){
+      var key = h.quotationId || ('d' + (h.createdAt ? dateInputValue(h.createdAt) : '?'));
+      var g = index[key];
+      if(!g){ g = index[key] = { key: key, date: h.createdAt, quotationId: h.quotationId, points: [] }; groups.push(g); }
+      g.points.push(h);
+    });
+    groups.forEach(function(g){
+      var q = g.quotationId ? quotationById(g.quotationId) : null;
+      g.label = q && q.number ? '#' + q.number : (g.date ? fmtDate(g.date).slice(0, 5) : '—');
+      g.sub = g.date ? fmtDate(g.date).slice(0, 5) : '';
+      var qty = g.points.reduce(function(s, p){ return s + p.qty; }, 0);
+      var val = g.points.reduce(function(s, p){ return s + p.qty * p.price; }, 0);
+      g.avg = qty > 0 ? val / qty : g.points.reduce(function(s, p){ return s + p.price; }, 0) / g.points.length;
+    });
+    return groups;
+  }
+  function priceChartSvg(groups, colorOf){
+    var W = 760, H = 300, L = 66, R = 18, T = 16, B = 54;
+    var prices = [];
+    groups.forEach(function(g){ g.points.forEach(function(p){ prices.push(p.price); }); });
+    var min = Math.min.apply(null, prices), max = Math.max.apply(null, prices);
+    if(max === min){ var d = (max * 0.1) || 1; min -= d; max += d; } else { var pad = (max - min) * 0.15; min = Math.max(0, min - pad); max += pad; }
+    function x(i){ return groups.length === 1 ? (L + (W - L - R) / 2) : L + (W - L - R) * i / (groups.length - 1); }
+    function y(v){ return T + (H - T - B) * (1 - (v - min) / (max - min)); }
+    var out = '';
+    for(var t = 0; t <= 4; t++){
+      var v = min + (max - min) * t / 4, yy = y(v);
+      out += '<line x1="' + L + '" y1="' + yy.toFixed(1) + '" x2="' + (W - R) + '" y2="' + yy.toFixed(1) + '" stroke="#E1E4DF" stroke-width="1"/>' +
+        '<text x="' + (L - 8) + '" y="' + (yy + 4).toFixed(1) + '" text-anchor="end" font-size="11" fill="#5B6A62">' + money(v) + '</text>';
+    }
+    var step = Math.max(1, Math.ceil(groups.length / 10));
+    groups.forEach(function(g, i){
+      if(i % step !== 0 && i !== groups.length - 1) return;
+      out += '<text x="' + x(i).toFixed(1) + '" y="' + (H - 30) + '" text-anchor="middle" font-size="11" font-weight="600" fill="#1B2420">' + escHtml(g.label) + '</text>' +
+        '<text x="' + x(i).toFixed(1) + '" y="' + (H - 15) + '" text-anchor="middle" font-size="10" fill="#8B9A92">' + escHtml(g.sub) + '</text>';
+    });
+    if(groups.length > 1){
+      out += '<polyline fill="none" stroke="#146C4E" stroke-width="2.5" stroke-linejoin="round" points="' + groups.map(function(g, i){ return x(i).toFixed(1) + ',' + y(g.avg).toFixed(1); }).join(' ') + '"/>';
+    }
+    groups.forEach(function(g, i){
+      g.points.forEach(function(p){
+        out += '<circle cx="' + x(i).toFixed(1) + '" cy="' + y(p.price).toFixed(1) + '" r="5.5" fill="' + colorOf(p.supplierId) + '" stroke="#fff" stroke-width="2">' +
+          '<title>' + escHtml(g.label) + (g.sub ? ' · ' + g.sub : '') + '\n' + escHtml(supplierName(p.supplierId)) + ' — ' + money(p.price) + ' (' + fmtQty(p.qty) + ')</title></circle>';
+      });
+    });
+    return '<div style="overflow-x:auto;"><svg viewBox="0 0 ' + W + ' ' + H + '" width="100%" style="min-width:520px; max-height:340px;" role="img" aria-label="Evolução do preço do produto por cotação">' + out + '</svg></div>';
+  }
+
+  function renderPriceSection(){
+    var resumo = document.getElementById('dash-preco-resumo'), grafico = document.getElementById('dash-preco-grafico');
+    var prods = productsWithHistory();
+    var hidden = document.getElementById('dash-prod-id');
+    if(!prods.some(function(p){ return p.id === dashProductId; })) dashProductId = '';
+    if(!dashProductId && prods.length){
+      // starts on the product that appeared in the most quotations, so there is already a curve to look at
+      dashProductId = prods.slice().sort(function(a, b){ return (b.cotacoes - a.cotacoes) || (b.n - a.n); })[0].id;
+    }
+    hidden.value = dashProductId;
+    var chosen = prods.filter(function(p){ return p.id === dashProductId; })[0];
+    document.getElementById('dash-prod-escolhido').style.display = chosen ? 'flex' : 'none';
+    document.getElementById('dash-prod-busca-wrap').style.display = chosen ? 'none' : 'block';
+    if(chosen) document.getElementById('dash-prod-escolhido-nome').textContent = chosen.name + ' · ' + chosen.cotacoes + (chosen.cotacoes === 1 ? ' cotação' : ' cotações');
+    if(!chosen){
+      resumo.innerHTML = '';
+      grafico.innerHTML = '<div class="tbl-empty">' + (allocReady
+        ? 'Ainda não há preços lançados nas cotações. Quando você colocar o fornecedor e o preço dos itens, a evolução aparece aqui.'
+        : 'O histórico será ativado depois de rodar o arquivo cotacao_lancamentos.sql no Supabase.') + '</div>';
+      return;
+    }
+    var groups = priceSeries(dashProductId);
+    var colors = {}, order = [];
+    groups.forEach(function(g){ g.points.forEach(function(p){ if(!(p.supplierId in colors)){ colors[p.supplierId] = CHART_COLORS[order.length % CHART_COLORS.length]; order.push(p.supplierId); } }); });
+    var colorOf = function(id){ return colors[id] || '#5B6A62'; };
+    var all = []; groups.forEach(function(g){ g.points.forEach(function(p){ all.push(p.price); }); });
+    var first = groups[0], last = groups[groups.length - 1];
+    var summary;
+    if(groups.length < 2){
+      summary = '<div class="banner banner-amber" style="margin-bottom:14px;">Este produto só aparece em 1 cotação (' + escHtml(first.label) + '). A linha de evolução aparece quando ele tiver 2 ou mais.</div>';
+    } else {
+      var change = (last.avg - first.avg) / first.avg * 100;
+      var up = change > 0.05, down = change < -0.05;
+      summary = '<div class="banner ' + (up ? 'banner-amber' : 'banner-green') + '" style="margin-bottom:14px; font-weight:600;">' +
+        (up ? '▲ Subiu ' + pctText(change) : down ? '▼ Caiu ' + pctText(Math.abs(change)) : '● Estável (' + pctText(0) + ')') +
+        ' desde a primeira cotação (' + escHtml(first.label) + ' · ' + money(first.avg) + ' → ' + escHtml(last.label) + ' · ' + money(last.avg) + ')</div>';
+    }
+    var cards = [['Último preço', money(last.avg)], ['Menor preço', money(Math.min.apply(null, all))], ['Maior preço', money(Math.max.apply(null, all))], ['Cotações', String(groups.length)]];
+    resumo.innerHTML = summary + '<div style="display:flex; gap:12px; flex-wrap:wrap; margin-bottom:14px;">' + cards.map(function(c){
+      return '<div style="flex:1 1 130px; border:1px solid var(--line); border-radius:12px; padding:10px 14px; background:#FBFAF7;"><div style="font-size:11px; color:var(--ink-soft);">' + c[0] + '</div><div style="font-size:17px; font-weight:700; font-family:\'Fraunces\',serif;">' + c[1] + '</div></div>';
+    }).join('') + '</div>';
+    grafico.innerHTML = priceChartSvg(groups, colorOf) +
+      '<div style="display:flex; gap:16px; flex-wrap:wrap; margin-top:10px; font-size:12px; color:var(--ink-soft);">' +
+        '<span><span style="display:inline-block; width:18px; height:3px; background:#146C4E; vertical-align:middle; margin-right:6px;"></span>média da cotação</span>' +
+        order.map(function(sid){ return '<span><span style="display:inline-block; width:10px; height:10px; border-radius:50%; background:' + colors[sid] + '; margin-right:6px;"></span>' + escHtml(supplierName(sid)) + '</span>'; }).join('') +
+      '</div>';
+  }
+
+  function renderDashProdLista(){
+    var term = normalizeText(document.getElementById('dash-prod-busca').value).trim();
+    var list = productsWithHistory().filter(function(p){ return !term || normalizeText(p.name).indexOf(term) > -1; });
+    document.getElementById('dash-prod-lista').innerHTML = list.map(function(p){
+      return '<button type="button" data-action="escolher-dash-prod" data-id="' + escHtml(p.id) + '" style="display:flex; justify-content:space-between; gap:10px; width:100%; text-align:left; background:none; border:none; border-bottom:1px solid #F0EEE7; padding:10px 12px; cursor:pointer; font-size:13px;">' +
+        '<span style="font-weight:600;">' + escHtml(p.name) + '</span><span style="color:var(--ink-soft); white-space:nowrap;">' + p.cotacoes + (p.cotacoes === 1 ? ' cotação' : ' cotações') + '</span></button>';
+    }).join('') || '<div style="padding:16px; font-size:12px; color:var(--ink-soft); text-align:center;">Nenhum produto com preço lançado.</div>';
+  }
+  function openDashProdLista(){ renderDashProdLista(); document.getElementById('dash-prod-lista').style.display = 'block'; }
+  function closeDashProdLista(){ document.getElementById('dash-prod-lista').style.display = 'none'; }
+  document.getElementById('dash-prod-busca').addEventListener('focus', openDashProdLista);
+  document.getElementById('dash-prod-busca').addEventListener('click', openDashProdLista);
+  document.getElementById('dash-prod-busca').addEventListener('input', openDashProdLista);
+  document.getElementById('dash-prod-trocar').addEventListener('click', function(){
+    document.getElementById('dash-prod-escolhido').style.display = 'none';
+    document.getElementById('dash-prod-busca-wrap').style.display = 'block';
+    var box = document.getElementById('dash-prod-busca'); box.value = ''; box.focus(); openDashProdLista();
+  });
+  buyerRoot.addEventListener('click', function(e){
+    var pick = e.target.closest('[data-action="escolher-dash-prod"]');
+    if(pick){ dashProductId = pick.dataset.id; document.getElementById('dash-prod-busca').value = ''; closeDashProdLista(); renderPriceSection(); return; }
+    if(!e.target.closest('#dash-prod-picker')) closeDashProdLista();
+  });
 
   function renderDashboard(){
     renderDashMonthSelect();
@@ -2639,44 +2866,14 @@ var QRCode;
     document.getElementById('dash-total-label').textContent = dashMonth === 'todos' ? 'Total comprado (todos os meses)' : 'Total comprado em ' + periodo;
     document.getElementById('dash-total-comprado').textContent = money(realOrders.reduce(function(sum, o){ return sum + (Number(o.total) || 0); }, 0));
     document.getElementById('dash-pedidos-fechados').textContent = realOrders.filter(function(o){ return o.status === 'entregue'; }).length;
-
-    var abertas = quots.filter(isQuotationOpen);
-    var encerradas = quots.filter(function(q){ return !isQuotationOpen(q); });
-    document.getElementById('dash-cotacoes-abertas').textContent = abertas.length;
+    document.getElementById('dash-cotacoes-abertas').textContent = quots.filter(isQuotationOpen).length;
     var suppliersUsed = {};
     realOrders.forEach(function(o){ if(o.supplier_id) suppliersUsed[o.supplier_id] = true; });
     document.getElementById('dash-fornecedores-usados').textContent = Object.keys(suppliersUsed).length;
 
-    renderDashboardOrderStats(realOrders);
-
-    var abertasList = document.getElementById('dash-cotacoes-abertas-list');
-    abertasList.innerHTML = '';
-    if(abertas.length === 0){
-      abertasList.innerHTML = '<div class="card" style="text-align:center; color:var(--ink-soft); font-size:13px;">Nenhuma cotação em aberto no período.</div>';
-    } else {
-      abertas.forEach(function(q){ abertasList.appendChild(quotationCard(q)); });
-    }
-
-    var encerradasList = document.getElementById('dash-cotacoes-encerradas-list');
-    encerradasList.innerHTML = '';
-    if(encerradas.length === 0){
-      encerradasList.innerHTML = '<div class="card" style="text-align:center; color:var(--ink-soft); font-size:13px;">Nenhuma cotação encerrada no período.</div>';
-    } else {
-      encerradas.forEach(function(q){
-        var sup = {};
-        q.items.forEach(function(it){ it.allocations.forEach(function(a){ sup[a.supplierId] = true; }); });
-        var card = document.createElement('div');
-        card.className = 'card';
-        card.innerHTML =
-          '<div class="row" style="justify-content:space-between; align-items:flex-start; margin-bottom:8px;">' +
-            '<div><div class="row-title">' + escHtml(quotationName(q)) + '</div>' +
-            '<div class="row-sub">' + (q.createdAt ? fmtDateTime(q.createdAt) + ' · ' : '') + q.items.length + ' item(ns) · ' + Object.keys(sup).length + ' fornecedor(es)</div></div>' +
-            '<span class="badge badge-gray">Encerrada</span>' +
-          '</div>' +
-          '<button class="btn btn-ghost" data-action="ver-cotacao" data-id="' + q.id + '">Ver detalhes</button>';
-        encerradasList.appendChild(card);
-      });
-    }
+    renderDashboardOrderStats(realOrders);   // partial deliveries, "mais comprados" and the category pie (need the order items)
+    renderFornecedoresRank(realOrders);
+    renderPriceSection();
   }
   document.getElementById('dash-month').addEventListener('change', function(e){
     dashMonth = e.target.value;
@@ -3977,10 +4174,8 @@ var QRCode;
       '<div style="display:flex; gap:8px; margin-top:12px; flex-wrap:wrap;">' +
         (isDraft ? '<button class="btn btn-primary" data-action="confirmar-rascunho" data-id="' + order.id + '" style="padding:8px 14px;">Confirmar pedido</button>' : '') +
         '<button class="btn btn-ghost" data-action="ver-pedido" data-id="' + order.id + '" style="padding:8px 14px;">Ver</button>' +
-        (isOrderLocked(order)
-          ? '<span style="align-self:center; font-size:12px; color:var(--ink-soft);">🔒 Entrega concluída — pedido travado</span>'
-          : '<button class="btn btn-ghost" data-action="editar-pedido" data-id="' + order.id + '" style="padding:8px 14px;">Editar</button>' +
-            '<button class="btn btn-ghost" data-action="excluir-pedido" data-id="' + order.id + '" style="padding:8px 14px; color:var(--red);">Excluir</button>') +
+        '<button class="btn btn-ghost" data-action="editar-pedido" data-id="' + order.id + '" style="padding:8px 14px;">Editar</button>' +
+        '<button class="btn btn-ghost" data-action="excluir-pedido" data-id="' + order.id + '" style="padding:8px 14px; color:var(--red);">Excluir</button>' +
       '</div>';
     return card;
   }
@@ -4013,7 +4208,12 @@ var QRCode;
     editingOrderId = order.id;
     document.getElementById('pe-id').value = order.id;
     document.getElementById('pe-code').value = order.code;
-    document.getElementById('pe-status').value = order.status;
+    var statusSel = document.getElementById('pe-status');
+    var deliveredOpt = statusSel.querySelector('option[value="entregue"]');
+    if(isOrderDelivered(order)){
+      if(!deliveredOpt){ deliveredOpt = document.createElement('option'); deliveredOpt.value = 'entregue'; deliveredOpt.textContent = 'Entregue e conferido'; statusSel.appendChild(deliveredOpt); }
+    } else if(deliveredOpt){ deliveredOpt.remove(); }
+    statusSel.value = order.status;
     document.getElementById('pe-entrega').value = order.delivery_date || '';
     document.getElementById('pe-total').value = order.total;
     document.getElementById('pedido-edit-form').style.display = 'block';
@@ -4025,14 +4225,13 @@ var QRCode;
   document.getElementById('pedido-edit-cancel').addEventListener('click', closeOrderEditForm);
   document.getElementById('pedido-edit-save').addEventListener('click', async function(){
     if(!editingOrderId) return;
-    var editingOrder = ORDERS.filter(function(o){ return o.id === editingOrderId; })[0];
-    if(await orderLockedOnServer(editingOrder)){ alert('Este pedido já teve a entrega concluída e não pode mais ser alterado.'); closeOrderEditForm(); redrawAfterLock(); return; }
     var payload = {
       code: document.getElementById('pe-code').value.trim(),
       status: document.getElementById('pe-status').value,
       delivery_date: document.getElementById('pe-entrega').value || null,
-      total: parseFloat(String(document.getElementById('pe-total').value).replace(',', '.')) || 0
+      total: parseMoneyFlexible(document.getElementById('pe-total').value) || 0
     };
+    payload.confirmed = payload.status === 'entregue';
     try{
       if(dbReady) check(await db.from('orders').update(payload).eq('id', editingOrderId), 'Editar pedido');
       var idx = ORDERS.findIndex(function(o){ return o.id === editingOrderId; });
@@ -4101,32 +4300,70 @@ var QRCode;
     var editBtn = e.target.closest('[data-action="editar-pedido"]');
     if(editBtn){
       var order2 = ORDERS.filter(function(o){ return String(o.id) === editBtn.dataset.id; })[0];
-      if(order2 && await orderLockedOnServer(order2)){ alert('Este pedido já teve a entrega concluída e não pode mais ser alterado.'); redrawAfterLock(); return; }
-      if(order2) openOrderEditForm(order2);
+      if(!order2) return;
+      if(await refreshDelivered(order2)){
+        redrawAfterLock();
+        if(!confirm('⚠️ O pedido ' + order2.code + ' já foi ENTREGUE e está fechado.\n\nTem certeza de que quer editar?')) return;
+      }
+      openOrderEditForm(order2);
       return;
     }
     var delBtn = e.target.closest('[data-action="excluir-pedido"]');
     if(delBtn){
       var order3 = ORDERS.filter(function(o){ return String(o.id) === delBtn.dataset.id; })[0];
       if(!order3) return;
-      if(await orderLockedOnServer(order3)){ alert('Este pedido já teve a entrega concluída e não pode mais ser excluído.'); redrawAfterLock(); return; }
-      if(!confirm('Excluir o pedido ' + order3.code + '? Essa ação não pode ser desfeita.')) return;
+      var wasDelivered = await refreshDelivered(order3);
+      var askText = wasDelivered
+        ? '⚠️ O pedido ' + order3.code + ' já foi ENTREGUE e está fechado.\n\nExcluir apaga o pedido e todos os itens dele, e não dá para desfazer. Tem certeza de que quer excluir?'
+        : 'Excluir o pedido ' + order3.code + '? Essa ação não pode ser desfeita.';
+      if(!confirm(askText)) return;
+      // values typed into a quotation that became this order go back to "waiting for an order"
+      var unlinkedIds = [];
+      QUOTATIONS.forEach(function(q){ q.items.forEach(function(it){ it.allocations.forEach(function(a){ if(a.orderId === order3.id) unlinkedIds.push(a.id); }); }); });
       try{
         if(dbReady){
+          if(allocReady && unlinkedIds.length) check(await db.from('quotation_allocations').update({ order_id: null }).eq('order_id', order3.id), 'Soltar lançamentos do pedido');
           check(await db.from('order_items').delete().eq('order_id', order3.id), 'Excluir itens do pedido');
           check(await db.from('orders').delete().eq('id', order3.id), 'Excluir pedido');
         }
       } catch(err){
         console.error('Erro ao excluir pedido', err);
-        alert('Não foi possível excluir o pedido.\n\nDetalhe técnico: ' + (err && err.message ? err.message : err));
+        if(dbReady && allocReady && unlinkedIds.length){ try{ await db.from('quotation_allocations').update({ order_id: order3.id }).in('id', unlinkedIds); } catch(e2){ console.error(e2); } }
+        alert(friendlyDbError(err, 'Não foi possível excluir o pedido.'));
         return;
       }
+      await releaseAllocationsOfOrder(order3.id);
       ORDERS = ORDERS.filter(function(o){ return o.id !== order3.id; });
       if(state.viewingOrder && state.viewingOrder.id === order3.id) state.viewingOrder = null;
       renderPedidosList();
       renderResumoMes();
     }
   });
+
+  // After an order is deleted: its lançamentos wait for a new order and a closed quotation is open again
+  async function releaseAllocationsOfOrder(orderId){
+    var touched = {};
+    QUOTATIONS.forEach(function(q){ q.items.forEach(function(it){ it.allocations.forEach(function(a){
+      if(a.orderId === orderId){ a.orderId = null; touched[q.id] = q; }
+    }); }); });
+    HISTORY.forEach(function(h){ if(h.orderId === orderId) h.orderId = null; });
+    for(var qid in touched){
+      var q = touched[qid];
+      if(q.status === 'encerrada'){
+        try{
+          if(dbReady){
+            await db.from('quotations').update({ status: 'aberta' }).eq('id', q.id);
+            await db.from('quotation_items').update({ status: 'aberta' }).eq('quotation_id', q.id);
+          }
+        } catch(e){ console.error('Não foi possível reabrir a cotação', e); }
+        q.status = 'aberta'; q.items.forEach(function(it){ it.status = 'aberta'; });
+      }
+    }
+  }
+  function redrawAfterLock(){
+    if(state.page === 'conferencia') renderConferencia();
+    else if(state.page === 'pedidos'){ if(state.viewingOrder) showPedidosDetail(); else renderPedidosList(); }
+  }
 
   function renderNota(){
     var order = state.viewingOrder;
@@ -4164,13 +4401,13 @@ var QRCode;
   document.getElementById('imprimir-btn').addEventListener('click', function(){ window.print(); });
 
   // Once the delivery has been checked in (status entregue / confirmed), nothing about the order can change anymore.
-  function isOrderLocked(order){
+  function isOrderDelivered(order){
     return !!(order && (order.confirmed || order.status === 'entregue'));
   }
 
   // The screen can be out of date (e.g. the stockkeeper finished the delivery by QR code on his phone),
   // so before changing an order we ask the database whether it has already been delivered.
-  async function orderLockedOnServer(order){
+  async function refreshDelivered(order){
     if(!order) return false;
     if(dbReady && order.id && String(order.id).indexOf('local_') !== 0){
       try{
@@ -4182,18 +4419,23 @@ var QRCode;
         }
       } catch(err){ console.error('Não foi possível conferir o pedido no banco', err); }
     }
-    return isOrderLocked(order);
+    return isOrderDelivered(order);
   }
-  function redrawAfterLock(){
-    if(state.page === 'conferencia') renderConferencia();
-    else if(state.page === 'pedidos'){ if(state.viewingOrder) showPedidosDetail(); else renderPedidosList(); }
+  // A delivered (closed) order can still be changed, but only after the buyer confirms it is really intended.
+  // For the conference screen the question is asked once per order, the first time something is touched.
+  async function confirmDeliveredEdit(order){
+    if(!order || !isOrderDelivered(order)) return true;
+    state.unlocked = state.unlocked || {};
+    if(state.unlocked[order.id]) return true;
+    if(!confirm('⚠️ O pedido ' + order.code + ' já foi ENTREGUE e está fechado.\n\nTem certeza de que quer alterar a conferência dele?')) return false;
+    state.unlocked[order.id] = true;
+    return true;
   }
 
   function statusChip(item, status, label){
     var isActive = item.receiveStatus === status;
     var activeClass = status === 'recebido' ? 'active' : (status === 'parcial' ? 'active-parcial' : 'active-devolvido');
-    var locked = isOrderLocked(state.viewingOrder);
-    return '<button type="button" class="chip' + (isActive ? ' ' + activeClass : '') + '" data-id="' + item.itemId + '" data-action="set-status" data-status="' + status + '"' + (locked ? ' disabled style="cursor:not-allowed; opacity:' + (isActive ? '1' : '0.45') + ';"' : '') + '>' + label + '</button>';
+    return '<button type="button" class="chip' + (isActive ? ' ' + activeClass : '') + '" data-id="' + item.itemId + '" data-action="set-status" data-status="' + status + '">' + label + '</button>';
   }
 
   function conferenciaRow(item){
@@ -4205,9 +4447,9 @@ var QRCode;
         '<div class="row" style="justify-content:space-between; margin-top:12px; padding-top:12px; border-top:1px solid var(--line);">' +
           '<span style="font-size:12px; color:var(--ink-soft);">Quantidade recebida</span>' +
           '<div class="stepper">' +
-            '<button type="button" data-id="' + item.itemId + '" data-action="recv-dec" aria-label="Diminuir"' + (isOrderLocked(state.viewingOrder) ? ' disabled' : '') + '>–</button>' +
+            '<button type="button" data-id="' + item.itemId + '" data-action="recv-dec" aria-label="Diminuir"'+ '>–</button>' +
             '<span>' + fmtQty(item.receivedQty) + ' / ' + fmtQty(item.qty) + '</span>' +
-            '<button type="button" data-id="' + item.itemId + '" data-action="recv-inc" aria-label="Aumentar"' + (isOrderLocked(state.viewingOrder) ? ' disabled' : '') + '>+</button>' +
+            '<button type="button" data-id="' + item.itemId + '" data-action="recv-inc" aria-label="Aumentar"'+ '>+</button>' +
           '</div>' +
         '</div>';
     }
@@ -4244,10 +4486,10 @@ var QRCode;
     var devolvidoCount = items.filter(function(i){ return i.receiveStatus === 'devolvido'; }).length;
 
     var okBanner = document.getElementById('conferencia-ok');
-    var lockedOrder = isOrderLocked(state.viewingOrder);
-    if(lockedOrder){
+    var deliveredOrder = isOrderDelivered(state.viewingOrder);
+    if(deliveredOrder && !(state.unlocked && state.unlocked[state.viewingOrder.id])){
       okBanner.style.display = 'flex';
-      okBanner.textContent = 'Entrega concluída — a conferência está travada e não pode mais ser alterada.';
+      okBanner.textContent = 'Pedido já entregue e fechado. Se você mexer em algo, o app pede confirmação antes.';
     } else if(allDecided){
       okBanner.style.display = 'flex';
       okBanner.textContent = (parcialCount === 0 && devolvidoCount === 0)
@@ -4259,8 +4501,8 @@ var QRCode;
 
     var alreadyConfirmed = !!(state.viewingOrder && state.viewingOrder.confirmed);
     var btn = document.getElementById('armazenar-btn');
-    btn.disabled = !allDecided || alreadyConfirmed;
-    btn.textContent = alreadyConfirmed ? 'Estoque atualizado' : 'Armazenar produtos';
+    btn.disabled = !allDecided;
+    btn.textContent = alreadyConfirmed ? 'Salvar alterações da conferência' : 'Armazenar produtos';
 
     var noteEl = document.getElementById('conferencia-nota');
     var currentOrderKey = state.viewingOrder ? String(state.viewingOrder.id) : '';
@@ -4268,13 +4510,13 @@ var QRCode;
       noteEl.dataset.orderKey = currentOrderKey;
       noteEl.value = (state.viewingOrder && state.viewingOrder.receiver_note) || '';
     }
-    noteEl.disabled = lockedOrder;
+    noteEl.disabled = false;
   }
 
-  buyerRoot.addEventListener('click', function(e){
+  buyerRoot.addEventListener('click', async function(e){
     var statusBtn = e.target.closest('[data-action="set-status"]');
     if(statusBtn){
-      if(isOrderLocked(state.viewingOrder)) return;
+      if(!(await confirmDeliveredEdit(state.viewingOrder))) return;
       var item = state.currentOrderItems.filter(function(x){ return String(x.itemId) === statusBtn.dataset.id; })[0];
       if(item){
         item.receiveStatus = statusBtn.dataset.status;
@@ -4287,7 +4529,7 @@ var QRCode;
     }
     var recvBtn = e.target.closest('[data-action="recv-inc"], [data-action="recv-dec"]');
     if(recvBtn){
-      if(isOrderLocked(state.viewingOrder)) return;
+      if(!(await confirmDeliveredEdit(state.viewingOrder))) return;
       var item2 = state.currentOrderItems.filter(function(x){ return String(x.itemId) === recvBtn.dataset.id; })[0];
       if(item2){
         var delta = recvBtn.dataset.action === 'recv-inc' ? 1 : -1;
@@ -4300,7 +4542,8 @@ var QRCode;
   document.getElementById('armazenar-btn').addEventListener('click', async function(){
     var order = state.viewingOrder;
     if(!order) return;
-    if(await orderLockedOnServer(order)){ alert('Esta entrega já foi concluída e não pode mais ser alterada.'); redrawAfterLock(); return; }
+    await refreshDelivered(order);
+    if(!(await confirmDeliveredEdit(order))) return;
     var note = document.getElementById('conferencia-nota').value.trim();
 
     if(!dbReady){
