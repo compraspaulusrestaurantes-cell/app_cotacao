@@ -1454,6 +1454,7 @@ html, body {
             <label for="pedido-search" class="sr-only">Buscar pedido</label>
             <input id="pedido-search" type="text" placeholder="Buscar por código, fornecedor ou data">
           </div>
+          <div id="ped-hidden-note" style="display:none; font-size:12.5px; color:var(--ink-soft); background:var(--amber-tint); border-radius:10px; padding:10px 14px; margin:0 0 14px 0; line-height:1.5;"></div>
           <div id="ped-owner-wrap" style="display:none; align-items:center; gap:10px; margin:0 0 14px 0;">
             <label for="ped-owner-filter" style="font-size:12px; font-weight:600; color:var(--ink-soft);">Comprador</label>
             <select id="ped-owner-filter"><option value="">Todos os compradores</option></select>
@@ -2339,7 +2340,7 @@ var QRCode;
   var SUPABASE_URL = 'https://dqghwfrmodulnevzpgbw.supabase.co';
   var SUPABASE_KEY = 'sb_publishable_nNk6sJNE-7NzraHnjXliLQ_nRfeWtZb';
   var db = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-  var APP_VERSION = '2026-11-19 · versão 11';
+  var APP_VERSION = '2026-11-19 · versão 12';
   var APP_BASE_URL = 'https://compraspaulusrestaurantes-cell.github.io/app_cotacao/';
   var DEFAULT_SUPPLIER_NAME = 'Distribuidora Bom Preço';
   var SUPPLIERS_SEED = [
@@ -2531,8 +2532,12 @@ var QRCode;
   }
   // The screen of each buyer only shows his own quotations; the administrator sees everybody's.
   // (Old quotations with no author stay visible to all, since nobody owns them.)
+  function myAuthorNames(){
+    var local = String(currentBuyer.email || '').split('@')[0];
+    return [currentBuyer.nome, nameFromEmail(currentBuyer.email), local, currentBuyer.email].filter(Boolean).map(function(n){ return normalizeText(n).trim(); });
+  }
   function canSeeAuthor(author){
-    return isAdmin() || !author || normalizeText(author) === normalizeText(currentBuyer.nome);
+    return isAdmin() || !author || myAuthorNames().indexOf(normalizeText(author).trim()) > -1;
   }
   function canSeeQuotation(q){ return canSeeAuthor(q.createdBy); }
 
@@ -2589,6 +2594,7 @@ var QRCode;
 
   // Numbers that must look at EVERY order, not only the ones this buyer can see (next order code, suppliers already used)
   var ORDER_CODE_MAX = 1040;
+  var HIDDEN_ORDERS = { count: 0, authors: [] };
   var ORDER_COUNT_BY_SUPPLIER = {};
   function noteAllOrders(all){
     ORDER_CODE_MAX = 1040; ORDER_COUNT_BY_SUPPLIER = {};
@@ -2611,6 +2617,9 @@ var QRCode;
     var all = res.data || [];
     noteAllOrders(all);
     // each buyer sees only his own orders (the administrator sees everybody's; old orders with no author stay visible to all)
+    var hiddenAuthors = {};
+    all.forEach(function(o){ if(!canSeeAuthor(o.created_by)) hiddenAuthors[o.created_by] = (hiddenAuthors[o.created_by] || 0) + 1; });
+    HIDDEN_ORDERS = { count: Object.keys(hiddenAuthors).reduce(function(n, k){ return n + hiddenAuthors[k]; }, 0), authors: Object.keys(hiddenAuthors).sort() };
     ORDERS = all.filter(function(o){ return canSeeAuthor(o.created_by); }).map(function(o){
       return Object.assign({}, o, { supplier_name: supplierNameById[o.supplier_id] || '—' });
     }).sort(function(a,b){ return (b.order_date || '').localeCompare(a.order_date || ''); });
@@ -5333,13 +5342,19 @@ var QRCode;
   function renderPedidosList(){
     var list = document.getElementById('pedidos-list');
     list.innerHTML = '';
+    var hiddenNote = document.getElementById('ped-hidden-note');
+    if(!isAdmin() && HIDDEN_ORDERS.count > 0){
+      hiddenNote.style.display = 'block';
+      hiddenNote.textContent = 'Aqui aparecem só os pedidos feitos por você (' + (currentBuyer.nome || 'sua conta') + '). Há ' + HIDDEN_ORDERS.count + (HIDDEN_ORDERS.count === 1 ? ' pedido' : ' pedidos') + ' em nome de outras pessoas (' + HIDDEN_ORDERS.authors.map(function(a){ return a || 'sem autor'; }).join(', ') + '), que só o administrador vê.';
+    } else { hiddenNote.style.display = 'none'; }
     var ownerWrap = document.getElementById('ped-owner-wrap'), ownerSel = document.getElementById('ped-owner-filter');
     if(isAdmin()){
       var owners = [];
-      ORDERS.forEach(function(o){ var n = o.created_by || NO_OWNER; if(owners.indexOf(n) === -1) owners.push(n); });
+      var ownerCount = {};
+      ORDERS.forEach(function(o){ var n = o.created_by || NO_OWNER; if(owners.indexOf(n) === -1) owners.push(n); ownerCount[n] = (ownerCount[n] || 0) + 1; });
       owners.sort(function(a, b){ return a.localeCompare(b, 'pt-BR'); });
       if(pedOwner && owners.indexOf(pedOwner) === -1) pedOwner = '';
-      ownerSel.innerHTML = '<option value="">Todos os compradores</option>' + owners.map(function(n){ return '<option value="' + escHtml(n) + '"' + (n === pedOwner ? ' selected' : '') + '>' + escHtml(n) + '</option>'; }).join('');
+      ownerSel.innerHTML = '<option value="">Todos os compradores (' + ORDERS.length + ')</option>' + owners.map(function(n){ return '<option value="' + escHtml(n) + '"' + (n === pedOwner ? ' selected' : '') + '>' + escHtml(n) + ' (' + ownerCount[n] + ')</option>'; }).join('');
       ownerWrap.style.display = 'flex';
     } else { pedOwner = ''; ownerWrap.style.display = 'none'; }
     var filtered = ORDERS.filter(function(o){
