@@ -16,7 +16,7 @@ if('serviceWorker' in navigator){ window.addEventListener('load', function(){ na
 </script>
 <script>
 /* Opened from a WhatsApp/QR link: never show any login screen, not even for a split second */
-if(/[?&](confirmar|pedido)=/.test(window.location.search)){ document.documentElement.className += ' link-mode'; }
+if(/[?&](confirmar|pedido|cotacao)=/.test(window.location.search)){ document.documentElement.className += ' link-mode'; }
 </script>
 <title>Paulu&#39;s</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -2340,7 +2340,7 @@ var QRCode;
   var SUPABASE_URL = 'https://dqghwfrmodulnevzpgbw.supabase.co';
   var SUPABASE_KEY = 'sb_publishable_nNk6sJNE-7NzraHnjXliLQ_nRfeWtZb';
   var db = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-  var APP_VERSION = '2026-11-19 · versão 12';
+  var APP_VERSION = '2026-11-25 · versão 14';
   var APP_BASE_URL = 'https://compraspaulusrestaurantes-cell.github.io/app_cotacao/';
   var DEFAULT_SUPPLIER_NAME = 'Distribuidora Bom Preço';
   var SUPPLIERS_SEED = [
@@ -2476,7 +2476,7 @@ var QRCode;
         return {
           id: it.id, name: it.product_name, qty: Number(it.qty) || 0, productId: it.product_id || null, status: it.status || 'aberta', obs: it.obs || '',
           allocations: (it.quotation_allocations || []).map(function(a){
-            return { id: a.id, supplierId: a.supplier_id, qty: Number(a.qty) || 0, price: Number(a.price) || 0, orderId: a.order_id || null, createdAt: a.created_at ? new Date(a.created_at) : null, createdBy: a.created_by || null };
+            return { id: a.id, supplierId: a.supplier_id, qty: Number(a.qty) || 0, price: Number(a.price) || 0, orderId: a.order_id || null, obs: a.obs || '', createdAt: a.created_at ? new Date(a.created_at) : null, createdBy: a.created_by || null };
           })
         };
       })
@@ -2484,16 +2484,16 @@ var QRCode;
   }
 
   var numberReady = true;   // false until quotations.number exists in the database
-  var COLS = { number: false, qBy: false, oBy: false, delivered: false, aBy: false, pack: false, obsQ: false, obsO: false };   // optional columns created by the SQL update
+  var COLS = { number: false, qBy: false, oBy: false, delivered: false, aBy: false, pack: false, obsQ: false, obsO: false, obsA: false };   // optional columns created by the SQL update
   async function probeColumn(table, col){ var r = await db.from(table).select(col).limit(1); return !r.error; }
   async function probeColumns(){
     var r = await Promise.all([
       probeColumn('quotations', 'number'), probeColumn('quotations', 'created_by'),
       probeColumn('orders', 'created_by'), probeColumn('orders', 'delivered_at'),
       probeColumn('quotation_allocations', 'created_by'), probeColumn('products', 'pack_qty'),
-      probeColumn('quotation_items', 'obs'), probeColumn('order_items', 'obs')
+      probeColumn('quotation_items', 'obs'), probeColumn('order_items', 'obs'), probeColumn('quotation_allocations', 'obs')
     ]);
-    COLS = { number: r[0], qBy: r[1], oBy: r[2], delivered: r[3], aBy: r[4], pack: r[5], obsQ: r[6], obsO: r[7] };
+    COLS = { number: r[0], qBy: r[1], oBy: r[2], delivered: r[3], aBy: r[4], pack: r[5], obsQ: r[6], obsO: r[7], obsA: r[8] };
   }
   // the observation text of the product (brand, type...) is optional; when the database has no column for it yet, it still goes in the message
   function obsLine(text){ return String(text || '').replace(/\s+/g, ' ').trim(); }
@@ -2632,6 +2632,7 @@ var QRCode;
       await ensureSupplierProducts();
       await probeColumns();
       await ensureQuotations();
+      await loadResponses();
       await loadPriceHistory();
       await ensureOrdersList();
       dbReady = true;
@@ -3979,7 +3980,14 @@ var QRCode;
     });
     if(compact) lines.push('');
     lines.push(SEP);
-    lines.push('💬 Me responda com o *preço de cada item* (e a marca, se tiver).');
+    if(RESP_READY && q.id && isQuotationOpen(q)){
+      lines.push('💬 Responda *pelo link*, sem precisar de login:');
+      lines.push(quotationLink(q));
+      lines.push('Lá você coloca o *preço*, a *marca* e uma *observação* de cada item.');
+      lines.push('Se preferir, pode responder aqui mesmo.');
+    } else {
+      lines.push('💬 Me responda com o *preço de cada item* (e a marca, se tiver).');
+    }
     lines.push('Obrigado!');
     return lines.join('\n');
   }
@@ -4089,7 +4097,8 @@ var QRCode;
         (open ? '<span class="badge badge-amber">Em aberto</span>' : '<span class="badge badge-gray">Encerrada</span>') +
       '</div>' +
       '<div class="progress" style="margin:12px 0 6px 0;"><div style="width:' + pct + '%;"></div></div>' +
-      '<div class="row-sub">' + st.complete + ' de ' + st.items + ' itens com fornecedor definido' + (st.toOrderLines ? ' · ' + st.toOrderLines + ' lançamento(s) aguardando pedido' : '') + '</div>' +
+      '<div class="row-sub">' + st.complete + ' de ' + st.items + ' itens com fornecedor definido' + (st.toOrderLines ? ' · ' + st.toOrderLines + ' lançamento(s) aguardando pedido' : '') +
+        (RESP_READY && responsesOf(q).length ? ' · ' + responsesOf(q).length + (responsesOf(q).length === 1 ? ' resposta' : ' respostas') + ' de fornecedores' : '') + '</div>' +
       '<div style="display:flex; gap:8px; margin-top:12px; flex-wrap:wrap;">' +
         '<button type="button" class="btn btn-primary" data-action="ver-cotacao" data-id="' + q.id + '">Abrir</button>' +
         '<button type="button" class="btn btn-ghost" data-action="whats-cotacao" data-id="' + q.id + '">WhatsApp</button>' +
@@ -4146,7 +4155,8 @@ var QRCode;
     var unit = itemUnitLabel(item);
     return '<div style="display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap; padding:10px 0; border-top:1px solid #F0EEE7;">' +
       '<div><div style="font-weight:600; font-size:13px;">' + escHtml(supplierName(a.supplierId)) + '</div>' +
-      '<div class="row-sub">' + fmtQty(a.qty) + ' ' + unit + ' × ' + money(a.price) + ' = <b>' + money(round2(a.qty * a.price)) + '</b></div></div>' +
+      '<div class="row-sub">' + fmtQty(a.qty) + ' ' + unit + ' × ' + money(a.price) + ' = <b>' + money(round2(a.qty * a.price)) + '</b></div>' +
+      (a.obs ? '<div class="row-sub" style="color:var(--green-dark);">' + escHtml(a.obs) + '</div>' : '') + '</div>' +
       (a.orderId
         ? '<span class="badge badge-green">Pedido gerado</span>'
         : '<div style="display:flex; gap:6px;"><button type="button" class="tbl-btn" data-action="editar-alocacao" data-id="' + q.id + '" data-item="' + item.id + '" data-alloc="' + a.id + '">Editar</button>' +
@@ -4173,6 +4183,7 @@ var QRCode;
       '</div>' +
       '<div class="progress" style="margin:12px 0 4px 0;"><div style="width:' + pct + '%;"></div></div>' +
       item.allocations.map(function(a){ return allocationRowHtml(q, item, a); }).join('') +
+      itemResponsesHtml(q, item) +
     '</div>';
   }
 
@@ -4227,7 +4238,7 @@ var QRCode;
           '<button type="button" class="btn btn-ghost" data-action="excluir-cotacao" data-id="' + q.id + '" style="color:var(--red);">Excluir cotação</button>' +
         '</div>' +
       '</div>' +
-      summary + bar +
+      responsesSectionHtml(q) + summary + bar +
       q.items.map(function(it){ return itemCardHtml(q, it); }).join('');
     updateCotSelectionBar();
   }
@@ -4516,6 +4527,210 @@ var QRCode;
     renderCotacaoDetail(qid);
   }
 
+  /* ---------- Cotação por link: respostas dos fornecedores ---------- */
+  var RESPONSES = {};      // quotation id -> [ response ]
+  var RESP_READY = false;  // false until the SQL (tables + public functions) was run
+  function quotationLink(q){ return APP_BASE_URL + '?cotacao=' + q.id; }
+  function mapResponse(r){
+    var items = {};
+    (r.quotation_response_items || []).forEach(function(i){
+      items[i.quotation_item_id] = { available: i.available !== false, price: i.price == null ? null : Number(i.price), brand: i.brand || '', obs: i.obs || '' };
+    });
+    return { id: r.id, quotationId: r.quotation_id, supplierId: r.supplier_id || null, supplierName: r.supplier_name || '—', contactName: r.contact_name || '', contactPhone: r.contact_phone || '',
+      note: r.note || '', createdAt: r.created_at ? new Date(r.created_at) : null, updatedAt: r.updated_at ? new Date(r.updated_at) : (r.created_at ? new Date(r.created_at) : null), items: items };
+  }
+  async function loadResponses(){
+    var res;
+    try{ res = await db.from('quotation_responses').select('*, quotation_response_items(*)'); } catch(e){ res = { error: e }; }
+    if(res.error){
+      if(/relation|does not exist|schema cache|quotation_response/i.test(String(res.error.message || ''))){ RESP_READY = false; RESPONSES = {}; }
+      return;   // a temporary failure keeps what is on screen
+    }
+    RESP_READY = true;
+    var visible = {}; QUOTATIONS.forEach(function(q){ visible[q.id] = true; });
+    var map = {};
+    (res.data || []).forEach(function(r){ if(!visible[r.quotation_id]) return; (map[r.quotation_id] = map[r.quotation_id] || []).push(mapResponse(r)); });
+    Object.keys(map).forEach(function(k){ map[k].sort(function(a, b){ return (a.createdAt ? a.createdAt.getTime() : 0) - (b.createdAt ? b.createdAt.getTime() : 0); }); });
+    RESPONSES = map;
+  }
+  function responsesOf(q){ return RESPONSES[q.id] || []; }
+  function isPricedAns(a){ return !!a && a.available && a.price > 0; }
+  function responseCounts(resp){
+    var c = { priced: 0, none: 0 };
+    Object.keys(resp.items).forEach(function(k){ var a = resp.items[k]; if(isPricedAns(a)) c.priced++; else if(!a.available) c.none++; });
+    return c;
+  }
+  function responseObsText(a){ return [a.brand ? 'Marca: ' + a.brand : '', a.obs].filter(Boolean).join(' · '); }
+  // who answered this item, and which price is the lowest
+  function itemResponses(q, item){
+    var list = [];
+    responsesOf(q).forEach(function(r){ var a = r.items[item.id]; if(a) list.push({ resp: r, ans: a }); });
+    var priced = list.filter(function(x){ return isPricedAns(x.ans); });
+    var best = null;
+    priced.forEach(function(x){ if(!best || x.ans.price < best.ans.price) best = x; });
+    return { list: list, priced: priced, cheapest: best };
+  }
+  function allocatedByResponse(item, resp){
+    if(!resp.supplierId) return 0;
+    return round3((item.allocations || []).filter(function(a){ return a.supplierId === resp.supplierId; }).reduce(function(s, a){ return s + a.qty; }, 0));
+  }
+  function itemResponsesHtml(q, item){
+    if(!RESP_READY) return '';
+    var info = itemResponses(q, item);
+    if(!info.priced.length) return '';   // suppliers who do not have this product do not show up on it at all
+    var unit = itemUnitLabel(item), rem = remainingQty(item);
+    var sorted = info.priced.slice().sort(function(a, b){ return a.ans.price - b.ans.price; });   // lowest price first
+    var rows = sorted.map(function(x){
+      var cheap = info.cheapest === x, chosen = allocatedByResponse(item, x.resp), det = responseObsText(x.ans);
+      var action = chosen > 0
+        ? '<span class="badge badge-green">Escolhido · ' + fmtQty(chosen) + ' ' + unit + '</span>'
+        : (rem > 0 ? '<button type="button" class="btn ' + (cheap ? 'btn-primary' : 'btn-ghost') + '" data-action="usar-resposta" data-id="' + q.id + '" data-item="' + item.id + '" data-resp="' + x.resp.id + '" style="padding:8px 14px;">Usar ' + fmtQty(rem) + ' ' + unit + '</button>' : '');
+      return '<div style="display:flex; gap:10px 14px; flex-wrap:wrap; align-items:center; justify-content:space-between; padding:10px 12px; border-radius:10px; margin-top:6px; background:' + (cheap ? 'var(--green-tint)' : '#FAF8F3') + ';">' +
+        '<div style="min-width:150px; flex:1 1 150px;"><div style="font-weight:600; font-size:13px;">' + escHtml(x.resp.supplierName) + '</div><div class="row-sub">' + escHtml(x.resp.contactName) + '</div></div>' +
+        '<div style="min-width:110px;"><div style="font-weight:600;">' + money(x.ans.price) + ' <span class="row-sub">/ ' + unit + '</span></div>' + (cheap && info.priced.length > 1 ? '<span class="badge badge-green">Menor preço</span>' : '') + '</div>' +
+        '<div class="row-sub" style="flex:2 1 160px;">' + (det ? escHtml(det) : '—') + '</div>' +
+        '<div style="min-width:140px; font-size:13px;">' + (rem > 0 ? fmtQty(rem) + ' ' + unit + ' → <b>' + money(round2(rem * x.ans.price)) + '</b>' : '') + '</div>' +
+        '<div>' + action + '</div></div>';
+    }).join('');
+    return '<div style="margin-top:12px; border-top:1px solid #F0EEE7; padding-top:10px;"><div class="row-sub" style="font-weight:600;">Respostas dos fornecedores (' + info.priced.length + ')</div>' + rows + '</div>';
+  }
+  function responseTime(d){
+    if(!d) return '';
+    var today = new Date().toDateString() === d.toDateString();
+    return (today ? '' : d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }) + ' ') + d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+  }
+  function responsesSectionHtml(q){
+    if(!RESP_READY){
+      return '<div class="card" style="margin-bottom:14px; background:#FAF8F3;"><div style="font-size:13px; font-weight:600;">Respostas dos fornecedores pelo link</div>' +
+        '<div class="row-sub" style="margin-top:4px;">Para os fornecedores responderem por um link, rode uma vez o arquivo <b>atualizacao_seguranca_e_recursos.sql</b> no Supabase e recarregue esta página.</div></div>';
+    }
+    var list = responsesOf(q), open = isQuotationOpen(q);
+    var canUse = pendingItems(q).some(function(it){ return itemResponses(q, it).priced.length > 0; });
+    var cards = list.map(function(r){
+      var c = responseCounts(r), phone = normalizePhoneForWhatsApp(r.contactPhone);
+      var chosenLines = q.items.reduce(function(n, it){ return n + (allocatedByResponse(it, r) > 0 ? 1 : 0); }, 0);
+      return '<div style="border:1px solid var(--line); border-radius:12px; padding:12px 14px; display:flex; flex-direction:column; gap:5px; background:#fff;">' +
+        '<div style="font-weight:600; font-size:14px;">' + escHtml(r.supplierName) + '</div>' +
+        '<div class="row-sub">' + (r.updatedAt && r.createdAt && r.updatedAt.getTime() - r.createdAt.getTime() > 60000 ? 'alterou' : 'respondeu') + ' ' + responseTime(r.updatedAt || r.createdAt) + '</div>' +
+        '<div style="font-size:13px;">' + c.priced + (c.priced === 1 ? ' preço' : ' preços') + (c.none ? ' · ' + c.none + ' não tem' : '') + (chosenLines ? ' · ' + chosenLines + ' escolhido(s)' : '') + '</div>' +
+        '<div style="font-size:13px;">' + escHtml(r.contactName) + ' · ' + (phone ? '<a href="https://wa.me/' + phone + '" target="_blank" rel="noopener" style="color:var(--green); font-weight:600;">' + escHtml(r.contactPhone) + '</a>' : escHtml(r.contactPhone)) + '</div>' +
+        (r.note ? '<div class="row-sub" style="font-style:italic;">“' + escHtml(r.note) + '”</div>' : '') +
+        (!r.supplierId ? '<div><span class="badge badge-amber">Fornecedor não cadastrado</span></div>' : '') +
+        '<div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:4px;">' +
+          (!r.supplierId ? '<button type="button" class="tbl-btn" data-action="cadastrar-forn-resposta" data-id="' + q.id + '" data-resp="' + r.id + '">Cadastrar fornecedor</button>' : '') +
+          '<button type="button" class="tbl-btn danger" data-action="excluir-resposta" data-id="' + q.id + '" data-resp="' + r.id + '">Excluir resposta</button>' +
+        '</div></div>';
+    }).join('');
+    return '<div class="card" id="cot-respostas" style="margin-bottom:14px;">' +
+      '<div style="display:flex; justify-content:space-between; align-items:flex-start; gap:12px; flex-wrap:wrap;"><div><h3 style="font-size:16px; margin:0;">Respostas dos fornecedores (' + list.length + ')</h3>' +
+        '<div class="row-sub" style="margin-top:4px;">' + (list.length ? 'Se algum fornecedor errou na hora de enviar, use “Excluir resposta”: ele pode responder de novo pelo mesmo link.' : 'Ninguém respondeu ainda. Cole a mensagem com o link no grupo de fornecedores.') + '</div></div>' +
+        (canUse ? '<button type="button" class="btn btn-ghost" data-action="usar-menor-todos" data-id="' + q.id + '">Usar o menor preço nos produtos que faltam</button>' : '') + '</div>' +
+      (open
+        ? '<div style="display:flex; gap:10px 14px; align-items:center; flex-wrap:wrap; background:#FAF8F3; border-radius:10px; padding:10px 12px; margin:12px 0;"><div style="flex:1 1 280px; min-width:0;"><div style="font-size:12px; font-weight:600;">Link para colar no grupo do WhatsApp</div><div class="row-sub" style="word-break:break-all;">' + escHtml(quotationLink(q)) + '</div></div>' +
+          '<button type="button" class="btn btn-primary" data-action="copiar-cotacao" data-id="' + q.id + '">Copiar mensagem com o link</button>' +
+          '<button type="button" class="btn btn-ghost" data-action="copiar-link-cotacao" data-id="' + q.id + '">Copiar só o link</button></div>' +
+          '<div class="row-sub" style="margin-bottom:' + (list.length ? '12px' : '0') + ';">Não precisa de login: quem tiver o link consegue responder. Ele deixa de aceitar respostas quando a cotação é encerrada.</div>'
+        : '<div class="row-sub" style="margin:10px 0;">Esta cotação está encerrada: o link não aceita mais respostas.</div>') +
+      (list.length ? '<div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(240px, 1fr)); gap:12px;">' + cards + '</div>' : '') +
+    '</div>';
+  }
+
+  // one allocation line per product (the same thing the "Colocar fornecedor" window does), for one supplier
+  async function addAllocationLines(q, sid, lines){
+    var ins = check(await db.from('quotation_allocations').insert(lines.map(function(l){
+      return Object.assign({ quotation_id: q.id, quotation_item_id: l.item.id, product_id: l.item.productId, product_name: l.item.name, supplier_id: sid, qty: l.qty, price: l.price },
+        COLS.aBy ? { created_by: currentBuyer.nome } : {}, (COLS.obsA && l.obs) ? { obs: l.obs } : {});
+    })).select('id,created_at,quotation_item_id'), 'Salvar lançamentos');
+    var byItem = {};
+    (ins.data || []).forEach(function(r){ byItem[r.quotation_item_id] = r; });
+    lines.forEach(function(l){
+      var saved = byItem[l.item.id];
+      var created = saved && saved.created_at ? new Date(saved.created_at) : new Date();
+      var a = { id: saved ? saved.id : null, supplierId: sid, qty: l.qty, price: l.price, orderId: null, obs: l.obs || '', createdAt: created, createdBy: currentBuyer.nome || null };
+      l.item.allocations.push(a);
+      HISTORY.unshift({ id: a.id, quotationId: q.id, productId: l.item.productId, productName: l.item.name, supplierId: sid, qty: l.qty, price: l.price, orderId: null, createdAt: created, createdBy: currentBuyer.nome || null });
+      delete cotSelected[l.item.id];
+    });
+    applyLastPrices();
+  }
+  // a supplier typed by hand is not in the registry yet: find it by name or register it (with the phone he gave)
+  async function ensureResponseSupplier(resp, silent){
+    if(resp.supplierId && SUPPLIERS.some(function(s){ return s.id === resp.supplierId; })) return resp.supplierId;
+    var same = SUPPLIERS.filter(function(s){ return normalizeText(s.name) === normalizeText(resp.supplierName); })[0];
+    var sid = same ? same.id : null;
+    if(!sid){
+      if(!silent && !confirm('"' + resp.supplierName + '" ainda não está nos seus fornecedores.\n\nCadastrar agora, com o telefone ' + resp.contactPhone + '?')) return null;
+      try{
+        var ins = check(await db.from('suppliers').insert({ name: resp.supplierName, phone: resp.contactPhone }).select('id,name,email,phone,address,categories,brands').single(), 'Cadastrar fornecedor');
+        SUPPLIERS.push(ins.data); supplierNameById[ins.data.id] = ins.data.name; supplierIdByName[ins.data.name] = ins.data.id; sid = ins.data.id;
+      } catch(err){ console.error(err); alert(friendlyDbError(err, 'Não foi possível cadastrar o fornecedor.')); return null; }
+    }
+    try{ check(await db.from('quotation_responses').update({ supplier_id: sid }).eq('id', resp.id), 'Ligar a resposta ao fornecedor'); } catch(e2){ console.error(e2); }
+    resp.supplierId = sid;
+    return sid;
+  }
+  async function useResponse(qid, itemId, respId){
+    var q = quotationById(qid); if(!q) return;
+    var item = q.items.filter(function(x){ return x.id === itemId; })[0];
+    var resp = responsesOf(q).filter(function(r){ return r.id === respId; })[0];
+    if(!item || !resp) return;
+    var a = resp.items[itemId];
+    if(!isPricedAns(a)) return;
+    var rem = remainingQty(item);
+    if(!(rem > 0)){ alert('Este item já está completo.'); return; }
+    if(!allocReady){ alert('Para lançar preços, rode o arquivo atualizacao_seguranca_e_recursos.sql no Supabase (uma vez).'); return; }
+    var sid = await ensureResponseSupplier(resp, false); if(!sid) return;
+    try{ await addAllocationLines(q, sid, [{ item: item, qty: rem, price: a.price, obs: responseObsText(a) }]); }
+    catch(err){ console.error(err); alert(friendlyDbError(err, 'Não foi possível usar este preço.')); return; }
+    renderCotacaoDetail(q.id);
+    showBuyerToast('Preço de ' + resp.supplierName + ' usado em ' + item.name + ' (' + fmtQty(rem) + ' ' + itemUnitLabel(item) + ').');
+  }
+  async function useCheapestEverywhere(qid){
+    var q = quotationById(qid); if(!q) return;
+    if(!allocReady){ alert('Para lançar preços, rode o arquivo atualizacao_seguranca_e_recursos.sql no Supabase (uma vez).'); return; }
+    var picks = [];
+    pendingItems(q).forEach(function(item){ var info = itemResponses(q, item); if(info.cheapest) picks.push({ item: item, resp: info.cheapest.resp, ans: info.cheapest.ans }); });
+    if(!picks.length){ alert('Nenhum dos produtos que faltam tem resposta de fornecedor com preço.'); return; }
+    var unregistered = picks.filter(function(p){ return !p.resp.supplierId; }).length;
+    var msg = 'Usar o menor preço nos ' + picks.length + (picks.length === 1 ? ' produto' : ' produtos') + ' que faltam?\n\n' +
+      picks.slice(0, 8).map(function(p){ return '• ' + p.item.name + ' → ' + p.resp.supplierName + ' (' + money(p.ans.price) + ')'; }).join('\n') + (picks.length > 8 ? '\n• e mais ' + (picks.length - 8) + '…' : '') +
+      (unregistered ? '\n\nFornecedores que ainda não estão cadastrados serão cadastrados.' : '') + '\n\nVocê pode mudar qualquer um depois.';
+    if(!confirm(msg)) return;
+    var groups = {}, done = 0;
+    for(var i = 0; i < picks.length; i++){
+      var sid = await ensureResponseSupplier(picks[i].resp, true); if(!sid) continue;
+      (groups[sid] = groups[sid] || []).push({ item: picks[i].item, qty: remainingQty(picks[i].item), price: picks[i].ans.price, obs: responseObsText(picks[i].ans) });
+    }
+    try{
+      var sids = Object.keys(groups);
+      for(var g = 0; g < sids.length; g++){ await addAllocationLines(q, sids[g], groups[sids[g]]); done += groups[sids[g]].length; }
+    } catch(err){ console.error(err); alert(friendlyDbError(err, 'Não foi possível usar os preços.')); renderCotacaoDetail(q.id); return; }
+    renderCotacaoDetail(q.id);
+    showBuyerToast('Menor preço usado em ' + done + (done === 1 ? ' produto.' : ' produtos.'));
+  }
+  async function deleteResponse(qid, respId){
+    var q = quotationById(qid); if(!q) return;
+    var resp = responsesOf(q).filter(function(r){ return r.id === respId; })[0]; if(!resp) return;
+    var c = responseCounts(resp);
+    var chosen = q.items.reduce(function(n, it){ return n + (allocatedByResponse(it, resp) > 0 ? 1 : 0); }, 0);
+    var msg = 'Excluir a resposta de ' + resp.supplierName + '?\n\n' + resp.contactName + ' · ' + resp.contactPhone + '\n\n' +
+      '• Os ' + c.priced + (c.priced === 1 ? ' preço' : ' preços') + ', as marcas e as observações que ele enviou saem da comparação.\n' +
+      '• Ele poderá responder de novo pelo mesmo link, enquanto a cotação estiver aberta.' +
+      (chosen ? '\n\nAtenção: você já escolheu ' + chosen + (chosen === 1 ? ' preço' : ' preços') + ' desta resposta. Eles continuam nos lançamentos; para tirar, use “Remover” em cada produto.' : '');
+    if(!confirm(msg)) return;
+    try{ check(await db.from('quotation_responses').delete().eq('id', resp.id), 'Excluir resposta'); }
+    catch(err){ console.error(err); alert(friendlyDbError(err, 'Não foi possível excluir a resposta.')); return; }
+    RESPONSES[q.id] = responsesOf(q).filter(function(r){ return r.id !== resp.id; });
+    renderCotacaoDetail(q.id);
+    showBuyerToast('Resposta de ' + resp.supplierName + ' excluída.');
+  }
+  async function registerResponseSupplier(qid, respId){
+    var q = quotationById(qid); if(!q) return;
+    var resp = responsesOf(q).filter(function(r){ return r.id === respId; })[0]; if(!resp) return;
+    var sid = await ensureResponseSupplier(resp, false);
+    if(sid){ renderCotacaoDetail(q.id); showBuyerToast(resp.supplierName + ' cadastrado nos fornecedores.'); }
+  }
+
   /* ----- Gerar pedidos (um por fornecedor) ----- */
   function nextOrderCode(){
     var max = ORDER_CODE_MAX;
@@ -4598,7 +4813,7 @@ var QRCode;
         var rows = [];
         for(var li = 0; li < g.lines.length; li++){
           var pid = await ensureProductForItem(g.lines[li].item);
-          rows.push({ product_id: pid, qty: g.lines[li].a.qty, price: g.lines[li].a.price, obs: g.lines[li].item.obs || '' });
+          rows.push({ product_id: pid, qty: g.lines[li].a.qty, price: g.lines[li].a.price, obs: [g.lines[li].item.obs, g.lines[li].a.obs].filter(Boolean).join(' · ') });
         }
         var code = nextOrderCode();
         var orderDate = new Date().toISOString().slice(0, 10);
@@ -4687,6 +4902,7 @@ var QRCode;
       return;
     }
     QUOTATIONS = QUOTATIONS.filter(function(x){ return x.id !== id; });
+    delete RESPONSES[id];
     HISTORY = HISTORY.filter(function(h){ return !(h.quotationId === id && !h.orderId); });
     applyLastPrices();
     renderCotacoesList();
@@ -4709,6 +4925,11 @@ var QRCode;
     else if(a === 'editar-alocacao'){ openEditAllocation(id, act.dataset.item, act.dataset.alloc); }
     else if(a === 'remover-alocacao'){ removeAllocation(id, act.dataset.item, act.dataset.alloc); }
     else if(a === 'gerar-pedidos'){ openGenModal(id); }
+    else if(a === 'copiar-link-cotacao'){ var q3 = quotationById(id); if(q3) copyText(quotationLink(q3)).then(function(ok){ showBuyerToast(ok ? 'Link copiado!' : 'Não consegui copiar o link.'); }); }
+    else if(a === 'usar-resposta'){ useResponse(id, act.dataset.item, act.dataset.resp); }
+    else if(a === 'usar-menor-todos'){ useCheapestEverywhere(id); }
+    else if(a === 'excluir-resposta'){ deleteResponse(id, act.dataset.resp); }
+    else if(a === 'cadastrar-forn-resposta'){ registerResponseSupplier(id, act.dataset.resp); }
   });
 
   document.addEventListener('keydown', function(e){
@@ -5852,6 +6073,7 @@ var QRCode;
     return JSON.stringify([
       ORDERS.map(function(o){ return [o.id, o.status, o.total, o.confirmed, o.delivery_date]; }),
       QUOTATIONS.map(function(q){ return [q.id, q.status, q.items.map(function(it){ return [it.id, it.qty, it.allocations.map(function(a){ return [a.id, a.supplierId, a.qty, a.price, a.orderId]; })]; })]; }),
+      Object.keys(RESPONSES).sort().map(function(k){ return [k, RESPONSES[k].map(function(r){ return [r.id, r.updatedAt ? r.updatedAt.getTime() : 0]; })]; }),
       HISTORY.length, SUPPLIERS.length, PRODUCTS.length
     ]);
   }
@@ -5888,8 +6110,10 @@ var QRCode;
       var before = dataSignature();
       var beforeStatus = {}; ORDERS.forEach(function(o){ beforeStatus[o.id] = o.status; });
       var beforeQ = {}; QUOTATIONS.forEach(function(q){ beforeQ[q.id] = true; });
+      var beforeR = {}; Object.keys(RESPONSES).forEach(function(k){ RESPONSES[k].forEach(function(r){ beforeR[r.id] = r.updatedAt ? r.updatedAt.getTime() : 0; }); });
       await ensureOrdersList();
       await ensureQuotations();
+      await loadResponses();
       await loadPriceHistory();
       if(opts.full) await refreshCatalogKeepingSelection();
       if(state.viewingOrder){
@@ -5900,6 +6124,14 @@ var QRCode;
         .forEach(function(o){ showBuyerToast(o.supplier_name + (o.status === 'confirmado' ? ' confirmou o pedido ' : ' avisou que o pedido está a caminho: ') + o.code); });
       QUOTATIONS.filter(function(q){ return !beforeQ[q.id] && q.createdBy && q.createdBy !== currentBuyer.nome; })
         .forEach(function(q){ showBuyerToast(q.createdBy + ' criou a ' + quotationName(q)); });
+      if(RESP_READY) Object.keys(RESPONSES).forEach(function(k){
+        var qq = quotationById(k);
+        RESPONSES[k].forEach(function(r){
+          var t = r.updatedAt ? r.updatedAt.getTime() : 0;
+          if(beforeR[r.id] === undefined) showBuyerToast(r.supplierName + ' respondeu à ' + (qq ? quotationName(qq) : 'cotação'));
+          else if(t !== beforeR[r.id]) showBuyerToast(r.supplierName + ' alterou a resposta da ' + (qq ? quotationName(qq) : 'cotação'));
+        });
+      });
       if(dataSignature() !== before) pendingRedraw = true;
       if(pendingRedraw && redrawCurrentPage()) pendingRedraw = false;   // waits until the person stops typing
     } catch(err){
@@ -6299,6 +6531,417 @@ var QRCode;
 
   run();
 })();
+</script>
+
+<script>
+
+/* Supplier quotation page: opened from the link in the WhatsApp group (?cotacao=<quotation id>). No login.
+   The supplier says who they are, then sends price, brand and a note for each product. */
+(function(){
+  "use strict";
+  var params = new URLSearchParams(window.location.search);
+  var qid = params.get('cotacao');
+  if(!qid) return;
+
+  document.getElementById('buyer-root').style.display = 'none';
+  document.documentElement.style.overflowX = 'clip'; document.body.style.overflowX = 'clip';   // (not "hidden"): lets the progress header and the bottom bar stay in view while scrolling
+  var root = document.getElementById('public-root');
+  root.style.cssText = 'display:block; min-height:100vh; background:#FBF8F3; font-family:"IBM Plex Sans",sans-serif; color:#1D2A25;';
+
+  var db = window.supabase.createClient('https://dqghwfrmodulnevzpgbw.supabase.co', 'sb_publishable_nNk6sJNE-7NzraHnjXliLQ_nRfeWtZb');
+  var GREEN = '#00906d', DEEP = '#006e55', INK = '#1D2A25', SOFT = '#4F5D56', LINE = '#D9D9D9', BEIGE = '#EFDECE', FIELD = '#86918B';
+
+  /* ---------- small helpers ---------- */
+  function esc(t){ return String(t == null ? '' : t).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+  var UNITS = { Unidade:'un', Caixa:'cx', Pacote:'pct', Fardo:'fardo', Kg:'kg', Litro:'L', Saco:'saco' };
+  function unitOf(it){ return UNITS[it.unit] || 'un'; }
+  function fmtQty(n){ n = Number(n) || 0; return (Math.round(n * 1000) / 1000).toLocaleString('pt-BR', { maximumFractionDigits: 3 }); }
+  function money(n){ return 'R$ ' + (Math.round((Number(n) || 0) * 100) / 100).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+  function parsePrice(t){   // "39,90", "39.90", "1.234,50"; a dot followed by exactly 3 digits is a thousands separator ("1.500")
+    var s = String(t == null ? '' : t).replace(/[^\d.,]/g, '');
+    if(!s) return null;
+    var lc = s.lastIndexOf(','), ld = s.lastIndexOf('.');
+    if(lc > -1 && ld > -1){ s = lc > ld ? s.replace(/\./g, '').replace(',', '.') : s.replace(/,/g, ''); }
+    else if(lc > -1){ s = s.replace(/\./g, '').replace(',', '.'); }
+    else if(ld > -1 && /^\d{1,3}(\.\d{3})+$/.test(s)){ s = s.replace(/\./g, ''); }
+    var n = Number(s);
+    return isFinite(n) ? n : null;
+  }
+  function priceText(n){ return Number(n).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 4 }); }
+  function maskPhone(v){
+    var d = String(v || '').replace(/\D/g, '').slice(0, 11);
+    if(d.length === 0) return '';
+    if(d.length <= 2) return '(' + d;
+    if(d.length <= 6) return '(' + d.slice(0, 2) + ') ' + d.slice(2);
+    if(d.length <= 10) return '(' + d.slice(0, 2) + ') ' + d.slice(2, 6) + '-' + d.slice(6);
+    return '(' + d.slice(0, 2) + ') ' + d.slice(2, 7) + '-' + d.slice(7);
+  }
+  function phoneOk(v){ return String(v || '').replace(/\D/g, '').length >= 10; }
+  function sleep(ms){ return new Promise(function(r){ setTimeout(r, ms); }); }
+
+  /* what this device remembers: the secret key of the answer already sent (to alter it) and the draft being typed */
+  var SKEY = 'paulus_cot_' + qid;
+  function loadStore(){ try{ return JSON.parse(localStorage.getItem(SKEY) || 'null') || {}; } catch(e){ return {}; } }
+  function saveStore(){ try{ localStorage.setItem(SKEY, JSON.stringify(store)); } catch(e){ /* private mode: fine */ } }
+  var store = loadStore();
+
+  var Q = null;   // what the link shows: { id, number, status, items: [{ id, name, qty, unit, obs }], mine }
+  var S = { step: 'ident', supplierId: null, supplierName: '', contactName: '', contactPhone: '', note: '', answers: {}, sentAt: null };
+  function ans(id){ return S.answers[id] || (S.answers[id] = { state: 'empty', price: '', brand: '', obs: '' }); }   // state: empty | filled | none
+  var persistTimer = null;
+  function persistDraft(){
+    clearTimeout(persistTimer);
+    persistTimer = setTimeout(function(){
+      store.draft = { step: (S.step === 'fill' || S.step === 'review') ? 'fill' : 'ident', supplierId: S.supplierId, supplierName: S.supplierName, contactName: S.contactName, contactPhone: S.contactPhone, note: S.note, answers: S.answers };
+      saveStore();
+    }, 300);
+  }
+  function counts(){
+    var filled = 0, none = 0, total = 0;
+    Q.items.forEach(function(it){ var a = ans(it.id); if(a.state === 'filled') filled++; else if(a.state === 'none') none++;
+      if(a.state === 'filled'){ var n = parsePrice(a.price); total += (n > 0 ? n * it.qty : 0); } });
+    return { filled: filled, none: none, answered: filled + none, total: Math.round(total * 100) / 100, all: Q.items.length };
+  }
+
+  /* ---------- look ---------- */
+  (function addStyles(){
+    var st = document.createElement('style');
+    st.textContent =
+      '@keyframes pp-spin{to{transform:rotate(360deg)}}' +
+      '@keyframes pp-pop{0%{transform:scale(.3);opacity:0}60%{transform:scale(1.12);opacity:1}100%{transform:scale(1);opacity:1}}' +
+      '@keyframes pp-draw{to{stroke-dashoffset:0}}' +
+      '@keyframes pp-rise{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}' +
+      '.pp-spin{animation:pp-spin .9s linear infinite;transform-origin:50% 50%}' +
+      '.pp-pop{animation:pp-pop .55s cubic-bezier(.2,1.3,.4,1) both}' +
+      '.pp-check{stroke-dasharray:24;stroke-dashoffset:24;animation:pp-draw .45s .4s ease-out forwards}' +
+      '.pp-rise{opacity:0;animation:pp-rise .45s ease-out forwards}' +
+      '#cq-page input, #cq-page textarea, #cq-page button{font-family:inherit}' +
+      '#cq-page input:focus, #cq-page textarea:focus{outline:3px solid rgba(0,144,109,.35); outline-offset:1px}' +
+      '#cq-page button:focus-visible, #cq-page a:focus-visible{outline:3px solid rgba(0,144,109,.45); outline-offset:2px}' +
+      '@media (prefers-reduced-motion: reduce){.pp-pop,.pp-rise{animation:none;opacity:1}.pp-check{animation:none;stroke-dashoffset:0}.pp-spin{animation-duration:2.4s}}';
+    document.head.appendChild(st);
+  })();
+  var CHECK = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="' + DEEP + '" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6L9 17l-5-5"/></svg>';
+  function brandBar(right){
+    return '<div style="display:flex; align-items:center; justify-content:space-between; gap:10px; padding:14px 20px; background:#fff; border-bottom:1px solid ' + LINE + ';">' +
+      '<div style="display:flex; align-items:center; gap:10px;">' +
+        '<div style="width:36px; height:36px; border-radius:10px; background:' + GREEN + '; color:#fff; display:flex; align-items:center; justify-content:center; font-family:Fraunces,serif; font-weight:600; font-size:20px;" aria-hidden="true">P</div>' +
+        '<div><div style="font-family:Fraunces,serif; font-weight:600; font-size:18px; line-height:1.1; color:' + DEEP + ';">Paulu\'s</div><div style="font-size:11px; color:' + SOFT + '; letter-spacing:.02em;">Restaurantes Empresariais</div></div>' +
+      '</div>' + (right || '') + '</div>';
+  }
+  function page(inner){
+    root.innerHTML = '<div id="cq-page" style="max-width:520px; margin:0 auto; min-height:100vh; background:#FBF8F3; display:flex; flex-direction:column;">' + inner + '</div>';
+    window.scrollTo(0, 0);
+  }
+  function btnPrimary(id, label){ return '<button type="button" id="' + id + '" style="display:flex; align-items:center; justify-content:center; width:100%; height:56px; border:none; border-radius:14px; background:' + DEEP + '; color:#fff; font-size:17px; font-weight:600; cursor:pointer;">' + label + '</button>'; }
+  function btnSecondary(id, label){ return '<button type="button" id="' + id + '" style="display:flex; align-items:center; justify-content:center; width:100%; height:52px; border:1.5px solid ' + FIELD + '; border-radius:14px; background:#fff; color:' + INK + '; font-size:16px; font-weight:500; cursor:pointer;">' + label + '</button>'; }
+  function inputCss(extra){ return 'width:100%; height:52px; padding:0 14px; border:1.5px solid ' + FIELD + '; border-radius:12px; background:#fff; font-size:16px; color:' + INK + ';' + (extra || ''); }
+
+  /* ---------- plain screens ---------- */
+  function screenLoading(){
+    page(brandBar() + '<div id="cq-loading" style="padding:80px 24px; text-align:center;"><svg class="pp-spin" width="64" height="64" viewBox="0 0 50 50" style="display:block; margin:0 auto 16px auto;"><circle cx="25" cy="25" r="20" fill="none" stroke="#DCEFE4" stroke-width="5"/><circle cx="25" cy="25" r="20" fill="none" stroke="' + GREEN + '" stroke-width="5" stroke-linecap="round" stroke-dasharray="32 120"/></svg><div style="font-size:15px; color:' + SOFT + ';">Abrindo a cotação…</div></div>');
+  }
+  function screenMessage(title, text, retryId){
+    page(brandBar() + '<div id="cq-msg" style="padding:56px 28px; text-align:center;"><h1 style="margin:0 0 12px 0; font-family:Fraunces,serif; font-weight:600; font-size:26px; line-height:1.2;">' + esc(title) + '</h1>' +
+      '<p style="margin:0 0 20px 0; font-size:16px; line-height:1.5; color:#33423B;">' + esc(text) + '</p>' + (retryId ? '<div style="max-width:280px; margin:0 auto;">' + btnPrimary(retryId, 'Tentar de novo') + '</div>' : '') + '</div>');
+    if(retryId) document.getElementById(retryId).addEventListener('click', init);
+  }
+
+  /* ---------- 2. who is answering ---------- */
+  var suggestSeq = 0, suggestTimer = null;
+  function screenIdent(error){
+    var n = Q.items.length;
+    page(brandBar() +
+      '<div style="display:flex; flex-direction:column; gap:20px; padding:28px 24px 32px 24px;">' +
+        '<div style="display:flex; flex-direction:column; gap:8px;">' +
+          '<div style="font-size:12px; font-weight:600; letter-spacing:.08em; text-transform:uppercase; color:' + DEEP + ';">' + (Q.number ? 'Cotação #' + esc(Q.number) : 'Cotação') + '</div>' +
+          '<h1 style="margin:0; font-family:Fraunces,serif; font-weight:600; font-size:30px; line-height:1.15;">Vamos pedir os seus preços</h1>' +
+          '<p style="margin:0; font-size:15px; line-height:1.5; color:#33423B;">São ' + n + (n === 1 ? ' produto' : ' produtos') + '. Leva uns 2 minutos e não precisa de senha.</p>' +
+        '</div>' +
+        '<div style="display:flex; flex-direction:column; gap:8px; position:relative;">' +
+          '<label for="cq-empresa" style="font-size:14px; font-weight:600;">Sua empresa <span style="font-weight:400; color:' + SOFT + ';">(obrigatório)</span></label>' +
+          '<input id="cq-empresa" type="text" autocomplete="organization" value="' + esc(S.supplierName) + '" style="' + inputCss() + '">' +
+          '<div id="cq-sug" style="display:none; position:absolute; left:0; right:0; top:84px; z-index:5; background:#fff; border:1px solid ' + LINE + '; border-radius:12px; box-shadow:0 12px 28px rgba(29,42,37,.18); overflow:hidden;"></div>' +
+          '<div style="font-size:13px; line-height:1.4; color:' + SOFT + ';">Comece a digitar e escolha na lista. Se não achar, é só escrever o nome da sua empresa.</div>' +
+        '</div>' +
+        '<div style="display:flex; flex-direction:column; gap:8px;">' +
+          '<label for="cq-nome" style="font-size:14px; font-weight:600;">Seu nome <span style="font-weight:400; color:' + SOFT + ';">(obrigatório)</span></label>' +
+          '<input id="cq-nome" type="text" autocomplete="name" value="' + esc(S.contactName) + '" style="' + inputCss() + '">' +
+        '</div>' +
+        '<div style="display:flex; flex-direction:column; gap:8px;">' +
+          '<label for="cq-tel" style="font-size:14px; font-weight:600;">Telefone para contato <span style="font-weight:400; color:' + SOFT + ';">(obrigatório)</span></label>' +
+          '<input id="cq-tel" type="tel" inputmode="tel" autocomplete="tel" value="' + esc(S.contactPhone) + '" style="' + inputCss() + '">' +
+          '<div style="font-size:13px; line-height:1.4; color:' + SOFT + ';">Com DDD. O comprador chama você neste número se tiver alguma dúvida.</div>' +
+        '</div>' +
+        '<div id="cq-err" role="alert" style="' + (error ? '' : 'display:none; ') + 'padding:12px 14px; border-radius:12px; background:#F7E1DE; color:#7A1D14; font-size:14px; line-height:1.4;">' + esc(error || '') + '</div>' +
+        '<div style="font-size:13px; line-height:1.4; color:#33423B; margin-bottom:-8px;">Os três campos são obrigatórios para continuar.</div>' +
+        btnPrimary('cq-start', 'Começar a responder') +
+        '<div style="background:' + BEIGE + '; border-radius:14px; padding:16px; display:flex; flex-direction:column; gap:12px;">' +
+          '<div style="font-size:14px; font-weight:600;">Como funciona</div>' +
+          [['1', 'Você vê os produtos e as quantidades pedidas'], ['2', 'Coloca o preço, a marca e uma observação, se quiser'], ['3', 'Envia. O comprador recebe na hora']].map(function(s){
+            return '<div style="display:flex; gap:12px; align-items:center; font-size:14px; line-height:1.4;"><div style="flex:0 0 26px; width:26px; height:26px; border-radius:50%; background:' + DEEP + '; color:#fff; display:flex; align-items:center; justify-content:center; font-size:13px; font-weight:600;" aria-hidden="true">' + s[0] + '</div><span>' + s[1] + '</span></div>';
+          }).join('') +
+        '</div>' +
+      '</div>');
+    var emp = document.getElementById('cq-empresa'), nome = document.getElementById('cq-nome'), tel = document.getElementById('cq-tel'), sug = document.getElementById('cq-sug');
+    emp.addEventListener('input', function(){
+      S.supplierName = emp.value; S.supplierId = null; persistDraft();
+      clearTimeout(suggestTimer);
+      var term = emp.value.trim();
+      if(term.length < 2){ sug.style.display = 'none'; return; }
+      suggestTimer = setTimeout(async function(){
+        var mySeq = ++suggestSeq;
+        try{
+          var r = await db.rpc('search_suppliers_public', { p_quotation: qid, p_term: term });
+          if(mySeq !== suggestSeq || r.error || !Array.isArray(r.data) || !r.data.length){ if(mySeq === suggestSeq) sug.style.display = 'none'; return; }
+          sug.innerHTML = r.data.map(function(s){ return '<button type="button" data-sup-id="' + esc(s.id) + '" data-sup-name="' + esc(s.name) + '" style="display:block; width:100%; min-height:48px; text-align:left; padding:0 14px; border:none; border-bottom:1px solid #EEE; background:#fff; font-size:15px; color:' + INK + '; cursor:pointer;">' + esc(s.name) + '</button>'; }).join('');
+          sug.style.display = 'block';
+        } catch(e){ /* the list is optional: typing the name still works */ }
+      }, 250);
+    });
+    sug.addEventListener('click', function(e){
+      var b = e.target.closest('[data-sup-id]'); if(!b) return;
+      S.supplierId = b.dataset.supId; S.supplierName = b.dataset.supName; emp.value = S.supplierName; sug.style.display = 'none'; persistDraft();
+    });
+    nome.addEventListener('input', function(){ S.contactName = nome.value; persistDraft(); });
+    tel.addEventListener('input', function(){ tel.value = maskPhone(tel.value); S.contactPhone = tel.value; persistDraft(); });
+    document.getElementById('cq-start').addEventListener('click', function(){
+      var missing = [];
+      if(S.supplierName.trim().length < 2) missing.push('a sua empresa');
+      if(S.contactName.trim().length < 2) missing.push('o seu nome');
+      if(!phoneOk(S.contactPhone)) missing.push('o telefone com DDD');
+      [['cq-empresa', S.supplierName.trim().length < 2], ['cq-nome', S.contactName.trim().length < 2], ['cq-tel', !phoneOk(S.contactPhone)]].forEach(function(p){
+        document.getElementById(p[0]).style.borderColor = p[1] ? '#B42318' : FIELD;
+      });
+      var err = document.getElementById('cq-err');
+      if(missing.length){ err.textContent = 'Falta preencher: ' + missing.join(', ') + '.'; err.style.display = 'block'; return; }
+      S.step = 'fill'; persistDraft(); screenFill();
+    });
+  }
+
+  /* ---------- 3. price, brand and note for each product ---------- */
+  function badgeHtml(a){
+    if(a.state === 'filled') return '<span style="display:inline-flex; align-items:center; gap:6px; padding:5px 10px; border-radius:999px; background:#E3F4EC; color:' + DEEP + '; font-size:12px; font-weight:600; white-space:nowrap;">' + CHECK + ' Preenchido</span>';
+    if(a.state === 'none') return '<span style="display:inline-flex; align-items:center; padding:5px 10px; border-radius:999px; background:#E4E4E4; color:#3D4843; font-size:12px; font-weight:600; white-space:nowrap;">Não tenho</span>';
+    return '<span style="display:inline-flex; align-items:center; padding:5px 10px; border-radius:999px; background:#FBE9D3; color:#7A4A12; font-size:12px; font-weight:600; white-space:nowrap;">Falta o preço</span>';
+  }
+  function calcText(it, a){
+    var n = parsePrice(a.price);
+    return n > 0 ? fmtQty(it.qty) + ' ' + unitOf(it) + ' × ' + money(n) + ' = ' + money(it.qty * n) : fmtQty(it.qty) + ' ' + unitOf(it) + ' × R$ ___ = o total aparece aqui';
+  }
+  function cardHtml(it){
+    var a = ans(it.id), unit = unitOf(it);
+    var head = '<div style="display:flex; justify-content:space-between; align-items:flex-start; gap:10px;">' +
+      '<div style="display:flex; flex-direction:column; gap:3px;"><div style="font-weight:600; font-size:17px; line-height:1.2; ' + (a.state === 'none' ? 'color:#3D4843;' : '') + '">' + esc(it.name) + '</div>' +
+      '<div style="font-size:14px; color:#33423B;">Pedido: <span style="font-weight:600;">' + fmtQty(it.qty) + ' ' + unit + '</span></div></div>' +
+      '<span id="cq-badge-' + esc(it.id) + '">' + badgeHtml(a) + '</span></div>';
+    if(a.state === 'none'){
+      return '<div id="cq-card-' + esc(it.id) + '" style="background:#F1F1F1; border:1px solid ' + LINE + '; border-radius:16px; padding:16px; display:flex; flex-direction:column; gap:6px;">' + head +
+        '<button type="button" data-act="back" data-item="' + esc(it.id) + '" style="align-self:flex-start; min-height:44px; padding:0; border:none; background:none; font-size:14px; color:' + DEEP + '; text-decoration:underline; cursor:pointer;">Voltar a responder este produto</button></div>';
+    }
+    var f = function(key, label, value, ph){
+      return '<div style="display:flex; flex-direction:column; gap:6px;"><label for="cq-' + key + '-' + esc(it.id) + '" style="font-size:13px; font-weight:600;">' + label + ' <span style="font-weight:400; color:' + SOFT + ';">(opcional)</span></label>' +
+        '<input id="cq-' + key + '-' + esc(it.id) + '" type="text" maxlength="' + (key === 'brand' ? 80 : 200) + '" data-f="' + key + '" data-item="' + esc(it.id) + '" value="' + esc(value) + '" placeholder="' + ph + '" style="width:100%; height:48px; padding:0 14px; border:1.5px solid ' + FIELD + '; border-radius:12px; background:#fff; font-size:15px; color:' + INK + ';"></div>';
+    };
+    return '<div id="cq-card-' + esc(it.id) + '" style="background:#fff; border:1px solid ' + LINE + '; border-radius:16px; padding:16px; display:flex; flex-direction:column; gap:14px;">' + head +
+      (it.obs ? '<div style="background:' + BEIGE + '; border-radius:10px; padding:9px 12px; font-size:13px; line-height:1.4;"><span style="font-weight:600;">Obs. do comprador:</span> ' + esc(it.obs) + '</div>' : '') +
+      '<div style="display:flex; flex-direction:column; gap:6px;"><label for="cq-price-' + esc(it.id) + '" style="font-size:13px; font-weight:600;">Seu preço por ' + unit + '</label>' +
+        '<div style="display:flex; align-items:center; gap:8px; height:56px; padding:0 14px; border:1.5px solid ' + FIELD + '; border-radius:12px; background:#fff;"><span style="font-size:18px; font-weight:500; color:' + SOFT + ';">R$</span>' +
+        '<input id="cq-price-' + esc(it.id) + '" type="text" inputmode="decimal" data-f="price" data-item="' + esc(it.id) + '" value="' + esc(a.price) + '" placeholder="0,00" style="flex:1; min-width:0; height:100%; border:none; outline:none; background:transparent; font-size:22px; font-weight:600; color:' + INK + ';"></div>' +
+        '<div id="cq-calc-' + esc(it.id) + '" style="font-size:13px; font-weight:600; color:' + (parsePrice(a.price) > 0 ? DEEP : SOFT) + ';">' + calcText(it, a) + '</div></div>' +
+      f('brand', 'Marca', a.brand, 'Ex.: marca ou tipo') + f('obs', 'Observação', a.obs, 'Ex.: embalagem, prazo, validade') +
+      '<button type="button" data-act="none" data-item="' + esc(it.id) + '" style="align-self:flex-start; min-height:44px; padding:0; border:none; background:none; font-size:14px; color:' + SOFT + '; text-decoration:underline; cursor:pointer;">Não tenho este produto</button></div>';
+  }
+  function progressHtml(){
+    var c = counts(), pct = c.all ? Math.round(c.answered / c.all * 100) : 0;
+    return '<div style="display:flex; justify-content:space-between; font-size:14px;"><span id="cq-prog-label" style="font-weight:600;">' + c.answered + ' de ' + c.all + ' respondidos</span><span id="cq-prog-pct" style="color:' + SOFT + ';">' + pct + '%</span></div>' +
+      '<div style="height:8px; border-radius:4px; background:#E4E4E4;"><div id="cq-prog-bar" style="width:' + pct + '%; height:8px; border-radius:4px; background:' + GREEN + ';"></div></div>';
+  }
+  function updateProgress(){
+    var c = counts(), pct = c.all ? Math.round(c.answered / c.all * 100) : 0;
+    var l = document.getElementById('cq-prog-label'); if(!l) return;
+    l.textContent = c.answered + ' de ' + c.all + ' respondidos';
+    document.getElementById('cq-prog-pct').textContent = pct + '%';
+    document.getElementById('cq-prog-bar').style.width = pct + '%';
+    var rest = c.all - c.answered, n = document.getElementById('cq-rest');
+    if(n) n.textContent = rest > 0 ? 'Faltam ' + rest + (rest === 1 ? ' produto' : ' produtos') + '. Você pode enviar só o que preencheu.' : 'Todos os produtos respondidos.';
+  }
+  function screenFill(){
+    var c = counts(), rest = c.all - c.answered;
+    page(
+      '<div style="background:#fff; border-bottom:1px solid ' + LINE + '; padding:14px 20px 16px 20px; display:flex; flex-direction:column; gap:12px; position:sticky; top:0; z-index:4;">' +
+        '<div style="display:flex; justify-content:space-between; align-items:center; gap:10px;"><div style="font-family:Fraunces,serif; font-weight:600; font-size:18px; color:' + DEEP + ';">' + (Q.number ? 'Cotação #' + esc(Q.number) : 'Cotação') + '</div><div style="font-size:13px; color:' + SOFT + ';">' + esc(S.supplierName) + '</div></div>' +
+        '<div id="cq-progress" style="display:flex; flex-direction:column; gap:8px;">' + progressHtml() + '</div></div>' +
+      '<div style="display:flex; flex-direction:column; gap:16px; padding:16px 20px;">' +
+        '<div style="background:' + BEIGE + '; border-radius:12px; padding:12px 14px; font-size:14px; line-height:1.45;">Preencha só o que você tem. Se não tiver o produto, toque em <span style="font-weight:600;">“Não tenho”</span>.</div>' +
+        Q.items.map(cardHtml).join('') +
+      '</div>' +
+      '<div style="position:sticky; bottom:0; margin-top:auto; background:#fff; border-top:1px solid ' + LINE + '; padding:14px 20px 20px 20px; display:flex; flex-direction:column; gap:10px;">' +
+        '<div id="cq-rest" style="font-size:13px; color:#33423B; text-align:center;">' + (rest > 0 ? 'Faltam ' + rest + (rest === 1 ? ' produto' : ' produtos') + '. Você pode enviar só o que preencheu.' : 'Todos os produtos respondidos.') + '</div>' +
+        '<div id="cq-fill-err" role="alert" style="display:none; padding:10px 12px; border-radius:12px; background:#F7E1DE; color:#7A1D14; font-size:14px;"></div>' +
+        btnPrimary('cq-review', 'Revisar e enviar') +
+      '</div>');
+    document.getElementById('cq-review').addEventListener('click', function(){
+      if(counts().answered === 0){
+        var e = document.getElementById('cq-fill-err'); e.textContent = 'Responda ao menos um produto: coloque o preço ou toque em “Não tenho”.'; e.style.display = 'block'; return;
+      }
+      S.step = 'review'; screenReview();
+    });
+  }
+  // typing in the product cards: only the small pieces (total line, badge, progress) are redrawn, never the field being typed in
+  root.addEventListener('input', function(e){
+    var el = e.target; if(!el.dataset || !el.dataset.f || S.step !== 'fill') return;
+    var it = Q.items.filter(function(x){ return x.id === el.dataset.item; })[0]; if(!it) return;
+    var a = ans(it.id);
+    if(el.dataset.f === 'price'){
+      a.price = el.value; a.state = parsePrice(a.price) > 0 ? 'filled' : 'empty';
+      var calc = document.getElementById('cq-calc-' + it.id); calc.textContent = calcText(it, a); calc.style.color = a.state === 'filled' ? DEEP : SOFT;
+      document.getElementById('cq-badge-' + it.id).innerHTML = badgeHtml(a);
+      updateProgress();
+    } else if(el.dataset.f === 'brand'){ a.brand = el.value; }
+    else if(el.dataset.f === 'obs'){ a.obs = el.value; }
+    persistDraft();
+  });
+  root.addEventListener('focusout', function(e){
+    var el = e.target; if(!el.dataset || el.dataset.f !== 'price') return;
+    var n = parsePrice(el.value); if(n > 0){ el.value = priceText(n); ans(el.dataset.item).price = el.value; var it = Q.items.filter(function(x){ return x.id === el.dataset.item; })[0]; if(it) document.getElementById('cq-calc-' + it.id).textContent = calcText(it, ans(it.id)); }
+  });
+  root.addEventListener('click', function(e){
+    var b = e.target.closest('[data-act]'); if(!b || S.step !== 'fill') return;
+    var it = Q.items.filter(function(x){ return x.id === b.dataset.item; })[0]; if(!it) return;
+    var a = ans(it.id);
+    if(b.dataset.act === 'none') a.state = 'none';
+    else if(b.dataset.act === 'back') a.state = parsePrice(a.price) > 0 ? 'filled' : 'empty';
+    var card = document.getElementById('cq-card-' + it.id); card.outerHTML = cardHtml(it);
+    updateProgress(); persistDraft();
+  });
+
+  /* ---------- 4. check and send ---------- */
+  function screenReview(error){
+    var c = counts(), unanswered = c.all - c.answered;
+    var rows = Q.items.map(function(it, i){
+      var a = ans(it.id), unit = unitOf(it), border = i ? 'border-top:1px solid #E4E4E4;' : '';
+      if(a.state === 'filled'){
+        var n = parsePrice(a.price);
+        var det = [a.brand ? 'Marca: ' + esc(a.brand) : '', esc(a.obs)].filter(Boolean).join(' · ');
+        return '<div style="display:flex; justify-content:space-between; gap:12px; padding:14px 0; ' + border + '"><div style="display:flex; flex-direction:column; gap:3px; min-width:0;"><div style="font-weight:600; font-size:15px;">' + esc(it.name) + '</div>' +
+          '<div style="font-size:14px; color:#33423B;">' + fmtQty(it.qty) + ' ' + unit + ' × ' + money(n) + '</div>' + (det ? '<div style="font-size:13px; color:' + SOFT + ';">' + det + '</div>' : '') + '</div>' +
+          '<div style="font-weight:600; font-size:15px; white-space:nowrap;">' + money(n * it.qty) + '</div></div>';
+      }
+      if(a.state === 'none') return '<div style="display:flex; justify-content:space-between; gap:12px; padding:14px 0; ' + border + '"><div style="display:flex; flex-direction:column; gap:3px;"><div style="font-weight:600; font-size:15px; color:#3D4843;">' + esc(it.name) + '</div><div style="font-size:14px; color:#3D4843;">Não tenho este produto</div></div><span style="align-self:flex-start; padding:4px 10px; border-radius:999px; background:#E4E4E4; color:#3D4843; font-size:12px; font-weight:600; white-space:nowrap;">Não tenho</span></div>';
+      return '<div style="display:flex; justify-content:space-between; gap:12px; padding:14px 0; ' + border + '"><div style="display:flex; flex-direction:column; gap:3px;"><div style="font-weight:600; font-size:15px;">' + esc(it.name) + '</div><div style="font-size:14px; color:#33423B;">' + fmtQty(it.qty) + ' ' + unit + ' · ainda sem preço</div></div><span style="align-self:flex-start; padding:4px 10px; border-radius:999px; background:#FBE9D3; color:#7A4A12; font-size:12px; font-weight:600; white-space:nowrap;">Sem resposta</span></div>';
+    }).join('');
+    page(
+      '<div style="background:#fff; border-bottom:1px solid ' + LINE + '; padding:14px 20px; display:flex; justify-content:space-between; align-items:center; gap:10px;"><div style="font-family:Fraunces,serif; font-weight:600; font-size:18px; color:' + DEEP + ';">' + (Q.number ? 'Cotação #' + esc(Q.number) : 'Cotação') + '</div><div style="font-size:13px; color:' + SOFT + ';">' + esc(S.supplierName) + '</div></div>' +
+      '<div style="display:flex; flex-direction:column; gap:18px; padding:24px 20px;">' +
+        '<div style="display:flex; flex-direction:column; gap:8px;"><h1 style="margin:0; font-family:Fraunces,serif; font-weight:600; font-size:28px; line-height:1.15;">Confira antes de enviar</h1>' +
+          '<p style="margin:0; font-size:15px; line-height:1.5; color:#33423B;">Você respondeu ' + c.answered + ' de ' + c.all + ' produtos. O que ficar em branco o comprador vê como “sem resposta”.</p></div>' +
+        '<div style="background:#fff; border:1px solid ' + LINE + '; border-radius:16px; padding:14px 16px; display:flex; justify-content:space-between; align-items:flex-start; gap:12px;"><div style="display:flex; flex-direction:column; gap:3px; min-width:0;"><div style="font-size:12px; font-weight:600; letter-spacing:.06em; text-transform:uppercase; color:' + SOFT + ';">Seus dados</div><div style="font-weight:600; font-size:15px;">' + esc(S.contactName) + ' · ' + esc(S.supplierName) + '</div><div style="font-size:14px; color:#33423B;">' + esc(S.contactPhone) + '</div></div>' +
+          '<button type="button" id="cq-edit-id" style="display:inline-flex; align-items:center; min-height:44px; border:none; background:none; font-size:14px; font-weight:600; color:' + DEEP + '; text-decoration:underline; cursor:pointer;">Alterar</button></div>' +
+        '<div style="background:#fff; border:1px solid ' + LINE + '; border-radius:16px; padding:4px 16px;">' + rows + '</div>' +
+        (unanswered > 0 ? '<div style="background:#FBE9D3; border-radius:12px; padding:14px 16px; font-size:14px; line-height:1.45; color:#4A2D0A;"><div style="font-weight:600; margin-bottom:6px;">' + unanswered + (unanswered === 1 ? ' produto ficou sem resposta' : ' produtos ficaram sem resposta') + '</div>Você pode enviar assim e completar depois, até o comprador fechar a cotação.</div>' : '') +
+        '<div style="display:flex; justify-content:space-between; align-items:baseline; border-top:2px solid ' + LINE + '; padding-top:14px;"><span style="font-size:15px; font-weight:600;">Total do que você respondeu</span><span id="cq-total" style="font-family:Fraunces,serif; font-weight:600; font-size:22px; color:' + DEEP + ';">' + money(c.total) + '</span></div>' +
+        '<div style="display:flex; flex-direction:column; gap:6px;"><label for="cq-note" style="font-size:14px; font-weight:600;">Recado para o comprador <span style="font-weight:400; color:' + SOFT + ';">(opcional)</span></label>' +
+          '<textarea id="cq-note" rows="3" maxlength="500" placeholder="Ex.: preços válidos até sexta; entrega em 2 dias úteis" style="width:100%; padding:12px 14px; border:1.5px solid ' + FIELD + '; border-radius:12px; background:#fff; font-size:15px; line-height:1.4; color:' + INK + '; resize:none;">' + esc(S.note) + '</textarea></div>' +
+        '<div id="cq-send-err" role="alert" style="' + (error ? '' : 'display:none; ') + 'padding:12px 14px; border-radius:12px; background:#F7E1DE; color:#7A1D14; font-size:14px; line-height:1.4;">' + esc(error || '') + '</div>' +
+        '<div style="display:flex; flex-direction:column; gap:10px;">' + btnPrimary('cq-send', 'Enviar cotação') + btnSecondary('cq-back', 'Voltar e editar') + '</div>' +
+      '</div>');
+    document.getElementById('cq-note').addEventListener('input', function(){ S.note = this.value; persistDraft(); });
+    document.getElementById('cq-back').addEventListener('click', function(){ S.step = 'fill'; screenFill(); });
+    document.getElementById('cq-edit-id').addEventListener('click', function(){ S.step = 'ident'; screenIdent(); });
+    document.getElementById('cq-send').addEventListener('click', function(){ send(false); });
+  }
+  async function send(retried){
+    var btn = document.getElementById('cq-send'); btn.disabled = true; btn.textContent = 'Enviando…';
+    var items = [];
+    Q.items.forEach(function(it){
+      var a = ans(it.id);
+      if(a.state === 'filled') items.push({ quotation_item_id: it.id, available: true, price: parsePrice(a.price), brand: a.brand.trim(), obs: a.obs.trim() });
+      else if(a.state === 'none') items.push({ quotation_item_id: it.id, available: false });
+    });
+    try{
+      var res = await db.rpc('save_quotation_response', { p_quotation: qid, p_response: store.resp ? store.resp.id : null, p_key: store.resp ? store.resp.key : null,
+        p_supplier_id: S.supplierId, p_supplier_name: S.supplierName.trim(), p_contact_name: S.contactName.trim(), p_contact_phone: S.contactPhone.trim(), p_note: S.note.trim(), p_items: items });
+      if(res.error) throw new Error(res.error.message);
+      var d = res.data || {};
+      if(!d.ok){
+        if(d.reason === 'closed'){ screenMessage('Esta cotação foi encerrada', 'O comprador do Paulu\'s fechou a cotação enquanto você respondia, então ela não aceita mais respostas. Fale com ele se precisar.'); return; }
+        if(d.reason === 'invalid_key' && !retried){ delete store.resp; saveStore(); return send(true); }   // old key no longer valid: send as a new answer
+        if(d.reason === 'invalid_name' || d.reason === 'invalid_phone' || d.reason === 'invalid_supplier'){ S.step = 'ident'; screenIdent('Confira a empresa, o nome e o telefone com DDD.'); return; }
+        throw new Error('A resposta não foi aceita (' + (d.reason || 'erro') + ').');
+      }
+      store.resp = { id: d.response_id, key: d.key }; delete store.draft; store.sentAt = new Date().toISOString(); saveStore();
+      S.sentAt = new Date(store.sentAt); S.step = 'sent'; screenSent();
+    } catch(err){
+      console.error(err);
+      screenReview('Não foi possível enviar agora. Confira a internet e toque em “Enviar cotação” de novo. Suas respostas continuam aqui.');
+    }
+  }
+
+  /* ---------- 5. sent ---------- */
+  function screenSent(){
+    var c = counts();
+    var parts = [];
+    if(c.filled) parts.push('os seus ' + c.filled + (c.filled === 1 ? ' preço' : ' preços'));
+    if(c.none) parts.push('a informação de que você não tem ' + c.none + (c.none === 1 ? ' produto' : ' produtos'));
+    var when = S.sentAt ? ' · enviada às ' + S.sentAt.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '';
+    page(brandBar() +
+      '<div style="display:flex; flex-direction:column; align-items:center; gap:18px; padding:56px 28px 24px 28px; text-align:center;">' +
+        '<div class="pp-pop" style="width:132px; height:132px; border-radius:50%; background:' + GREEN + '; display:flex; align-items:center; justify-content:center; box-shadow:0 12px 28px rgba(0,144,109,.30);"><svg width="76" height="76" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" role="img" aria-label="Enviado com sucesso"><path class="pp-check" d="M20 6L9 17l-5-5"/></svg></div>' +
+        '<h1 id="cq-sent-title" class="pp-rise" style="margin:0; font-family:Fraunces,serif; font-weight:600; font-size:32px; line-height:1.15; animation-delay:.6s;">Cotação enviada!</h1>' +
+        '<p id="cq-sent-text" class="pp-rise" style="margin:0; font-size:16px; line-height:1.5; color:#33423B; animation-delay:.8s;">Obrigado, <span style="font-weight:600;">' + esc(S.supplierName) + '</span>. O comprador do Paulu\'s já recebeu ' + (parts.length ? parts.join(' e ') : 'a sua resposta') + '.</p>' +
+        '<div style="font-size:13px; color:' + SOFT + ';">' + (Q.number ? 'Cotação #' + esc(Q.number) : 'Cotação') + when + '</div>' +
+      '</div>' +
+      '<div style="margin:8px 24px 0 24px; background:' + BEIGE + '; border-radius:14px; padding:16px; display:flex; flex-direction:column; gap:10px;">' +
+        '<div style="font-size:14px; font-weight:600;">Precisa mudar algum preço?</div>' +
+        '<div style="font-size:14px; line-height:1.45;">Você pode alterar a sua resposta até o comprador fechar a cotação. Basta abrir o mesmo link de novo, neste aparelho.</div>' +
+        '<button type="button" id="cq-change" style="display:flex; align-items:center; justify-content:center; height:52px; border:1.5px solid ' + DEEP + '; border-radius:14px; background:#fff; color:' + DEEP + '; font-size:16px; font-weight:600; cursor:pointer;">Alterar minhas respostas</button>' +
+      '</div>' +
+      '<div style="margin-top:auto; padding:20px 24px 28px 24px; text-align:center; font-size:13px; color:' + SOFT + ';">Pode fechar esta página.</div>');
+    document.getElementById('cq-change').addEventListener('click', function(){ S.step = 'fill'; screenFill(); });
+  }
+
+  /* ---------- start ---------- */
+  function fromMine(m){
+    S.supplierId = m.supplier_id || null; S.supplierName = m.supplier_name || ''; S.contactName = m.contact_name || ''; S.contactPhone = m.contact_phone || ''; S.note = m.note || '';
+    S.answers = {};
+    (m.items || []).forEach(function(i){
+      S.answers[i.quotation_item_id] = i.available === false ? { state: 'none', price: '', brand: '', obs: '' }
+        : { state: 'filled', price: priceText(Number(i.price)), brand: i.brand || '', obs: i.obs || '' };
+    });
+  }
+  async function init(){
+    screenLoading();
+    try{
+      var args = { p_quotation: qid };
+      if(store.resp){ args.p_response = store.resp.id; args.p_key = store.resp.key; }
+      var res = await db.rpc('get_quotation_public', args);
+      if(res.error) throw new Error(res.error.message);
+      Q = res.data;
+    } catch(err){
+      console.error(err);
+      screenMessage('Não foi possível abrir a cotação', 'Confira a internet e tente de novo.', 'cq-retry');
+      return;
+    }
+    if(!Q){ screenMessage('Cotação não encontrada', 'Confira o link que você recebeu. Se continuar assim, fale com o comprador do Paulu\'s.'); return; }
+    if(Q.status === 'encerrada'){ screenMessage('Esta cotação foi encerrada', 'O comprador do Paulu\'s já fechou esta cotação, então ela não aceita mais respostas. Se precisar, fale com ele.'); return; }
+    if(!Q.items || !Q.items.length){ screenMessage('Esta cotação ainda não tem produtos', 'Fale com o comprador do Paulu\'s.'); return; }
+    if(Q.mine){
+      fromMine(Q.mine); if(store.sentAt) S.sentAt = new Date(store.sentAt);
+      S.step = 'sent'; screenSent(); return;
+    }
+    if(store.resp){ delete store.resp; delete store.sentAt; saveStore(); }   // the buyer deleted that answer: the supplier may answer again
+    var d = store.draft;
+    if(d){
+      S.supplierId = d.supplierId || null; S.supplierName = d.supplierName || ''; S.contactName = d.contactName || ''; S.contactPhone = d.contactPhone || ''; S.note = d.note || ''; S.answers = d.answers || {};
+      var idOk = S.supplierName.trim().length >= 2 && S.contactName.trim().length >= 2 && phoneOk(S.contactPhone);
+      if(d.step === 'fill' && idOk){ S.step = 'fill'; screenFill(); return; }
+    }
+    S.step = 'ident'; screenIdent();
+  }
+  init();
+})();
+
 </script>
 
 </body>
