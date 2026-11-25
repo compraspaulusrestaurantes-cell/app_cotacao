@@ -1114,7 +1114,7 @@ html, body {
             </div>
 
             <div class="card">
-              <div style="font-size:13px; color:var(--ink-soft); margin-bottom:10px;">Resumo do mês</div>
+              <div style="font-size:13px; color:var(--ink-soft); margin-bottom:10px;">Resumo do mês <span id="home-resumo-escopo" style="color:var(--ink-faint);"></span></div>
               <div class="row" style="justify-content:space-between; margin-bottom:8px;"><span style="font-size:13px;">Total comprado</span><span id="home-total-comprado" style="font-size:13px; font-weight:600;">R$ 0,00</span></div>
               <div class="row" style="justify-content:space-between; margin-bottom:8px;"><span style="font-size:13px;">Pedidos fechados</span><span id="home-pedidos-fechados" style="font-size:13px; font-weight:600;">0</span></div>
               <div class="row" style="justify-content:space-between;"><span style="font-size:13px;">Fornecedores usados</span><span id="home-fornecedores" style="font-size:13px; font-weight:600;">0</span></div>
@@ -1453,6 +1453,10 @@ html, body {
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--ink-faint)" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
             <label for="pedido-search" class="sr-only">Buscar pedido</label>
             <input id="pedido-search" type="text" placeholder="Buscar por código, fornecedor ou data">
+          </div>
+          <div id="ped-owner-wrap" style="display:none; align-items:center; gap:10px; margin:0 0 14px 0;">
+            <label for="ped-owner-filter" style="font-size:12px; font-weight:600; color:var(--ink-soft);">Comprador</label>
+            <select id="ped-owner-filter"><option value="">Todos os compradores</option></select>
           </div>
 
           <div class="card" id="pedido-edit-form" style="display:none; margin-bottom:20px;">
@@ -2335,7 +2339,7 @@ var QRCode;
   var SUPABASE_URL = 'https://dqghwfrmodulnevzpgbw.supabase.co';
   var SUPABASE_KEY = 'sb_publishable_nNk6sJNE-7NzraHnjXliLQ_nRfeWtZb';
   var db = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-  var APP_VERSION = '2026-11-19 · versão 10';
+  var APP_VERSION = '2026-11-19 · versão 11';
   var APP_BASE_URL = 'https://compraspaulusrestaurantes-cell.github.io/app_cotacao/';
   var DEFAULT_SUPPLIER_NAME = 'Distribuidora Bom Preço';
   var SUPPLIERS_SEED = [
@@ -2527,9 +2531,10 @@ var QRCode;
   }
   // The screen of each buyer only shows his own quotations; the administrator sees everybody's.
   // (Old quotations with no author stay visible to all, since nobody owns them.)
-  function canSeeQuotation(q){
-    return isAdmin() || !q.createdBy || normalizeText(q.createdBy) === normalizeText(currentBuyer.nome);
+  function canSeeAuthor(author){
+    return isAdmin() || !author || normalizeText(author) === normalizeText(currentBuyer.nome);
   }
+  function canSeeQuotation(q){ return canSeeAuthor(q.createdBy); }
 
   function mapHistoryRow(a){
     return { id: a.id, quotationId: a.quotation_id, productId: a.product_id, productName: a.product_name, supplierId: a.supplier_id,
@@ -2582,9 +2587,31 @@ var QRCode;
 
   var ORDERS = [];
 
+  // Numbers that must look at EVERY order, not only the ones this buyer can see (next order code, suppliers already used)
+  var ORDER_CODE_MAX = 1040;
+  var ORDER_COUNT_BY_SUPPLIER = {};
+  function noteAllOrders(all){
+    ORDER_CODE_MAX = 1040; ORDER_COUNT_BY_SUPPLIER = {};
+    all.forEach(function(o){
+      var m = /#(\d+)/.exec(o.code || ''); if(m) ORDER_CODE_MAX = Math.max(ORDER_CODE_MAX, Number(m[1]));
+      if(o.supplier_id) ORDER_COUNT_BY_SUPPLIER[o.supplier_id] = (ORDER_COUNT_BY_SUPPLIER[o.supplier_id] || 0) + 1;
+    });
+  }
+  async function refreshOrderCodes(){   // right before creating an order: another buyer may have just created one
+    try{
+      var r = await db.from('orders').select('code');
+      if(!r.error && r.data){ var keepCount = ORDER_COUNT_BY_SUPPLIER; noteAllOrders(r.data.map(function(o){ return { code: o.code }; })); ORDER_COUNT_BY_SUPPLIER = keepCount; }
+    } catch(e){ console.error(e); }
+  }
+  function supplierOrderCount(id){
+    return Math.max(ORDER_COUNT_BY_SUPPLIER[id] || 0, ORDERS.filter(function(o){ return o.supplier_id === id; }).length);
+  }
   async function ensureOrdersList(){
     var res = check(await db.from('orders').select('*'), 'Ler pedidos');
-    ORDERS = (res.data || []).map(function(o){
+    var all = res.data || [];
+    noteAllOrders(all);
+    // each buyer sees only his own orders (the administrator sees everybody's; old orders with no author stay visible to all)
+    ORDERS = all.filter(function(o){ return canSeeAuthor(o.created_by); }).map(function(o){
       return Object.assign({}, o, { supplier_name: supplierNameById[o.supplier_id] || '—' });
     }).sort(function(a,b){ return (b.order_date || '').localeCompare(a.order_date || ''); });
   }
@@ -2768,6 +2795,7 @@ var QRCode;
   }
 
   function renderResumoMes(){
+    document.getElementById('home-resumo-escopo').textContent = isAdmin() ? '· todos os compradores' : '· só os seus pedidos';
     var key = currentMonthKey();
     var orders = ORDERS.filter(function(o){ return o.status !== 'rascunho' && monthKeyFromDateStr(o.order_date) === key; });
     var total = orders.reduce(function(sum, o){ return sum + (Number(o.total) || 0); }, 0);
@@ -3418,7 +3446,7 @@ var QRCode;
   function allCategoryNames(){
     return uniqueSorted([].concat.apply([], SUPPLIERS.map(function(s){ return s.categories || []; })).concat(PRODUCTS.map(function(p){ return p.category; }).filter(Boolean)));
   }
-  ['fornecedor-cat-filter', 'produto-cat-filter', 'hist-fornecedor', 'cot-owner-filter', 'dash-month', 'lista-cat-filter'].forEach(function(id){ enhanceSelect(document.getElementById(id)); });
+  ['fornecedor-cat-filter', 'produto-cat-filter', 'hist-fornecedor', 'cot-owner-filter', 'dash-month', 'lista-cat-filter', 'ped-owner-filter'].forEach(function(id){ enhanceSelect(document.getElementById(id)); });
   enhanceSuggestInput(document.getElementById('pf-categoria'), function(){ return uniqueSorted(PRODUCTS.map(function(p){ return p.category; }).filter(Boolean)); });
   var ffCats = enhanceChipInput(document.getElementById('ff-categorias'), allCategoryNames, 'Escolha na lista ou digite e aperte Enter');
 
@@ -3504,7 +3532,7 @@ var QRCode;
   async function deleteSupplier(id){
     var sup = SUPPLIERS.filter(function(x){ return x.id === id; })[0];
     if(!sup) return;
-    var used = ORDERS.some(function(o){ return o.supplier_id === id; }) || HISTORY.some(function(h){ return h.supplierId === id; });
+    var used = supplierOrderCount(id) > 0 || HISTORY.some(function(h){ return h.supplierId === id; });
     if(used){
       alert('"' + sup.name + '" já tem pedidos ou histórico de preços, então não pode ser excluído (para você não perder o histórico).');
       return;
@@ -3718,7 +3746,7 @@ var QRCode;
     return n;
   }
   function supplierUsage(sp){
-    var n = ORDERS.filter(function(o){ return o.supplier_id === sp.id; }).length;
+    var n = supplierOrderCount(sp.id);
     HISTORY.forEach(function(h){ if(h.supplierId === sp.id) n++; });
     return n;
   }
@@ -4481,7 +4509,7 @@ var QRCode;
 
   /* ----- Gerar pedidos (um por fornecedor) ----- */
   function nextOrderCode(){
-    var max = 1040;
+    var max = ORDER_CODE_MAX;
     ORDERS.forEach(function(o){ var m = /#(\d+)/.exec(o.code || ''); if(m) max = Math.max(max, Number(m[1])); });
     return '#' + (max + 1);
   }
@@ -4553,6 +4581,7 @@ var QRCode;
     var closeToo = document.getElementById('gen-close-wrap').style.display !== 'none' && document.getElementById('gen-close-too').checked;
     warnObsNotSaved(groups.some(function(g){ return g.lines.some(function(l){ return l.item.obs; }); }), COLS.obsO);
     var btn = this; btn.disabled = true; btn.textContent = 'Gerando...';
+    await refreshOrderCodes();
     var created = 0;
     try{
       for(var gi = 0; gi < groups.length; gi++){
@@ -4566,7 +4595,7 @@ var QRCode;
         var orderDate = new Date().toISOString().slice(0, 10);
         var orderIns = check(await db.from('orders').insert(Object.assign({
           code: code, supplier_id: g.supplierId, status: 'enviado', order_date: orderDate, delivery_date: dates[g.supplierId], total: g.total
-        }, COLS.oBy ? { created_by: currentBuyer.nome } : {})).select('id').single(), 'Criar pedido');
+        }, COLS.oBy ? { created_by: q.createdBy || currentBuyer.nome } : {})).select('id').single(), 'Criar pedido');
         if(!orderIns.data) throw new Error('O pedido não retornou id.');
         var orderId = orderIns.data.id;
         check(await db.from('order_items').insert(rows.map(function(r){ return Object.assign({ order_id: orderId, product_id: r.product_id, qty: r.qty, price: r.price, receive_status: 'pendente' }, (COLS.obsO && r.obs) ? { obs: r.obs } : {}); })), 'Salvar itens do pedido');
@@ -4576,7 +4605,7 @@ var QRCode;
           HISTORY.forEach(function(h){ if(h.id === l.a.id) h.orderId = orderId; });
         });
         ORDERS.unshift({ id: orderId, code: code, supplier_id: g.supplierId, supplier_name: supplierName(g.supplierId), status: 'enviado',
-          order_date: orderDate, delivery_date: dates[g.supplierId], total: g.total, confirmed: false, receiver_note: null, created_by: currentBuyer.nome || null });
+          order_date: orderDate, delivery_date: dates[g.supplierId], total: g.total, confirmed: false, receiver_note: null, created_by: q.createdBy || currentBuyer.nome || null });
         created++;
       }
       if(quotationIsDone(q) || closeToo){
@@ -5008,6 +5037,7 @@ var QRCode;
 
   /* ----- creating the direct order ----- */
   async function createDirectOrder(supplier, finalItems, deliveryStr, total){
+    await refreshOrderCodes();
     var code = nextOrderCode();
     var orderDateStr = new Date().toISOString().slice(0, 10);
     var orderIns = check(await db.from('orders').insert(Object.assign({
@@ -5296,12 +5326,24 @@ var QRCode;
   }
 
   var pedidoSearchTerm = '';
+  var pedOwner = '';
+  document.getElementById('ped-owner-filter').addEventListener('change', function(){ pedOwner = this.value; renderPedidosList(); });
   var editingOrderId = null;
 
   function renderPedidosList(){
     var list = document.getElementById('pedidos-list');
     list.innerHTML = '';
+    var ownerWrap = document.getElementById('ped-owner-wrap'), ownerSel = document.getElementById('ped-owner-filter');
+    if(isAdmin()){
+      var owners = [];
+      ORDERS.forEach(function(o){ var n = o.created_by || NO_OWNER; if(owners.indexOf(n) === -1) owners.push(n); });
+      owners.sort(function(a, b){ return a.localeCompare(b, 'pt-BR'); });
+      if(pedOwner && owners.indexOf(pedOwner) === -1) pedOwner = '';
+      ownerSel.innerHTML = '<option value="">Todos os compradores</option>' + owners.map(function(n){ return '<option value="' + escHtml(n) + '"' + (n === pedOwner ? ' selected' : '') + '>' + escHtml(n) + '</option>'; }).join('');
+      ownerWrap.style.display = 'flex';
+    } else { pedOwner = ''; ownerWrap.style.display = 'none'; }
     var filtered = ORDERS.filter(function(o){
+      if(pedOwner && (o.created_by || NO_OWNER) !== pedOwner) return false;
       if(!pedidoSearchTerm) return true;
       return (o.code || '').toLowerCase().indexOf(pedidoSearchTerm) > -1 ||
         (o.supplier_name || '').toLowerCase().indexOf(pedidoSearchTerm) > -1 ||
