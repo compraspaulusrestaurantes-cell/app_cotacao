@@ -1632,7 +1632,8 @@ window.PaulusNF = (function(){
               <div style="height:8px; background:var(--green-tint); border-radius:4px; overflow:hidden; margin-bottom:8px;">
                 <div id="conferencia-bar" style="width:0%; height:100%; background:var(--green); transition:width .2s;"></div>
               </div>
-              <div id="conferencia-count" style="font-size:12px; color:var(--ink-soft); margin-bottom:18px;">0 de 0 itens conferidos</div>
+              <div id="conferencia-count" style="font-size:12px; color:var(--ink-soft); margin-bottom:12px;">0 de 0 itens conferidos</div>
+              <div id="conferencia-valores" style="font-size:13px; margin-bottom:18px; line-height:1.7;"></div>
               <div id="conferencia-ok" class="banner banner-green" style="display:none; margin-bottom:18px;">Tudo confere com a nota. Pode armazenar.</div>
               <button class="btn btn-primary btn-block" id="armazenar-btn" disabled>Armazenar produtos</button>
             </div>
@@ -2420,7 +2421,7 @@ var QRCode;
   var SUPABASE_URL = 'https://dqghwfrmodulnevzpgbw.supabase.co';
   var SUPABASE_KEY = 'sb_publishable_nNk6sJNE-7NzraHnjXliLQ_nRfeWtZb';
   var db = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-  var APP_VERSION = '2026-11-26 · versão 17';
+  var APP_VERSION = '2026-11-26 · versão 18';
   var APP_BASE_URL = 'https://compraspaulusrestaurantes-cell.github.io/app_cotacao/';
   var DEFAULT_SUPPLIER_NAME = 'Distribuidora Bom Preço';
   var SUPPLIERS_SEED = [
@@ -6030,12 +6031,14 @@ var QRCode;
             '<span>' + fmtQty(item.receivedQty) + ' / ' + fmtQty(item.qty) + '</span>' +
             '<button type="button" data-id="' + item.itemId + '" data-action="recv-inc" aria-label="Aumentar"'+ '>+</button>' +
           '</div>' +
-        '</div>';
+        '</div>' +
+        '<div class="row-sub" style="text-align:right; margin-top:6px;">Valor desta entrega parcial: <b>' + money(round2(item.receivedQty * item.price)) + '</b></div>';
     }
     row.innerHTML =
       '<div class="row" style="justify-content:space-between; margin-bottom:10px;">' +
         '<div><div class="row-title">' + item.name + '</div>' + (item.obs ? '<div class="row-sub" style="color:var(--green-dark);">📝 ' + escHtml(item.obs) + '</div>' : '') + '</div>' +
-        '<div class="row-sub">esperado: ' + fmtQty(item.qty) + ' ' + (UNIT_LABELS[item.unit] || 'un') + '</div>' +
+        '<div style="text-align:right;"><div class="row-sub">esperado: ' + fmtQty(item.qty) + ' ' + (UNIT_LABELS[item.unit] || 'un') + '</div>' +
+          '<div class="row-sub">' + money(item.price) + ' / ' + (UNIT_LABELS[item.unit] || 'un') + ' · <b>' + money(round2(item.qty * item.price)) + '</b></div></div>' +
       '</div>' +
       '<div style="display:flex; gap:8px; flex-wrap:wrap;">' +
         statusChip(item, 'recebido', 'Recebido') +
@@ -6069,6 +6072,11 @@ var QRCode;
     var pct = total ? Math.round((decided/total)*100) : 0;
     document.getElementById('conferencia-bar').style.width = pct + '%';
     document.getElementById('conferencia-count').textContent = decided + ' de ' + total + ' itens conferidos';
+    var vPedido = items.reduce(function(sum, i){ return sum + i.qty * i.price; }, 0);
+    var vGot = items.reduce(function(sum, i){ return sum + (i.receiveStatus === 'recebido' ? i.qty : i.receiveStatus === 'parcial' ? (i.receivedQty || 0) : 0) * i.price; }, 0);
+    var vDiff = round2(vGot - vPedido);
+    document.getElementById('conferencia-valores').innerHTML = 'Valor do pedido <b style="float:right;">' + money(round2(vPedido)) + '</b><br>Recebido até agora <b style="float:right; color:var(--green);">' + money(round2(vGot)) + '</b>' +
+      (decided === total && total > 0 && vDiff !== 0 ? '<br><span style="color:var(--amber-dark); font-weight:600;">' + (vDiff < 0 ? money(-vDiff) + ' a menos' : money(vDiff) + ' a mais') + ' que o pedido.</span>' : '');
 
     var allDecided = total > 0 && decided === total;
     var recebidoCount = items.filter(function(i){ return i.receiveStatus === 'recebido'; }).length;
@@ -6886,12 +6894,14 @@ var QRCode;
         '<span style="font-size:12px; color:' + SOFT + ';">Quantidade recebida</span>' +
         '<div style="display:flex; align-items:center; gap:10px;">' +
           '<button type="button" data-item="' + item.itemId + '" data-delta="-1"' + (isLocked() ? ' disabled' : '') + ' style="width:26px; height:26px; border-radius:6px; border:1px solid ' + LINE + '; background:#fff; font-size:15px;">–</button>' +
-          '<span style="font-weight:600; min-width:44px; text-align:center;">' + item.receivedQty + ' / ' + item.qty + '</span>' +
+          '<span style="font-weight:600; min-width:44px; text-align:center;">' + fmtQ(item.receivedQty) + ' / ' + fmtQ(item.qty) + ' ' + unitLabel(item.unit) + '</span>' +
           '<button type="button" data-item="' + item.itemId + '" data-delta="1"' + (isLocked() ? ' disabled' : '') + ' style="width:26px; height:26px; border-radius:6px; border:1px solid ' + LINE + '; background:#fff; font-size:15px;">+</button>' +
-        '</div></div>';
+        '</div></div>' +
+        '<div style="font-size:12px; color:' + SOFT + '; margin-top:8px; text-align:right;">Valor desta entrega: <b style="color:#1B2420;">' + money((item.receivedQty || 0) * item.price) + '</b></div>';
     }
     return '<div style="background:#fff; border:1px solid ' + LINE + '; border-radius:12px; padding:14px;">' +
-      '<div style="display:flex; justify-content:space-between; margin-bottom:10px;"><span style="font-weight:600; font-size:14px;">' + item.name + (item.obs ? '<span style="display:block; font-weight:400; font-size:12px; color:' + SOFT + '; margin-top:2px;">📝 ' + String(item.obs).replace(/&/g,'&amp;').replace(/</g,'&lt;') + '</span>' : '') + '</span><span style="font-size:12px; color:' + SOFT + ';">esperado: ' + item.qty + '</span></div>' +
+      '<div style="display:flex; justify-content:space-between; margin-bottom:10px;"><span style="font-weight:600; font-size:14px;">' + item.name + (item.obs ? '<span style="display:block; font-weight:400; font-size:12px; color:' + SOFT + '; margin-top:2px;">📝 ' + String(item.obs).replace(/&/g,'&amp;').replace(/</g,'&lt;') + '</span>' : '') + '</span><span style="font-size:12px; color:' + SOFT + '; text-align:right; white-space:nowrap;">esperado: ' + fmtQ(item.qty) + ' ' + unitLabel(item.unit) +
+        '<span style="display:block; margin-top:2px;">' + money(item.price) + ' / ' + unitLabel(item.unit) + ' · <b style="color:#1B2420;">' + money(item.qty * item.price) + '</b></span></span></div>' +
       '<div style="display:flex; gap:8px;">' + chip(item,'recebido','Recebido',GREEN) + chip(item,'parcial','Parcial',AMBER) + chip(item,'devolvido','Devolvido',RED) + '</div>' +
       extra +
     '</div>';
@@ -6906,6 +6916,16 @@ var QRCode;
     var total = items.length;
     var decided = items.filter(function(i){ return i.receiveStatus && i.receiveStatus !== 'pendente'; }).length;
     document.getElementById('pub-progress').textContent = decided + ' de ' + total + ' itens conferidos';
+    var pedido = items.reduce(function(s, i){ return s + i.qty * i.price; }, 0);
+    var got = items.reduce(function(s, i){ return s + (i.receiveStatus === 'recebido' ? i.qty : i.receiveStatus === 'parcial' ? (i.receivedQty || 0) : 0) * i.price; }, 0);
+    var done = items.filter(function(i){ return i.receiveStatus === 'recebido' || i.receiveStatus === 'parcial' || i.receiveStatus === 'devolvido'; });
+    var box = document.getElementById('pub-recebido');
+    if(box){
+      var diff = Math.round((got - pedido) * 100) / 100;
+      box.innerHTML = '<div style="display:flex; justify-content:space-between;"><span style="color:' + SOFT + ';">Valor do pedido</span><b>' + money(pedido) + '</b></div>' +
+        '<div style="display:flex; justify-content:space-between; margin-top:6px;"><span style="color:' + SOFT + ';">Recebido até agora</span><b style="color:' + GREEN + ';">' + money(got) + '</b></div>' +
+        (done.length === total && total > 0 && diff !== 0 ? '<div style="margin-top:8px; color:' + AMBER + '; font-weight:600;">' + (diff < 0 ? money(-diff) + ' a menos' : money(diff) + ' a mais') + ' que o pedido.</div>' : '');
+    }
     var btn = document.getElementById('pub-armazenar');
     btn.disabled = decided < total || isLocked();
   }
@@ -6950,7 +6970,9 @@ var QRCode;
         '<div style="background:#fff; border:1px solid ' + LINE + '; border-radius:14px; padding:16px; margin-bottom:20px;">' +
           '<div style="display:flex; justify-content:space-between; margin-bottom:8px;"><span style="color:' + SOFT + '; font-size:13px;">Pedido</span><span style="font-weight:600;">' + order.code + '</span></div>' +
           '<div style="display:flex; justify-content:space-between; margin-bottom:8px;"><span style="color:' + SOFT + '; font-size:13px;">Fornecedor</span><span style="font-weight:600;">' + order.supplier_name + '</span></div>' +
-          '<div style="display:flex; justify-content:space-between;"><span style="color:' + SOFT + '; font-size:13px;">Entrega prevista</span><span style="font-weight:600;">' + fmtDateStr(order.delivery_date) + '</span></div>' +
+          '<div style="display:flex; justify-content:space-between; margin-bottom:8px;"><span style="color:' + SOFT + '; font-size:13px;">Entrega prevista</span><span style="font-weight:600;">' + fmtDateStr(order.delivery_date) + '</span></div>' +
+          '<div style="display:flex; justify-content:space-between; margin-bottom:8px;"><span style="color:' + SOFT + '; font-size:13px;">Itens do pedido</span><span style="font-weight:600;">' + items.length + '</span></div>' +
+          '<div style="display:flex; justify-content:space-between;"><span style="color:' + SOFT + '; font-size:13px;">Valor do pedido</span><span id="pub-valor-pedido" style="font-weight:700;">' + money(items.reduce(function(s, i){ return s + i.qty * i.price; }, 0)) + '</span></div>' +
         '</div>' +
         '<div id="pub-nf-card" style="background:#fff; border:1px solid ' + LINE + '; border-radius:14px; padding:14px; margin-bottom:16px;">' +
           '<div style="font-weight:600; font-size:14px;">Conferir pela nota fiscal (XML)</div>' +
@@ -6962,6 +6984,7 @@ var QRCode;
         '<div id="pub-items-list" style="display:flex; flex-direction:column; gap:10px; margin-bottom:16px;"></div>' +
         '<label style="font-size:12px; color:' + SOFT + '; display:block; margin-bottom:6px;">Observação de quem recebeu (opcional)</label>' +
         '<textarea id="pub-nota" rows="3" placeholder="Ex.: chegou 1 caixa amassada, avisar o fornecedor." style="width:100%; box-sizing:border-box; border:1px solid ' + LINE + '; border-radius:8px; padding:10px; font-size:16px; margin-bottom:16px; font-family:inherit;"></textarea>' +
+        '<div id="pub-recebido" style="background:#fff; border:1px solid ' + LINE + '; border-radius:12px; padding:12px 14px; margin-bottom:12px; font-size:13px;"></div>' +
         '<div id="pub-progress" style="font-size:12px; color:' + SOFT + '; margin-bottom:12px;">0 de 0 itens conferidos</div>' +
         '<button id="pub-armazenar" style="width:100%; background:' + GREEN + '; color:#fff; border:none; border-radius:12px; padding:15px; font-size:15px; font-weight:600;">Armazenar produtos</button>' +
         '<div id="pub-done-banner" style="display:none; margin-top:16px; background:#E3F0E9; color:' + GREEN + '; border-radius:10px; padding:12px; font-size:13px; text-align:center;">Recebimento registrado com sucesso.</div>' +
@@ -6993,6 +7016,7 @@ var QRCode;
     var n = Number(s); return isFinite(n) ? n : null;
   }
   function fmtQ(n){ return (Math.round((Number(n) || 0) * 1000) / 1000).toLocaleString('pt-BR', { maximumFractionDigits: 3 }); }
+  function unitLabel(u){ return { Unidade: 'un', Caixa: 'cx', Pacote: 'pct', Fardo: 'fardo', Kg: 'kg', Litro: 'L', Saco: 'saco' }[u] || (u ? String(u).toLowerCase() : 'un'); }
   function itemById(id){ return items.filter(function(i){ return String(i.itemId) === String(id); })[0] || null; }
   function nfLine(r){ var q = parseQ(r.qty); return q === null ? 0 : q; }
   function nfPubTotals(){
