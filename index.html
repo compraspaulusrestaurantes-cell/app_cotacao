@@ -995,6 +995,51 @@ html, body {
 #buyer-root .dash-filter input[type="date"] { border:1px solid var(--line); border-radius:12px; padding:10px 12px; font-size:13px; background:#fff; font-family:inherit; color:var(--ink); min-height:42px; box-sizing:border-box }
 </style>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+/* Shared by the buyer panel and the receiving page (phone): reads an NF-e XML and compares product names */
+window.PaulusNF = (function(){
+  var STOP = { kg:1, un:1, und:1, unid:1, cx:1, pct:1, pc:1, de:1, da:1, do:1, c:1, com:1, s:1, sem:1, e:1, a:1, o:1, em:1, g:1, gr:1, l:1, lt:1, ml:1 };
+  function norm(v){ return String(v || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, ''); }
+  function tokens(text){ return norm(text).split(/[^a-z0-9]+/).filter(function(t){ return t && !STOP[t] && !/^\d+$/.test(t); }); }
+  function score(a, b){   // 1 = every word of the shorter text is in the other one
+    var ta = tokens(a), tb = tokens(b);
+    if(!ta.length || !tb.length) return 0;
+    var common = ta.filter(function(t){ return tb.indexOf(t) > -1; }).length;
+    return common / Math.min(ta.length, tb.length);
+  }
+  var UNITS = { KG:'Kg', KGS:'Kg', UN:'Unidade', UND:'Unidade', UNID:'Unidade', UNIDADE:'Unidade', PC:'Unidade', PCA:'Unidade', CX:'Caixa', CXA:'Caixa', CAIXA:'Caixa', PCT:'Pacote', PT:'Pacote', PAC:'Pacote', FD:'Fardo', FARDO:'Fardo', SC:'Saco', SACO:'Saco', LT:'Litro', L:'Litro', LTS:'Litro', LITRO:'Litro' };
+  function r2(n){ return Math.round(n * 100) / 100; }
+  function txt(el, tag){
+    if(!el) return '';
+    var n = el.getElementsByTagNameNS('*', tag)[0];
+    return n ? String(n.textContent || '').trim() : '';
+  }
+  function parse(xmlText){
+    var doc;
+    try{ doc = new DOMParser().parseFromString(String(xmlText || ''), 'text/xml'); } catch(e){ return { ok: false, error: 'Não consegui ler este arquivo como XML.' }; }
+    if(!doc || doc.getElementsByTagName('parsererror').length) return { ok: false, error: 'Este arquivo não é um XML válido.' };
+    var inf = doc.getElementsByTagNameNS('*', 'infNFe')[0];
+    if(!inf) return { ok: false, error: 'Este XML não parece ser de uma NF-e: não achei os dados da nota.' };
+    var id = String(inf.getAttribute('Id') || '').replace(/^NFe/i, '');
+    var chave = /^\d{44}$/.test(id) ? id : txt(doc, 'chNFe');
+    var ide = inf.getElementsByTagNameNS('*', 'ide')[0], emit = inf.getElementsByTagNameNS('*', 'emit')[0], tot = inf.getElementsByTagNameNS('*', 'ICMSTot')[0];
+    var emi = txt(ide, 'dhEmi') || txt(ide, 'dEmi');
+    var itens = [];
+    Array.prototype.forEach.call(inf.getElementsByTagNameNS('*', 'det'), function(det, i){
+      var prod = det.getElementsByTagNameNS('*', 'prod')[0]; if(!prod) return;
+      var qty = Number(txt(prod, 'qCom')), vUn = Number(txt(prod, 'vUnCom')), vProd = Number(txt(prod, 'vProd')), vDesc = Number(txt(prod, 'vDesc')) || 0;
+      if(!(qty > 0)) return;
+      var eff = vProd > 0 ? (vProd - vDesc) / qty : vUn;   // unit price already without the discount of the line
+      itens.push({ n: Number(det.getAttribute('nItem')) || (i + 1), code: txt(prod, 'cProd'), desc: txt(prod, 'xProd'), unit: txt(prod, 'uCom').toUpperCase(),
+        qty: qty, unitPrice: Math.round(eff * 10000) / 10000, total: r2(vProd - vDesc) });
+    });
+    if(!itens.length) return { ok: false, error: 'A nota não tem itens.' };
+    return { ok: true, nota: { chave: chave, numero: txt(ide, 'nNF'), serie: txt(ide, 'serie'), emissao: emi ? emi.slice(0, 10) : '', emitente: txt(emit, 'xNome'), cnpj: txt(emit, 'CNPJ'),
+      total: Number(txt(tot, 'vNF')) || r2(itens.reduce(function(s, x){ return s + x.total; }, 0)) }, itens: itens };
+  }
+  return { parse: parse, score: score, tokens: tokens, norm: norm, units: UNITS };
+})();
+</script>
 </head>
 <body>
 
@@ -1568,8 +1613,10 @@ html, body {
               <div style="display:flex; justify-content:space-between; gap:14px; flex-wrap:wrap; align-items:center;">
                 <div style="min-width:0; flex:1 1 280px;"><div style="font-size:15px; font-weight:600;">Conferir pela nota fiscal (XML)</div>
                   <div class="row-sub" style="margin-top:4px;">Escolha o arquivo XML da nota. O app lê os itens, liga cada um ao seu cadastro de produtos e você corrige o que chegou de verdade.</div>
+                  <div class="row-sub" style="margin-top:4px;">No celular: no iPhone, salve o XML em “Arquivos” e escolha ali; no Android, ele costuma estar em “Downloads”.</div>
                   <div id="nf-linked-info" class="row-sub" style="margin-top:6px; color:var(--green-dark);"></div></div>
-                <div><input type="file" id="nf-file" accept=".xml,text/xml,application/xml" style="display:none;"><button type="button" class="btn btn-primary" id="nf-pick-btn">Escolher o XML da nota</button></div>
+                <div><input type="file" id="nf-file" style="display:none;"><button type="button" class="btn btn-primary" id="nf-pick-btn">Escolher o XML da nota</button>
+                  <button type="button" class="btn btn-ghost" id="nf-review-btn" style="display:none; margin-top:8px;">Revisar pela nota já lançada</button></div>
               </div>
             </div>
             <div id="nf-panel" style="display:none;"></div>
@@ -2373,7 +2420,7 @@ var QRCode;
   var SUPABASE_URL = 'https://dqghwfrmodulnevzpgbw.supabase.co';
   var SUPABASE_KEY = 'sb_publishable_nNk6sJNE-7NzraHnjXliLQ_nRfeWtZb';
   var db = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-  var APP_VERSION = '2026-11-26 · versão 16';
+  var APP_VERSION = '2026-11-26 · versão 17';
   var APP_BASE_URL = 'https://compraspaulusrestaurantes-cell.github.io/app_cotacao/';
   var DEFAULT_SUPPLIER_NAME = 'Distribuidora Bom Preço';
   var SUPPLIERS_SEED = [
@@ -6009,6 +6056,7 @@ var QRCode;
     document.getElementById('conferencia-list').style.display = nfOn ? 'none' : '';
     document.querySelector('#page-conferencia .side').style.display = nfOn ? 'none' : '';
     var vo = state.viewingOrder;
+    document.getElementById('nf-review-btn').style.display = vo && vo.nf_numero ? 'inline-block' : 'none';
     document.getElementById('nf-linked-info').textContent = vo && vo.nf_numero ? 'Este pedido já foi conferido pela nota fiscal nº ' + vo.nf_numero + (vo.nf_emissao ? ' (emitida em ' + fmtDateStr(String(vo.nf_emissao).slice(0, 10)) + ')' : '') + '.' : '';
     if(nfOn) renderNfPanel();
     var list = document.getElementById('conferencia-list');
@@ -6082,44 +6130,10 @@ var QRCode;
   });
 
   /* ---------- Conferência pela nota fiscal (XML) ---------- */
-  var NF_STOP = { kg:1, un:1, und:1, unid:1, cx:1, pct:1, pc:1, de:1, da:1, do:1, c:1, com:1, s:1, sem:1, e:1, a:1, o:1, em:1, g:1, gr:1, l:1, lt:1, ml:1 };
-  function nfTokens(text){ return normalizeText(text).split(/[^a-z0-9]+/).filter(function(t){ return t && !NF_STOP[t] && !/^\d+$/.test(t); }); }
-  function nfScore(a, b){   // 1 = every word of the shorter text is in the other one
-    var ta = nfTokens(a), tb = nfTokens(b);
-    if(!ta.length || !tb.length) return 0;
-    var common = ta.filter(function(t){ return tb.indexOf(t) > -1; }).length;
-    return common / Math.min(ta.length, tb.length);
-  }
-  var NF_UNITS = { KG:'Kg', KGS:'Kg', UN:'Unidade', UND:'Unidade', UNID:'Unidade', UNIDADE:'Unidade', PC:'Unidade', PCA:'Unidade', CX:'Caixa', CXA:'Caixa', CAIXA:'Caixa', PCT:'Pacote', PT:'Pacote', PAC:'Pacote', FD:'Fardo', FARDO:'Fardo', SC:'Saco', SACO:'Saco', LT:'Litro', L:'Litro', LTS:'Litro', LITRO:'Litro' };
-  function nfeText(el, tag){
-    if(!el) return '';
-    var n = el.getElementsByTagNameNS('*', tag)[0];
-    return n ? String(n.textContent || '').trim() : '';
-  }
-  // reads an NF-e XML (any namespace): the note's data and its lines
-  function parseNfe(xmlText){
-    var doc;
-    try{ doc = new DOMParser().parseFromString(String(xmlText || ''), 'text/xml'); } catch(e){ return { ok: false, error: 'Não consegui ler este arquivo como XML.' }; }
-    if(!doc || doc.getElementsByTagName('parsererror').length) return { ok: false, error: 'Este arquivo não é um XML válido.' };
-    var inf = doc.getElementsByTagNameNS('*', 'infNFe')[0];
-    if(!inf) return { ok: false, error: 'Este XML não parece ser de uma NF-e: não achei os dados da nota.' };
-    var id = String(inf.getAttribute('Id') || '').replace(/^NFe/i, '');
-    var chave = /^\d{44}$/.test(id) ? id : nfeText(doc, 'chNFe');
-    var ide = inf.getElementsByTagNameNS('*', 'ide')[0], emit = inf.getElementsByTagNameNS('*', 'emit')[0], tot = inf.getElementsByTagNameNS('*', 'ICMSTot')[0];
-    var emi = nfeText(ide, 'dhEmi') || nfeText(ide, 'dEmi');
-    var itens = [];
-    Array.prototype.forEach.call(inf.getElementsByTagNameNS('*', 'det'), function(det, i){
-      var prod = det.getElementsByTagNameNS('*', 'prod')[0]; if(!prod) return;
-      var qty = Number(nfeText(prod, 'qCom')), vUn = Number(nfeText(prod, 'vUnCom')), vProd = Number(nfeText(prod, 'vProd')), vDesc = Number(nfeText(prod, 'vDesc')) || 0;
-      if(!(qty > 0)) return;
-      var eff = vProd > 0 ? (vProd - vDesc) / qty : vUn;   // unit price already without the discount of the line
-      itens.push({ n: Number(det.getAttribute('nItem')) || (i + 1), code: nfeText(prod, 'cProd'), desc: nfeText(prod, 'xProd'), unit: nfeText(prod, 'uCom').toUpperCase(),
-        qty: qty, unitPrice: Math.round(eff * 10000) / 10000, total: round2(vProd - vDesc) });
-    });
-    if(!itens.length) return { ok: false, error: 'A nota não tem itens.' };
-    return { ok: true, nota: { chave: chave, numero: nfeText(ide, 'nNF'), serie: nfeText(ide, 'serie'), emissao: emi ? emi.slice(0, 10) : '', emitente: nfeText(emit, 'xNome'), cnpj: nfeText(emit, 'CNPJ'),
-      total: Number(nfeText(tot, 'vNF')) || round2(itens.reduce(function(s, x){ return s + x.total; }, 0)) }, itens: itens };
-  }
+  var NF_UNITS = window.PaulusNF.units;   // the XML reader is shared with the receiving page (see the head of this file)
+  function nfTokens(text){ return window.PaulusNF.tokens(text); }
+  function nfScore(a, b){ return window.PaulusNF.score(a, b); }
+  function parseNfe(xmlText){ return window.PaulusNF.parse(xmlText); }
   function readFileText(file){
     return new Promise(function(resolve, reject){
       var fr = new FileReader();
@@ -6182,10 +6196,14 @@ var QRCode;
     nf.rows.forEach(function(r){ if(!r.orderItemId && !r.touched) r.action = r.productId ? 'add' : 'pending'; });
   }
   async function nfStart(file){
-    var order = state.viewingOrder; if(!order || !file) return;
+    if(!state.viewingOrder || !file) return;
     if(file.size > 3 * 1024 * 1024){ alert('Este arquivo é grande demais para ser uma nota (máximo 3 MB).'); return; }
     var text;
     try{ text = await readFileText(file); } catch(e){ alert('Não consegui abrir o arquivo.'); return; }
+    return nfStartFromText(text, file.name);
+  }
+  async function nfStartFromText(text, fileName){
+    var order = state.viewingOrder; if(!order) return;
     var parsed = parseNfe(text);
     if(!parsed.ok){ alert(parsed.error); return; }
     if(COLS.nf && parsed.nota.chave){
@@ -6208,7 +6226,7 @@ var QRCode;
       }
       return { id: 'n' + line.n, line: line, productId: pid, link: link, orderItemId: null, qty: fmtQtyInput(line.qty), price: fmtPriceInput(line.unitPrice), action: 'pending', touched: false };
     });
-    state.nf = { orderId: order.id, file: file.name, xml: text, nota: parsed.nota, rows: rows, missing: [], aliases: aliases, remember: true };
+    state.nf = { orderId: order.id, file: fileName, xml: text, nota: parsed.nota, rows: rows, missing: [], aliases: aliases, remember: true };
     nfRematch();
     renderConferencia();
   }
@@ -6361,6 +6379,13 @@ var QRCode;
 
   /* ----- events of the panel ----- */
   document.getElementById('nf-pick-btn').addEventListener('click', function(){ document.getElementById('nf-file').click(); });
+  document.getElementById('nf-review-btn').addEventListener('click', async function(){   // opens the note the receiver already launched from the phone, to check prices and extra items
+    var vo = state.viewingOrder; if(!vo) return;
+    var r = await db.from('order_nf_files').select('xml').eq('order_id', vo.id).maybeSingle();
+    if(r.error || !r.data){ alert('O arquivo desta nota não está guardado neste pedido.'); return; }
+    if(!(await confirmDeliveredEdit(vo))) return;
+    nfStartFromText(r.data.xml, 'nota ' + (vo.nf_numero || '') + '.xml');
+  });
   document.getElementById('nf-file').addEventListener('change', async function(){
     var f = this.files && this.files[0]; this.value = '';
     if(!f) return;
@@ -6438,8 +6463,11 @@ var QRCode;
       }
       finalTotal = round2(finalTotal);
       var firstDelivery = !order.confirmed && order.status !== 'entregue', deliveredNow = new Date().toISOString();
-      var nfCols = COLS.nf ? { nf_numero: nf.nota.numero || null, nf_serie: nf.nota.serie || null, nf_chave: nf.nota.chave || null, nf_emissao: nf.nota.emissao || null, nf_total: nf.nota.total, nf_emitente: nf.nota.emitente || null, nf_xml: nf.xml } : {};
+      var nfCols = COLS.nf ? { nf_numero: nf.nota.numero || null, nf_serie: nf.nota.serie || null, nf_chave: nf.nota.chave || null, nf_emissao: nf.nota.emissao || null, nf_total: nf.nota.total, nf_emitente: nf.nota.emitente || null } : {};
       check(await db.from('orders').update(Object.assign({ receiver_note: note, confirmed: true, status: 'entregue', total: finalTotal }, nfCols, (COLS.delivered && firstDelivery) ? { delivered_at: deliveredNow } : {})).eq('id', order.id), 'Atualizar pedido');
+      if(COLS.nf){   // the XML file itself is kept apart (the orders list is read often and must stay light)
+        try{ await db.from('order_nf_files').delete().eq('order_id', order.id); await db.from('order_nf_files').insert({ order_id: order.id, xml: nf.xml }); } catch(e3){ console.error('Não consegui guardar o arquivo XML', e3); }
+      }
       if(COLS.delivered && firstDelivery) order.delivered_at = deliveredNow;
       Object.assign(order, nfCols, { status: 'entregue', confirmed: true, receiver_note: note, total: finalTotal });
     } catch(err){
@@ -6805,6 +6833,7 @@ var QRCode;
   var GREEN = '#146C4E', AMBER = '#C97A2B', RED = '#C43D3D', LINE = '#E1E4DF', SOFT = '#5B6A62';
   var order = null;
   var items = [];
+  var links = [];   // what this supplier already calls each product on its notes
   function isLocked(){ return !!(order && (order.confirmed || order.status === 'entregue')); }
 
   function money(v){ return 'R$ ' + Number(v || 0).toLocaleString('pt-BR', {minimumFractionDigits:2, maximumFractionDigits:2}); }
@@ -6829,10 +6858,11 @@ var QRCode;
       var data = res.data;
       if(!data){ showMessage('Pedido não encontrado. Confira o link do QR code.'); return; }
       order = { id: data.id, code: data.code, status: data.status, confirmed: !!data.confirmed, delivery_date: data.delivery_date,
-                total: data.total, receiver_note: data.receiver_note, supplier_name: data.supplier_name || '—' };
+                total: data.total, receiver_note: data.receiver_note, supplier_name: data.supplier_name || '—', nf_numero: data.nf_numero || '' };
+      links = data.links || [];
       items = (data.items || []).map(function(row){
         return {
-          itemId: row.id, name: row.name || 'Produto', obs: row.obs || '', qty: Number(row.qty), price: Number(row.price),
+          itemId: row.id, productId: row.product_id || null, unit: row.unit || '', name: row.name || 'Produto', obs: row.obs || '', qty: Number(row.qty), price: Number(row.price),
           receiveStatus: row.receive_status || 'pendente', receivedQty: row.received_qty == null ? null : Number(row.received_qty)
         };
       });
@@ -6922,9 +6952,16 @@ var QRCode;
           '<div style="display:flex; justify-content:space-between; margin-bottom:8px;"><span style="color:' + SOFT + '; font-size:13px;">Fornecedor</span><span style="font-weight:600;">' + order.supplier_name + '</span></div>' +
           '<div style="display:flex; justify-content:space-between;"><span style="color:' + SOFT + '; font-size:13px;">Entrega prevista</span><span style="font-weight:600;">' + fmtDateStr(order.delivery_date) + '</span></div>' +
         '</div>' +
+        '<div id="pub-nf-card" style="background:#fff; border:1px solid ' + LINE + '; border-radius:14px; padding:14px; margin-bottom:16px;">' +
+          '<div style="font-weight:600; font-size:14px;">Conferir pela nota fiscal (XML)</div>' +
+          '<div style="font-size:12px; color:' + SOFT + '; margin:4px 0 10px 0; line-height:1.45;">Escolha o arquivo XML da nota e o app confere os itens por você. Você só corrige o que chegou diferente.</div>' +
+          '<input type="file" id="pub-nf-file" style="display:none;"><button type="button" id="pub-nf-btn" style="width:100%; min-height:48px; border:1.5px solid ' + GREEN + '; border-radius:10px; background:#fff; color:' + GREEN + '; font-size:14px; font-weight:600;">Escolher o XML da nota</button>' +
+          '<div style="font-size:11px; color:#8B9A92; margin-top:8px; line-height:1.4;">iPhone: salve o XML em “Arquivos” e escolha ali. Android: escolha em “Downloads”.</div>' +
+        '</div>' +
+        '<div id="pub-nf-panel" style="display:none;"></div>' +
         '<div id="pub-items-list" style="display:flex; flex-direction:column; gap:10px; margin-bottom:16px;"></div>' +
         '<label style="font-size:12px; color:' + SOFT + '; display:block; margin-bottom:6px;">Observação de quem recebeu (opcional)</label>' +
-        '<textarea id="pub-nota" rows="3" placeholder="Ex.: chegou 1 caixa amassada, avisar o fornecedor." style="width:100%; box-sizing:border-box; border:1px solid ' + LINE + '; border-radius:8px; padding:10px; font-size:13px; margin-bottom:16px; font-family:inherit;"></textarea>' +
+        '<textarea id="pub-nota" rows="3" placeholder="Ex.: chegou 1 caixa amassada, avisar o fornecedor." style="width:100%; box-sizing:border-box; border:1px solid ' + LINE + '; border-radius:8px; padding:10px; font-size:16px; margin-bottom:16px; font-family:inherit;"></textarea>' +
         '<div id="pub-progress" style="font-size:12px; color:' + SOFT + '; margin-bottom:12px;">0 de 0 itens conferidos</div>' +
         '<button id="pub-armazenar" style="width:100%; background:' + GREEN + '; color:#fff; border:none; border-radius:12px; padding:15px; font-size:15px; font-weight:600;">Armazenar produtos</button>' +
         '<div id="pub-done-banner" style="display:none; margin-top:16px; background:#E3F0E9; color:' + GREEN + '; border-radius:10px; padding:12px; font-size:13px; text-align:center;">Recebimento registrado com sucesso.</div>' +
@@ -6932,15 +6969,191 @@ var QRCode;
 
     document.getElementById('pub-nota').value = order.receiver_note || '';
     document.getElementById('pub-armazenar').addEventListener('click', save);
+    wireNf();
     if(isLocked()){
+      document.getElementById('pub-nf-card').style.display = 'none';
       var btn = document.getElementById('pub-armazenar');
       btn.disabled = true; btn.textContent = 'Já conferido';
       document.getElementById('pub-nota').disabled = true;
-      document.getElementById('pub-done-banner').textContent = 'Entrega concluída — esta conferência já foi registrada e não pode mais ser alterada.';
+      document.getElementById('pub-done-banner').textContent = justDone || ('Entrega concluída — esta conferência já foi registrada e não pode mais ser alterada.' + (order.nf_numero ? ' Nota fiscal nº ' + order.nf_numero + '.' : ''));
       document.getElementById('pub-done-banner').style.display = 'block';
     }
     renderItems();
   }
+
+  /* ---------- conferência pelo XML da nota (no celular de quem recebe) ---------- */
+  var nfx = null, justDone = '';
+  function esc(t){ return String(t == null ? '' : t).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+  function parseQ(t){   // "96,4", "96.4", "1.234,5"; a dot followed by exactly 3 digits is a thousands separator
+    var s = String(t == null ? '' : t).replace(/[^\d.,]/g, ''); if(!s) return null;
+    var lc = s.lastIndexOf(','), ld = s.lastIndexOf('.');
+    if(lc > -1 && ld > -1) s = lc > ld ? s.replace(/\./g, '').replace(',', '.') : s.replace(/,/g, '');
+    else if(lc > -1) s = s.replace(/\./g, '').replace(',', '.');
+    else if(ld > -1 && /^\d{1,3}(\.\d{3})+$/.test(s)) s = s.replace(/\./g, '');
+    var n = Number(s); return isFinite(n) ? n : null;
+  }
+  function fmtQ(n){ return (Math.round((Number(n) || 0) * 1000) / 1000).toLocaleString('pt-BR', { maximumFractionDigits: 3 }); }
+  function itemById(id){ return items.filter(function(i){ return String(i.itemId) === String(id); })[0] || null; }
+  function nfLine(r){ var q = parseQ(r.qty); return q === null ? 0 : q; }
+  function nfPubTotals(){
+    var t = { pedido: 0, nota: nfx.nota.total, recebido: 0 };
+    items.forEach(function(i){ t.pedido += i.qty * i.price; });
+    nfx.rows.forEach(function(r){ var it = r.itemId ? itemById(r.itemId) : null; if(it) t.recebido += nfLine(r) * it.price; });
+    Object.keys(nfx.missing).forEach(function(k){ var it = itemById(k); if(it && nfx.missing[k] === 'chegou') t.recebido += it.qty * it.price; });
+    return t;
+  }
+  function nfDiff(r){
+    var it = r.itemId ? itemById(r.itemId) : null; if(!it) return '';
+    var q = nfLine(r), d = Math.round((q - it.qty) * 1000) / 1000;
+    if(d === 0) return 'Igual ao pedido.';
+    return (d > 0 ? 'Chegou ' + fmtQ(d) + ' a mais' : 'Chegou ' + fmtQ(-d) + ' a menos') + ' (' + (d > 0 ? '+' : '−') + (Math.abs(Math.round(d / it.qty * 1000) / 10)).toLocaleString('pt-BR') + '%)';
+  }
+  async function nfPubStart(text, fileName){
+    var NF = window.PaulusNF, parsed = NF.parse(text);
+    if(!parsed.ok){ alert(parsed.error); return; }
+    if(parsed.nota.chave){   // already launched in another order? say so now, not after the whole conference
+      try{
+        var chk = await db.rpc('check_nf_chave', { p_order: order.id, p_chave: parsed.nota.chave });
+        if(!chk.error && chk.data && chk.data.used){ alert('Esta nota fiscal (nº ' + (parsed.nota.numero || '?') + ') já foi lançada' + (chk.data.code ? ' no pedido ' + chk.data.code : ' em outro pedido') + '. A mesma nota não pode ser usada duas vezes.'); return; }
+      } catch(e){ /* if the check is not available, the database still refuses a repeated note when saving */ }
+    }
+    var used = {}, rows = parsed.itens.map(function(line){ return { id: 'n' + line.n, line: line, itemId: null, auto: 'none', qty: '' }; });
+    rows.forEach(function(r){   // 1) what this supplier already taught the app
+      var pid = null;
+      links.forEach(function(l){ if(!pid && ((l.nota_code && l.nota_code === r.line.code) || (l.nota_desc && l.nota_desc === NF.norm(r.line.desc)))) pid = l.product_id; });
+      var it = pid ? items.filter(function(i){ return i.productId === pid && !used[i.itemId]; })[0] : null;
+      if(it){ r.itemId = it.itemId; r.auto = 'alias'; used[it.itemId] = true; }
+    });
+    rows.forEach(function(r){   // 2) the order item whose name looks the most like the note's text
+      if(r.itemId) return;
+      var best = null, bs = 0;
+      items.forEach(function(i){ if(used[i.itemId]) return; var sc = NF.score(r.line.desc, i.name); if(sc > bs){ best = i; bs = sc; } });
+      if(best && bs >= 0.8){ r.itemId = best.itemId; r.auto = 'sugerido'; used[best.itemId] = true; }
+    });
+    rows.forEach(function(r){ if(r.itemId) r.qty = fmtQ(r.line.qty); });
+    nfx = { nota: parsed.nota, xml: text, rows: rows, missing: {}, file: fileName };
+    nfRematchPub();
+    renderNfPub();
+  }
+  function nfRematchPub(){
+    var used = {};
+    nfx.rows.forEach(function(r){ if(r.itemId) used[r.itemId] = true; });
+    var old = nfx.missing; nfx.missing = {};
+    items.forEach(function(i){ if(!used[i.itemId]) nfx.missing[i.itemId] = old[i.itemId] || 'nao-chegou'; });
+  }
+  function nfWarnUnit(r){
+    var it = r.itemId ? itemById(r.itemId) : null, app = window.PaulusNF.units[r.line.unit];
+    return it && app && it.unit && app !== it.unit ? 'A nota vende em ' + r.line.unit + ' e o pedido é em ' + it.unit + ': confira a quantidade.' : '';
+  }
+  function renderNfPub(){
+    var panel = document.getElementById('pub-nf-panel'), n = nfx.nota;
+    ['pub-nf-card', 'pub-items-list', 'pub-progress', 'pub-armazenar'].forEach(function(id){ document.getElementById(id).style.display = 'none'; });
+    panel.style.display = 'block';
+    var mismatch = n.emitente && window.PaulusNF.score(n.emitente, order.supplier_name) < 0.5;
+    var rowsHtml = nfx.rows.map(function(r){
+      var it = r.itemId ? itemById(r.itemId) : null, ln = r.line;
+      var opts = '<option value="">Fora do pedido</option>' + items.map(function(i){ return '<option value="' + esc(i.itemId) + '"' + (r.itemId === i.itemId ? ' selected' : '') + '>' + esc(i.name) + ' · pedido ' + fmtQ(i.qty) + '</option>'; }).join('');
+      var body = it
+        ? '<div style="font-size:12px; color:' + SOFT + '; margin:6px 0;">Pedido: ' + fmtQ(it.qty) + ' ' + esc(it.unit || '') + ' × ' + money(it.price) + '</div>' +
+          '<label for="pq-' + r.id + '" style="font-size:12px; color:' + SOFT + '; display:block; margin-bottom:4px;">Quanto chegou</label>' +
+          '<input id="pq-' + r.id + '" type="text" inputmode="decimal" data-pf="qty" data-row="' + r.id + '" value="' + esc(r.qty) + '" style="width:100%; box-sizing:border-box; border:1px solid ' + LINE + '; border-radius:8px; padding:12px; font-size:16px; font-weight:600; font-family:inherit;">' +
+          '<div id="pd-' + r.id + '" style="margin-top:8px; font-size:13px; font-weight:600; color:' + AMBER + ';">' + esc(nfDiff(r)) + '</div>' +
+          (Math.abs(ln.unitPrice - it.price) >= 0.005 ? '<div style="margin-top:6px; font-size:12px; color:' + AMBER + ';">Preço na nota: ' + money(ln.unitPrice) + ' (pedido ' + money(it.price) + '). O comprador confere o valor depois.</div>' : '') +
+          (nfWarnUnit(r) ? '<div style="margin-top:6px; font-size:12px; color:' + AMBER + ';">' + esc(nfWarnUnit(r)) + '</div>' : '')
+        : '<div style="margin-top:8px; font-size:12px; color:' + AMBER + ';">Este item veio na nota, mas não está no pedido. Ele fica anotado para o comprador ligar a um produto depois.</div>';
+      return '<div style="background:#fff; border:1px solid ' + (it ? LINE : AMBER) + '; border-radius:12px; padding:14px;">' +
+        '<div style="font-weight:600; font-size:14px;">' + esc(ln.desc) + '</div>' +
+        '<div style="font-size:12px; color:' + SOFT + '; margin:2px 0 10px 0;">na nota: ' + fmtQ(ln.qty) + ' ' + esc(ln.unit.toLowerCase()) + ' × ' + money(ln.unitPrice) + ' = ' + money(ln.total) + (r.auto === 'sugerido' ? ' · <b>ligação sugerida: confira</b>' : '') + '</div>' +
+        '<label for="ps-' + r.id + '" style="font-size:12px; color:' + SOFT + '; display:block; margin-bottom:4px;">Este item é qual do pedido?</label>' +
+        '<select id="ps-' + r.id + '" data-pf="item" data-row="' + r.id + '" style="width:100%; box-sizing:border-box; border:1px solid ' + LINE + '; border-radius:8px; padding:12px; font-size:16px; background:#fff; font-family:inherit;">' + opts + '</select>' + body + '</div>';
+    }).join('');
+    var missHtml = Object.keys(nfx.missing).map(function(k){
+      var it = itemById(k); if(!it) return '';
+      var c = nfx.missing[k];
+      var b = function(choice, label){ var on = c === choice; return '<button type="button" data-pf-miss="' + esc(k) + '" data-choice="' + choice + '" style="flex:1; min-height:44px; border-radius:8px; border:1px solid ' + (on ? GREEN : LINE) + '; background:' + (on ? GREEN : '#fff') + '; color:' + (on ? '#fff' : '#1B2420') + '; font-size:13px; font-weight:600;">' + label + '</button>'; };
+      return '<div style="background:#F3F3F1; border:1px solid ' + LINE + '; border-radius:12px; padding:14px;"><div style="font-weight:600; font-size:14px;">' + esc(it.name) + '</div>' +
+        '<div style="font-size:12px; color:' + SOFT + '; margin:2px 0 10px 0;">Pedido: ' + fmtQ(it.qty) + ' · <b>não veio na nota</b></div><div style="display:flex; gap:8px;">' + b('nao-chegou', 'Não chegou') + b('chegou', 'Chegou, fora da nota') + '</div></div>';
+    }).join('');
+    panel.innerHTML =
+      '<div style="background:#fff; border:1px solid ' + LINE + '; border-radius:14px; padding:14px; margin-bottom:12px;">' +
+        '<div style="font-weight:700; font-size:15px;">Nota fiscal nº ' + esc(n.numero || '?') + (n.serie ? ' · série ' + esc(n.serie) : '') + '</div>' +
+        '<div style="font-size:12px; color:' + SOFT + '; margin-top:4px;">' + (n.emissao ? 'emitida em ' + fmtDateStr(n.emissao) + ' · ' : '') + esc(n.emitente || '') + ' · valor da nota <b>' + money(n.total) + '</b></div>' +
+        (mismatch ? '<div style="margin-top:8px; font-size:12px; color:' + AMBER + ';">O emitente da nota não parece ser o fornecedor deste pedido (' + esc(order.supplier_name) + '). Confira se é a nota certa.</div>' : '') +
+        '<button type="button" id="pf-cancel" style="margin-top:10px; min-height:44px; padding:0; border:none; background:none; color:' + GREEN + '; font-size:13px; text-decoration:underline;">Cancelar e voltar à conferência manual</button></div>' +
+      '<div style="background:#EFDECE; border-radius:10px; padding:10px 12px; font-size:13px; line-height:1.45; margin-bottom:12px;">Confira o que <b>realmente chegou</b> (a carne costuma variar no peso). Os preços ficam como no pedido: se a nota tiver outro preço, o comprador confere depois.</div>' +
+      '<div style="display:flex; flex-direction:column; gap:10px; margin-bottom:12px;">' + rowsHtml + missHtml + '</div>' +
+      '<div id="pf-totals" style="margin-bottom:12px;">' + nfPubTotalsHtml() + '</div>' +
+      '<button type="button" id="pf-confirm" style="width:100%; min-height:52px; background:' + GREEN + '; color:#fff; border:none; border-radius:12px; padding:15px; font-size:15px; font-weight:600;">Confirmar entrega pela nota</button>';
+  }
+  function nfPubTotalsHtml(){
+    var t = nfPubTotals(), cell = function(l, v, strong){ return '<div style="flex:1 1 90px; background:' + (strong ? '#E3F0E9' : '#fff') + '; border:1px solid ' + LINE + '; border-radius:10px; padding:10px;"><div style="font-size:11px; color:' + SOFT + ';">' + l + '</div><div style="font-weight:700; font-size:14px;">' + money(v) + '</div></div>'; };
+    return '<div style="display:flex; gap:8px; flex-wrap:wrap;">' + cell('Pedido', t.pedido) + cell('Nota', t.nota) + cell('Recebido', t.recebido, true) + '</div>' +
+      '<div style="font-size:11px; color:' + SOFT + '; margin-top:6px;">O "Recebido" usa os preços do pedido.</div>';
+  }
+  async function nfPubSave(){
+    var btn = document.getElementById('pf-confirm');
+    var payload = [];
+    nfx.rows.forEach(function(r){ if(r.itemId) payload.push({ id: r.itemId, received_qty: nfLine(r) }); });
+    Object.keys(nfx.missing).forEach(function(k){ var it = itemById(k); payload.push({ id: k, received_qty: nfx.missing[k] === 'chegou' && it ? it.qty : 0 }); });
+    var bad = nfx.rows.filter(function(r){ return r.itemId && !(nfLine(r) > 0); });
+    if(bad.length){ alert('Informe quanto chegou de: ' + bad.map(function(r){ return r.line.desc; }).join(', ') + '.'); return; }
+    var learn = [];
+    nfx.rows.forEach(function(r){ var it = r.itemId ? itemById(r.itemId) : null; if(it && it.productId) learn.push({ nota_code: r.line.code || null, nota_desc: window.PaulusNF.norm(r.line.desc).trim(), product_id: it.productId }); });
+    btn.disabled = true; btn.textContent = 'Salvando...';
+    try{
+      var n = nfx.nota;
+      var res = await db.rpc('save_order_receiving_nf', { p_order: order.id, p_items: payload, p_note: document.getElementById('pub-nota').value.trim(),
+        p_nf: { numero: n.numero, serie: n.serie, chave: n.chave, emissao: n.emissao, total: n.total, emitente: n.emitente, xml: nfx.xml }, p_links: learn });
+      if(res.error) throw new Error(res.error.message);
+      var out = res.data || {};
+      if(!out.ok){
+        if(out.reason === 'already_delivered'){ nfx = null; order.confirmed = true; order.status = 'entregue'; render(); return; }
+        if(out.reason === 'nf_duplicate'){ btn.disabled = false; btn.textContent = 'Confirmar entrega pela nota'; alert('Esta nota fiscal já foi lançada' + (out.code ? ' no pedido ' + out.code : ' em outro pedido') + '. A mesma nota não pode ser usada duas vezes.'); return; }
+        throw new Error(out.reason || 'não salvou');
+      }
+      justDone = 'Entrega conferida pela nota fiscal nº ' + (n.numero || '') + '. Recebimento registrado com sucesso.';
+      nfx = null;
+      await load();
+    } catch(err){
+      console.error('Erro ao salvar a conferência pela nota', err);
+      btn.disabled = false; btn.textContent = 'Confirmar entrega pela nota';
+      alert('Não foi possível salvar. Verifique sua internet e tente de novo.');
+    }
+  }
+  function wireNf(){
+    var file = document.getElementById('pub-nf-file');
+    document.getElementById('pub-nf-btn').addEventListener('click', function(){ file.click(); });
+    file.addEventListener('change', function(){
+      var f = file.files && file.files[0]; file.value = '';
+      if(!f) return;
+      if(f.size > 3 * 1024 * 1024){ alert('Este arquivo é grande demais para ser uma nota (máximo 3 MB).'); return; }
+      var fr = new FileReader();
+      fr.onload = function(){ nfPubStart(String(fr.result || ''), f.name); };
+      fr.onerror = function(){ alert('Não consegui abrir o arquivo.'); };
+      fr.readAsText(f);
+    });
+  }
+  root.addEventListener('input', function(e){
+    var el = e.target.closest('[data-pf="qty"]'); if(!el || !nfx) return;
+    var r = nfx.rows.filter(function(x){ return x.id === el.dataset.row; })[0]; if(!r) return;
+    r.qty = el.value;
+    var d = document.getElementById('pd-' + r.id); if(d) d.textContent = nfDiff(r);
+    document.getElementById('pf-totals').innerHTML = nfPubTotalsHtml();
+  });
+  root.addEventListener('change', function(e){
+    var el = e.target.closest('[data-pf="item"]'); if(!el || !nfx) return;
+    var r = nfx.rows.filter(function(x){ return x.id === el.dataset.row; })[0]; if(!r) return;
+    nfx.rows.forEach(function(o){ if(o !== r && el.value && o.itemId === el.value){ o.itemId = null; o.qty = ''; o.auto = 'none'; } });   // an order item belongs to one line only
+    r.itemId = el.value || null; r.auto = 'manual'; r.qty = r.itemId ? fmtQ(r.line.qty) : '';
+    nfRematchPub(); renderNfPub();
+  });
+  root.addEventListener('click', function(e){
+    if(!nfx) return;
+    var m = e.target.closest('[data-pf-miss]');
+    if(m){ nfx.missing[m.dataset.pfMiss] = m.dataset.choice; renderNfPub(); return; }
+    if(e.target.id === 'pf-cancel'){ nfx = null; render(); return; }
+    if(e.target.id === 'pf-confirm') nfPubSave();
+  });
 
   root.addEventListener('click', function(e){
     var chipBtn = e.target.closest('[data-status]');
