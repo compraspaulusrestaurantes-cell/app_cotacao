@@ -1041,13 +1041,166 @@ window.PaulusNF = (function(){
   function fileProblem(f){
     var n = String((f && f.name) || '').toLowerCase(), t = String((f && f.type) || '').toLowerCase();
     if(/^image\//.test(t) || /\.(jpe?g|png|heic|heif|webp|gif|bmp|tiff?)$/.test(n))
-      return 'Isto é uma foto. O app ainda não lê fotos de nota fiscal: ele lê o arquivo XML da nota (peça ao fornecedor ou ao financeiro). Sem o XML, use a conferência manual.';
+      return 'Isto é uma foto. Para ler uma foto da nota, use o botão “Tirar foto da nota” ou “Escolher da galeria”. Aqui entra só o arquivo XML.';
     if(t === 'application/pdf' || /\.pdf$/.test(n))
-      return 'Isto é um PDF (a nota impressa). O app lê o arquivo XML da nota, não o PDF. Peça o XML ao fornecedor ou ao financeiro. Sem o XML, use a conferência manual.';
+      return 'Isto é um PDF (a nota impressa). O app não lê PDF: use o arquivo XML da nota, ou tire uma foto da nota impressa. Sem isso, use a conferência manual.';
     if(f && f.size > 3 * 1024 * 1024) return 'Este arquivo é grande demais para ser o XML de uma nota (máximo 3 MB). Confira se você escolheu o arquivo certo.';
     return '';
   }
-  return { parse: parse, score: score, tokens: tokens, norm: norm, units: UNITS, fileProblem: fileProblem };
+  /* ===== foto da nota (lida por IA no servidor): travas, preparo da imagem e a tela do scanner ===== */
+  function esc(t){ return String(t == null ? '' : t).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+  function brl(v){ return 'R$ ' + r2(Number(v) || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+  function stripZeros(s){ return String(s == null ? '' : s).replace(/\D/g, '').replace(/^0+(?=\d)/, ''); }
+  // the 44-digit access key ends with a check digit (modulo 11): if it does not match, a digit was misread
+  function chaveValida(k){
+    var d = String(k == null ? '' : k).replace(/\D/g, ''); if(d.length !== 44) return false;
+    var s = 0, w = 2;
+    for(var i = 42; i >= 0; i--){ s += Number(d.charAt(i)) * w; w = (w === 9) ? 2 : w + 1; }
+    var r = s % 11, dv = (r === 0 || r === 1) ? 0 : 11 - r;
+    return dv === Number(d.charAt(43));
+  }
+  // what the server read from the photo -> the same shape the XML reader produces
+  function fromAi(L){
+    L = L || {};
+    var itens = (Array.isArray(L.itens) ? L.itens : []).map(function(i, k){
+      var q = Number(i.quantidade), p = i.valor_unitario == null ? null : Number(i.valor_unitario), t = i.valor_total == null ? null : Number(i.valor_total);
+      if(p == null && t != null && q > 0) p = Math.round(t / q * 10000) / 10000;
+      if(t == null && p != null) t = r2(q * p);
+      return { n: k + 1, code: i.codigo || '', desc: String(i.descricao || ''), unit: String(i.unidade || '').toUpperCase(), qty: q, unitPrice: p == null ? 0 : p, missingPrice: p == null, total: t };
+    }).filter(function(i){ return i.desc && i.qty > 0; });
+    itens.forEach(function(i, k){ i.n = k + 1; });
+    var soma = r2(itens.reduce(function(s, i){ return s + (i.total || 0); }, 0));
+    var tp = L.valor_total_produtos == null ? null : Number(L.valor_total_produtos), tn = L.valor_total_nota == null ? null : Number(L.valor_total_nota);
+    return { ok: itens.length > 0, error: 'A leitura não trouxe itens.', itens: itens,
+      nota: { chave: String(L.chave_acesso || '').replace(/\D/g, ''), numero: stripZeros(L.numero), serie: stripZeros(L.serie), emissao: L.data_emissao || '', emitente: L.emitente_nome || '',
+        cnpj: String(L.emitente_cnpj || '').replace(/\D/g, ''), destinatario: L.destinatario_nome || '', destinatarioCnpj: String(L.destinatario_cnpj || '').replace(/\D/g, ''), totalProdutos: tp, total: tn != null ? tn : (tp != null ? tp : soma) } };
+  }
+  // checks that do not depend on the reader being right: qty x price = line value, sum = total, access key
+  function validate(parsed){
+    var out = { lines: {}, nota: [], needsAck: [], chaveOk: false };
+    var soma = 0;
+    parsed.itens.forEach(function(i){
+      var msgs = [];
+      if(i.missingPrice || !(i.unitPrice > 0)) msgs.push('Não consegui ler o preço desta linha.');
+      else if(i.total != null){
+        var esperado = r2(i.qty * i.unitPrice);
+        if(Math.abs(esperado - i.total) > 0.02) msgs.push('A conta não fecha: ' + (Math.round(i.qty * 1000) / 1000).toLocaleString('pt-BR', { maximumFractionDigits: 3 }) + ' × ' + brl(i.unitPrice) + ' = ' + brl(esperado) + ', mas a linha diz ' + brl(i.total) + '.');
+      }
+      soma += i.total || 0;
+      if(msgs.length){ out.lines['n' + i.n] = msgs; out.needsAck.push('n' + i.n); }
+    });
+    soma = r2(soma);
+    var nota = parsed.nota, ref = nota.totalProdutos;
+    if(ref != null && Math.abs(soma - ref) > 0.05){ out.nota.push({ key: 'soma', text: 'A soma dos itens lidos (' + brl(soma) + ') não bate com o total dos produtos da nota (' + brl(ref) + '). Pode faltar um item, ou um valor foi lido errado.' }); out.needsAck.push('soma'); }
+    else if(ref == null) out.nota.push({ key: '', text: 'Não consegui ler o total dos produtos para conferir a soma.' });
+    var k = nota.chave;
+    if(!k) out.nota.push({ key: '', text: 'Não li a chave de acesso: esta nota não fica travada contra lançamento repetido.' });
+    else if(!chaveValida(k)) out.nota.push({ key: '', text: 'A chave de acesso lida não é válida (algum dígito foi lido errado). Ela não será guardada.' });
+    else {
+      out.chaveOk = true;
+      var dif = [];
+      if(nota.numero && stripZeros(k.slice(25, 34)) !== stripZeros(nota.numero)) dif.push('número');
+      if(nota.serie && stripZeros(k.slice(22, 25)) !== stripZeros(nota.serie)) dif.push('série');
+      if(nota.cnpj && nota.cnpj.length === 14 && k.slice(6, 20) !== nota.cnpj) dif.push('CNPJ do emitente');
+      if(dif.length){ out.nota.push({ key: 'cabecalho', text: 'A chave de acesso não bate com o(a) ' + dif.join(', ') + ' lido(s). Confira o cabeçalho da nota.' }); out.needsAck.push('cabecalho'); }
+    }
+    out.ok = out.needsAck.length === 0;
+    return out;
+  }
+  // photo -> JPEG of reasonable size (long side up to 2000 px). EXIF rotation is applied by the browser when it draws the image.
+  function prepareImage(file){
+    return new Promise(function(resolve, reject){
+      var t = String(file.type || '').toLowerCase();
+      if(t && !/^image\/(jpeg|png|webp|heic|heif)$/.test(t)) return reject(new Error('Escolha uma foto (JPG ou PNG).'));
+      function viaReader(){
+        var fr = new FileReader();
+        fr.onload = function(){
+          var url = String(fr.result || ''), m = /^data:(image\/(?:jpeg|png|webp));base64,(.+)$/.exec(url);
+          if(!m) return reject(new Error('Não consegui abrir esta foto. Tire de novo ou escolha outra.'));
+          resolve({ mime: m[1], data: m[2], preview: url });
+        };
+        fr.onerror = function(){ reject(new Error('Não consegui abrir esta foto. Tire de novo ou escolha outra.')); };
+        fr.readAsDataURL(file);
+      }
+      var canvas = document.createElement('canvas'), ctx = null;
+      try{ ctx = canvas.getContext && canvas.getContext('2d'); } catch(e){ ctx = null; }
+      if(!ctx || !window.URL || !window.URL.createObjectURL) return viaReader();
+      var url = URL.createObjectURL(file), im = new Image();
+      im.onload = function(){
+        try{
+          var enc = function(maxSide, q){
+            var w = im.naturalWidth || im.width, h = im.naturalHeight || im.height, k = Math.min(1, maxSide / Math.max(w, h));
+            canvas.width = Math.max(1, Math.round(w * k)); canvas.height = Math.max(1, Math.round(h * k));
+            ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, canvas.width, canvas.height); ctx.drawImage(im, 0, 0, canvas.width, canvas.height);
+            return canvas.toDataURL('image/jpeg', q);
+          };
+          var url2 = enc(2000, 0.85);
+          if(url2.length > 3300000) url2 = enc(1600, 0.7);
+          var prev = enc(220, 0.6);
+          URL.revokeObjectURL(url);
+          resolve({ mime: 'image/jpeg', data: url2.replace(/^data:image\/jpeg;base64,/, ''), preview: prev });
+        } catch(e2){ URL.revokeObjectURL(url); viaReader(); }
+      };
+      im.onerror = function(){ URL.revokeObjectURL(url); viaReader(); };
+      im.src = url;
+    });
+  }
+  // the scanner box: take a photo (phone camera) or pick from the gallery, up to 3 pages, then "Ler a nota"
+  function mountPhotoStage(el, cfg){
+    var c = cfg.colors, max = cfg.max || 3, imgs = [], busy = false, msg = '';
+    function btn(label, key, primary){
+      return '<button type="button" data-ps="' + key + '"' + (busy ? ' disabled' : '') + ' style="min-height:48px; padding:0 16px; border-radius:10px; font-size:14px; font-weight:600; font-family:inherit; cursor:pointer; ' +
+        (primary ? 'background:' + c.accent + '; color:#fff; border:none;' : 'background:#fff; color:' + c.accent + '; border:1.5px solid ' + c.accent + ';') + (busy ? ' opacity:.6;' : '') + '">' + label + '</button>';
+    }
+    function render(){
+      el.innerHTML =
+        '<input type="file" accept="image/*" capture="environment" data-ps-input="cam" style="display:none;">' +
+        '<input type="file" accept="image/*" data-ps-input="gal" style="display:none;">' +
+        '<div style="display:flex; gap:8px; flex-wrap:wrap;">' + btn(imgs.length ? 'Adicionar outra página' : 'Tirar foto da nota', 'cam', !imgs.length) + btn('Escolher da galeria', 'gal', false) + '</div>' +
+        (imgs.length ? '<div style="display:flex; gap:10px; margin-top:12px; flex-wrap:wrap;">' + imgs.map(function(im, k){
+          return '<div style="position:relative;"><img src="' + esc(im.preview) + '" alt="Página ' + (k + 1) + ' da nota" style="height:84px; border-radius:8px; border:1px solid ' + c.line + ';">' +
+            '<button type="button" data-ps="rm" data-k="' + k + '"' + (busy ? ' disabled' : '') + ' aria-label="Remover a página ' + (k + 1) + '" style="position:absolute; top:-10px; right:-10px; width:32px; height:32px; border-radius:16px; border:none; background:#333; color:#fff; font-size:14px; cursor:pointer;">✕</button></div>';
+        }).join('') + '</div>' : '') +
+        (imgs.length ? '<div style="margin-top:12px;">' + btn(busy ? 'Lendo a nota…' : 'Ler a nota', 'read', true) + '</div>' : '') +
+        '<div data-ps-msg role="status" style="font-size:12px; margin-top:8px; line-height:1.4; color:' + (busy ? c.soft : c.amber) + ';">' + esc(busy ? 'Lendo a nota… isso leva alguns segundos. Não feche esta tela.' : msg) + '</div>';
+    }
+    async function addFiles(files){
+      msg = '';
+      for(var i = 0; i < files.length; i++){
+        if(imgs.length >= max){ msg = 'No máximo ' + max + ' páginas por nota.'; break; }
+        if(files[i].size > 30 * 1024 * 1024){ msg = 'Esta foto é pesada demais. Tire de novo.'; continue; }
+        try{ imgs.push(await prepareImage(files[i])); } catch(e){ msg = e.message || 'Não consegui abrir esta foto.'; }
+      }
+      render();
+    }
+    el.addEventListener('click', async function(e){
+      var b = e.target.closest('[data-ps]'); if(!b || busy) return;
+      var a = b.dataset.ps;
+      if(a === 'cam') el.querySelector('[data-ps-input="cam"]').click();
+      else if(a === 'gal') el.querySelector('[data-ps-input="gal"]').click();
+      else if(a === 'rm'){ imgs.splice(Number(b.dataset.k), 1); msg = ''; render(); }
+      else if(a === 'read'){
+        busy = true; msg = ''; render();
+        try{ await cfg.onRead(imgs.slice()); imgs = []; msg = ''; } catch(err){ msg = (err && err.message) || 'Não consegui ler a nota. Tente de novo.'; }
+        busy = false; render();
+      }
+    });
+    el.addEventListener('change', function(e){
+      var inp = e.target.closest('[data-ps-input]'); if(!inp || busy) return;
+      var fs = Array.prototype.slice.call(inp.files || []); inp.value = '';
+      if(fs.length) addFiles(fs);
+    });
+    render();
+    return { addFiles: addFiles, reset: function(){ imgs = []; msg = ''; busy = false; render(); } };
+  }
+  // the server answered with an error: turn it into a sentence for the person
+  async function readFnError(error){
+    try{ if(error && error.context && typeof error.context.json === 'function'){ var j = await error.context.json(); if(j && j.mensagem) return j.mensagem; } } catch(e){ /* below */ }
+    var m = String((error && error.message) || '');
+    if(/not found|404|Failed to send|fetch/i.test(m)) return 'A leitura por foto ainda não está ligada neste sistema (a função ler-nota não foi publicada) ou está sem internet. Use o XML da nota ou a conferência manual.';
+    return 'Não consegui ler a nota agora. Tente de novo, ou use o XML da nota ou a conferência manual.';
+  }
+  return { parse: parse, score: score, tokens: tokens, norm: norm, units: UNITS, fileProblem: fileProblem, chaveValida: chaveValida, fromAi: fromAi, validate: validate, prepareImage: prepareImage, mountPhotoStage: mountPhotoStage, readFnError: readFnError };
 })();
 </script>
 </head>
@@ -1620,14 +1773,19 @@ window.PaulusNF = (function(){
         <div class="two-col">
           <div class="primary">
             <div class="card" id="nf-import-card" style="margin-bottom:16px;">
-              <div style="display:flex; justify-content:space-between; gap:14px; flex-wrap:wrap; align-items:center;">
-                <div style="min-width:0; flex:1 1 280px;"><div style="font-size:15px; font-weight:600;">Conferir pela nota fiscal (XML)</div>
-                  <div class="row-sub" style="margin-top:4px;">Escolha o arquivo XML da nota. O app lê os itens, liga cada um ao seu cadastro de produtos e você corrige o que chegou de verdade. <b>Só o XML:</b> o app ainda não lê foto nem PDF da nota.</div>
-                  <div class="row-sub" style="margin-top:4px;">No celular: no iPhone, salve o XML em “Arquivos” e escolha ali; no Android, ele costuma estar em “Downloads”.</div>
-                  <div id="nf-linked-info" class="row-sub" style="margin-top:6px; color:var(--green-dark);"></div></div>
-                <div><input type="file" id="nf-file" style="display:none;"><button type="button" class="btn btn-primary" id="nf-pick-btn">Escolher o XML da nota</button>
-                  <button type="button" class="btn btn-ghost" id="nf-review-btn" style="display:none; margin-top:8px;">Revisar pela nota já lançada</button></div>
+              <div style="font-size:15px; font-weight:600;">Conferir pela nota fiscal</div>
+              <div class="row-sub" style="margin-top:4px;">Use o arquivo <b>XML</b> da nota (exato) ou a <b>foto</b> da nota (lida por IA: você sempre confere antes de confirmar). O app lê os itens, liga cada um ao seu cadastro de produtos e você corrige o que chegou de verdade.</div>
+              <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-top:12px;">
+                <input type="file" id="nf-file" style="display:none;"><button type="button" class="btn btn-primary" id="nf-pick-btn">Escolher o XML da nota</button>
+                <button type="button" class="btn btn-ghost" id="nf-review-btn" style="display:none;">Revisar pela nota já lançada</button>
               </div>
+              <div class="row-sub" style="margin-top:6px;">No celular: no iPhone, salve o XML em “Arquivos” e escolha ali; no Android, ele costuma estar em “Downloads”.</div>
+              <div style="margin-top:14px; padding-top:14px; border-top:1px solid var(--line);">
+                <div style="font-size:14px; font-weight:600; margin-bottom:8px;">Ou use a foto da nota</div>
+                <div id="nf-foto-stage"></div>
+                <div class="row-sub" style="margin-top:6px;">Dica: nota inteira na foto, bem de frente, com boa luz e sem sombra. Se a nota tiver mais de uma página, tire uma foto de cada.</div>
+              </div>
+              <div id="nf-linked-info" class="row-sub" style="margin-top:10px; color:var(--green-dark);"></div>
             </div>
             <div id="nf-panel" style="display:none;"></div>
             <div class="list" id="conferencia-list"></div>
@@ -1732,6 +1890,14 @@ window.PaulusNF = (function(){
         <button class="btn btn-primary" id="gen-confirm">Gerar pedidos</button>
         <button class="btn btn-ghost" id="gen-cancel">Cancelar</button>
       </div>
+    </div>
+  </div>
+
+  <!-- ================= VER A FOTO DA NOTA EM TAMANHO MAIOR ================= -->
+  <div class="overlay" id="nf-foto-view" style="display:none;">
+    <div class="card" style="width:min(720px,100%); margin:auto; max-height:92vh; overflow:auto; text-align:center;">
+      <button type="button" class="btn btn-ghost" id="nf-foto-fechar" style="margin-bottom:10px;">Fechar</button>
+      <img id="nf-foto-img" alt="Foto da nota" style="max-width:100%; border-radius:8px;">
     </div>
   </div>
 
@@ -2431,7 +2597,7 @@ var QRCode;
   var SUPABASE_URL = 'https://dqghwfrmodulnevzpgbw.supabase.co';
   var SUPABASE_KEY = 'sb_publishable_nNk6sJNE-7NzraHnjXliLQ_nRfeWtZb';
   var db = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-  var APP_VERSION = '2026-11-27 · versão 20';
+  var APP_VERSION = '2026-11-26 · versão 21';
   var APP_BASE_URL = 'https://compraspaulusrestaurantes-cell.github.io/app_cotacao/';
   var DEFAULT_SUPPLIER_NAME = 'Distribuidora Bom Preço';
   var SUPPLIERS_SEED = [
@@ -2575,16 +2741,16 @@ var QRCode;
   }
 
   var numberReady = true;   // false until quotations.number exists in the database
-  var COLS = { number: false, qBy: false, oBy: false, delivered: false, aBy: false, pack: false, obsQ: false, obsO: false, obsA: false, nf: false };   // optional columns created by the SQL update
+  var COLS = { number: false, qBy: false, oBy: false, delivered: false, aBy: false, pack: false, obsQ: false, obsO: false, obsA: false, nf: false, nfFonte: false };   // optional columns created by the SQL update
   async function probeColumn(table, col){ var r = await db.from(table).select(col).limit(1); return !r.error; }
   async function probeColumns(){
     var r = await Promise.all([
       probeColumn('quotations', 'number'), probeColumn('quotations', 'created_by'),
       probeColumn('orders', 'created_by'), probeColumn('orders', 'delivered_at'),
       probeColumn('quotation_allocations', 'created_by'), probeColumn('products', 'pack_qty'),
-      probeColumn('quotation_items', 'obs'), probeColumn('order_items', 'obs'), probeColumn('quotation_allocations', 'obs'), probeColumn('orders', 'nf_chave')
+      probeColumn('quotation_items', 'obs'), probeColumn('order_items', 'obs'), probeColumn('quotation_allocations', 'obs'), probeColumn('orders', 'nf_chave'), probeColumn('orders', 'nf_fonte')
     ]);
-    COLS = { number: r[0], qBy: r[1], oBy: r[2], delivered: r[3], aBy: r[4], pack: r[5], obsQ: r[6], obsO: r[7], obsA: r[8], nf: r[9] };
+    COLS = { number: r[0], qBy: r[1], oBy: r[2], delivered: r[3], aBy: r[4], pack: r[5], obsQ: r[6], obsO: r[7], obsA: r[8], nf: r[9], nfFonte: r[10] };
   }
   // the observation text of the product (brand, type...) is optional; when the database has no column for it yet, it still goes in the message
   function obsLine(text){ return String(text || '').replace(/\s+/g, ' ').trim(); }
@@ -6254,12 +6420,17 @@ var QRCode;
     return nfStartFromText(text, file.name);
   }
   async function nfStartFromText(text, fileName){
-    var order = state.viewingOrder; if(!order) return;
     var parsed = parseNfe(text);
     if(!parsed.ok){ alert(parsed.error); return; }
-    if(COLS.nf && parsed.nota.chave){
+    return nfStartFromParsed(parsed, { fonte: 'xml', xml: text, fileName: fileName });
+  }
+  // ctx: { fonte: 'xml' | 'foto', xml, fileName, previews, fotos, issues }
+  async function nfStartFromParsed(parsed, ctx){
+    var order = state.viewingOrder; if(!order) return;
+    var chaveParaChecar = ctx.fonte === 'foto' ? (ctx.issues && ctx.issues.chaveOk ? parsed.nota.chave : '') : parsed.nota.chave;   // a key read from a photo only counts if its check digit is right
+    if(COLS.nf && chaveParaChecar){
       try{
-        var r = await db.from('orders').select('id,code').eq('nf_chave', parsed.nota.chave);
+        var r = await db.from('orders').select('id,code').eq('nf_chave', chaveParaChecar);
         var dup = !r.error ? (r.data || []).filter(function(o){ return o.id !== order.id; })[0] : null;
         if(dup){ alert('Esta nota fiscal (nº ' + (parsed.nota.numero || '?') + ') já foi lançada no pedido ' + dup.code + '.\n\nA mesma nota não pode ser usada em dois pedidos.'); return; }
       } catch(e2){ /* if the check fails, the database refuses a repeated note when saving */ }
@@ -6277,7 +6448,7 @@ var QRCode;
       }
       return { id: 'n' + line.n, line: line, productId: pid, link: link, orderItemId: null, qty: fmtQtyInput(line.qty), price: fmtPriceInput(line.unitPrice), action: 'pending', touched: false };
     });
-    state.nf = { orderId: order.id, file: fileName, xml: text, nota: parsed.nota, rows: rows, missing: [], aliases: aliases, remember: true };
+    state.nf = { orderId: order.id, file: ctx.fileName, xml: ctx.xml || '', fonte: ctx.fonte, issues: ctx.issues || null, ack: {}, previews: ctx.previews || [], nota: parsed.nota, rows: rows, missing: [], aliases: aliases, remember: true };
     nfRematch();
     renderConferencia();
   }
@@ -6325,6 +6496,16 @@ var QRCode;
     var n = nf.nota, sup = supplierName(order.supplier_id);
     var emitMismatch = n.emitente && nfScore(n.emitente, sup) < 0.5;
     var undecided = nf.rows.filter(function(r){ return !r.orderItemId && r.action === 'pending'; }).length;
+    var unacked = nf.issues ? nf.issues.needsAck.filter(function(k){ return !nf.ack[k]; }) : [];
+    var photoBlock = '';
+    if(nf.fonte === 'foto'){
+      photoBlock = '<div class="card" style="margin-bottom:14px; border:2px solid var(--green);"><div style="font-weight:600; margin-bottom:4px;">Nota lida por IA a partir da foto</div>' +
+        '<div class="row-sub">A leitura pode errar. <b>Confira com a nota na mão</b>: o app marcou em amarelo o que não fecha, e você só confirma depois de conferir essas linhas.</div>' +
+        (nf.previews.length ? '<div style="display:flex; gap:8px; margin-top:10px; flex-wrap:wrap;">' + nf.previews.map(function(pv, k){ return '<button type="button" data-action="nf-foto" data-k="' + k + '" aria-label="Ver a foto ' + (k + 1) + ' maior" style="padding:0; border:1px solid var(--line); border-radius:8px; background:#fff; cursor:pointer;"><img src="' + escHtml(pv) + '" alt="Foto ' + (k + 1) + ' da nota" style="height:72px; border-radius:8px; display:block;"></button>'; }).join('') + '</div>' : '') +
+        ((nf.issues && nf.issues.nota.length) ? '<div style="margin-top:10px;">' + nf.issues.nota.map(function(x){
+          return '<div class="banner banner-amber" style="margin-bottom:6px;">' + escHtml(x.text) + (x.key ? '<label style="display:flex; gap:8px; align-items:center; margin-top:8px; font-weight:600; min-height:32px;"><input type="checkbox" data-action="nf-ack" data-key="' + x.key + '" ' + (nf.ack[x.key] ? 'checked' : '') + '> Conferi e está certo</label>' : '') + '</div>'; }).join('') + '</div>' : '') +
+        (n.destinatario ? '<div class="row-sub" style="margin-top:8px;">Destinatário lido: ' + escHtml(n.destinatario) + '</div>' : '') + '</div>';
+    }
     var rowsHtml = nf.rows.map(function(r){
       var p = r.productId ? nfProduct(r.productId) : null, it = r.orderItemId ? nfItem(r.orderItemId) : null, ln = r.line;
       var badge = !p ? '<span class="badge badge-amber">Sem ligação</span>' : (r.link === 'sugerido' ? '<span class="badge badge-amber">Ligação sugerida: confira</span>' : '<span class="badge badge-green">Ligado</span>');
@@ -6347,10 +6528,13 @@ var QRCode;
           '</div>';
       }
       var warn = nfUnitWarn(r);
-      return '<div class="card" data-nf-row="' + r.id + '" style="' + (!p ? 'border:2px solid #E0A84F;' : '') + '">' +
+      var ackKey = 'n' + ln.n, probs = nf.issues && nf.issues.lines[ackKey];
+      var ackHtml = probs ? '<div class="banner banner-amber" style="margin-top:10px;">' + probs.map(escHtml).join('<br>') +
+        '<label style="display:flex; gap:8px; align-items:center; margin-top:8px; font-weight:600; min-height:32px;"><input type="checkbox" data-action="nf-ack" data-key="' + ackKey + '" ' + (nf.ack[ackKey] ? 'checked' : '') + '> Conferi esta linha com a nota</label></div>' : '';
+      return '<div class="card" data-nf-row="' + r.id + '" style="' + (!p || probs ? 'border:2px solid #E0A84F;' : '') + '">' +
         '<div style="display:flex; justify-content:space-between; gap:10px; align-items:flex-start;"><div style="min-width:0;"><div class="row-title">' + escHtml(ln.desc) + '</div>' +
           '<div class="row-sub">na nota' + (ln.code ? ' · cód. ' + escHtml(ln.code) : '') + ': ' + fmtQty(ln.qty) + ' ' + escHtml(ln.unit.toLowerCase()) + ' × ' + money(ln.unitPrice) + ' = ' + money(ln.total) + '</div></div>' + badge + '</div>' +
-        linkLine + inputs + (warn ? '<div class="row-sub" style="color:var(--amber-dark); margin-top:6px;">' + escHtml(warn) + '</div>' : '') + extra + '</div>';
+        linkLine + inputs + (warn ? '<div class="row-sub" style="color:var(--amber-dark); margin-top:6px;">' + escHtml(warn) + '</div>' : '') + extra + ackHtml + '</div>';
     }).join('');
     var missHtml = nf.missing.map(function(m){
       var it = nfItem(m.itemId); if(!it) return '';
@@ -6367,13 +6551,15 @@ var QRCode;
         '<div class="row-sub">arquivo: ' + escHtml(nf.file) + '</div></div>' +
         '<button type="button" class="btn btn-ghost" data-action="nf-cancel">Cancelar e voltar à conferência manual</button></div>' +
         (emitMismatch ? '<div class="banner banner-amber" style="margin-top:10px;">O emitente da nota (' + escHtml(n.emitente) + ') não parece ser o fornecedor deste pedido (' + escHtml(sup) + '). Confira se é a nota certa.</div>' : '') + '</div>' +
+      photoBlock +
       '<div class="banner" style="margin-bottom:14px; background:var(--beige, #EFDECE);">Mexa no que <b>realmente chegou</b>: quantidade e preço podem ser corrigidos item por item (a carne costuma variar no peso).</div>' +
       '<div class="list">' + rowsHtml + missHtml + '</div>' +
       '<div class="card" style="margin-top:14px;" id="nf-footer"><div id="nf-totals">' + nfTotalsHtml() + '</div>' +
         '<label style="display:flex; gap:8px; align-items:flex-start; font-size:13px; margin:14px 0;"><input type="checkbox" id="nf-remember" ' + (nf.remember ? 'checked' : '') + ' style="margin-top:2px;"><span>Lembrar as ligações dos produtos nas próximas notas de ' + escHtml(sup) + '</span></label>' +
         (undecided ? '<div class="banner banner-amber" style="margin-bottom:10px;">' + undecided + (undecided === 1 ? ' item da nota ainda precisa' : ' itens da nota ainda precisam') + ' de uma decisão: ligar a um produto ou ignorar.</div>' : '') +
-        '<button type="button" class="btn btn-primary btn-block" id="nf-confirm" ' + (undecided ? 'disabled' : '') + '>' + (order.confirmed ? 'Salvar a conferência pela nota' : 'Confirmar a entrega pela nota') + '</button>' +
-        '<div class="row-sub" style="margin-top:8px;">Ao confirmar, o pedido passa para <b>Entregue</b> com as quantidades e os valores recebidos, e o arquivo da nota fica guardado junto do pedido.</div></div>';
+        (unacked.length ? '<div class="banner banner-amber" style="margin-bottom:10px;">Falta conferir ' + unacked.length + (unacked.length === 1 ? ' ponto' : ' pontos') + ' que a leitura da foto marcou em amarelo.</div>' : '') +
+        '<button type="button" class="btn btn-primary btn-block" id="nf-confirm" ' + ((undecided || unacked.length) ? 'disabled' : '') + '>' + (order.confirmed ? 'Salvar a conferência pela nota' : 'Confirmar a entrega pela nota') + '</button>' +
+        '<div class="row-sub" style="margin-top:8px;">Ao confirmar, o pedido passa para <b>Entregue</b> com as quantidades e os valores recebidos, e ' + (nf.fonte === 'foto' ? 'as fotos da nota ficam guardadas' : 'o arquivo da nota fica guardado') + ' junto do pedido.</div></div>';
     nf.rows.forEach(function(r){ nfRefreshRow(r); });
   }
   function nfRefreshRow(r){
@@ -6440,9 +6626,28 @@ var QRCode;
   document.getElementById('nf-file').addEventListener('change', async function(){
     var f = this.files && this.files[0]; this.value = '';
     if(!f) return;
+    if(/^image\//i.test(f.type) || /\.(jpe?g|png|heic|heif|webp)$/i.test(f.name)){ nfStage.addFiles([f]); return; }   // a photo picked here goes to the scanner box
     if(!(await confirmDeliveredEdit(state.viewingOrder))) return;
     nfStart(f);
   });
+  // the scanner box: reads the photo on the server (function ler-nota) and opens the same conference as the XML
+  async function nfLerFotos(images){
+    var order = state.viewingOrder; if(!order) throw new Error('Abra um pedido primeiro.');
+    if(!dbReady) throw new Error('Sem conexão com o banco de dados agora. Verifique sua internet e tente de novo.');
+    if(!(await confirmDeliveredEdit(order))) throw new Error('');
+    var res;
+    try{ res = await db.functions.invoke('ler-nota', { body: { order_id: order.id, images: images.map(function(i){ return { mime: i.mime, data: i.data }; }) } }); }
+    catch(e){ throw new Error(await window.PaulusNF.readFnError(e)); }
+    if(res.error) throw new Error(await window.PaulusNF.readFnError(res.error));
+    var d = res.data;
+    if(!d || !d.ok) throw new Error((d && d.mensagem) || 'Não consegui ler a nota. Tente de novo.');
+    var parsed = window.PaulusNF.fromAi(d.leitura);
+    if(!parsed.ok) throw new Error(parsed.error);
+    var issues = window.PaulusNF.validate(parsed);
+    await nfStartFromParsed(parsed, { fonte: 'foto', fileName: 'foto da nota', previews: images.map(function(i){ return i.preview; }), fotos: d.fotos || [], issues: issues });
+  }
+  var nfStage = window.PaulusNF.mountPhotoStage(document.getElementById('nf-foto-stage'), { colors: { accent: '#00906d', soft: '#5B6A62', line: '#E1E4DF', amber: '#9A5B13' }, onRead: nfLerFotos });
+  document.getElementById('nf-foto-fechar').addEventListener('click', function(){ document.getElementById('nf-foto-view').style.display = 'none'; });
   document.getElementById('nf-panel').addEventListener('input', function(e){
     var el = e.target.closest('[data-nf]'); if(!el || !state.nf) return;
     var r = state.nf.rows.filter(function(x){ return x.id === el.dataset.row; })[0]; if(!r) return;
@@ -6452,11 +6657,13 @@ var QRCode;
   });
   document.getElementById('nf-panel').addEventListener('change', function(e){
     if(e.target.id === 'nf-remember' && state.nf) state.nf.remember = e.target.checked;
+    if(e.target.matches && e.target.matches('[data-action="nf-ack"]') && state.nf){ state.nf.ack[e.target.dataset.key] = e.target.checked; renderNfPanel(); }
   });
   document.getElementById('nf-panel').addEventListener('click', function(e){
     var b = e.target.closest('[data-action]'); if(!b || !state.nf) return;
     var a = b.dataset.action;
     if(a === 'nf-link'){ openNfLink(b.dataset.row); }
+    else if(a === 'nf-foto'){ var pv = state.nf.previews[Number(b.dataset.k)]; if(pv){ document.getElementById('nf-foto-img').src = pv; document.getElementById('nf-foto-view').style.display = 'flex'; } }
     else if(a === 'nf-extra'){
       var r = state.nf.rows.filter(function(x){ return x.id === b.dataset.row; })[0];
       if(r){ r.action = b.dataset.choice; r.touched = true; renderNfPanel(); }
@@ -6474,6 +6681,7 @@ var QRCode;
     await refreshDelivered(order);
     if(!(await confirmDeliveredEdit(order))) return;
     if(!dbReady){ alert('Sem conexão com o banco de dados agora. A conferência não foi salva: verifique sua internet e tente de novo.'); return; }
+    if(nf.issues && nf.issues.needsAck.some(function(k){ return !nf.ack[k]; })){ alert('Confira primeiro os pontos marcados em amarelo e marque “Conferi”.'); return; }
     // what will be saved
     var upd = [], add = [], problems = [];
     nf.rows.forEach(function(r){
@@ -6514,9 +6722,10 @@ var QRCode;
       }
       finalTotal = round2(finalTotal);
       var firstDelivery = !order.confirmed && order.status !== 'entregue', deliveredNow = new Date().toISOString();
-      var nfCols = COLS.nf ? { nf_numero: nf.nota.numero || null, nf_serie: nf.nota.serie || null, nf_chave: nf.nota.chave || null, nf_emissao: nf.nota.emissao || null, nf_total: nf.nota.total, nf_emitente: nf.nota.emitente || null } : {};
+      var chaveGuardar = nf.fonte === 'foto' ? (nf.issues && nf.issues.chaveOk ? nf.nota.chave : null) : (nf.nota.chave || null);   // a key read from a photo is only kept when its check digit is right
+      var nfCols = COLS.nf ? Object.assign({ nf_numero: nf.nota.numero || null, nf_serie: nf.nota.serie || null, nf_chave: chaveGuardar, nf_emissao: nf.nota.emissao || null, nf_total: nf.nota.total, nf_emitente: nf.nota.emitente || null }, COLS.nfFonte ? { nf_fonte: nf.fonte || 'xml' } : {}) : {};
       check(await db.from('orders').update(Object.assign({ receiver_note: note, confirmed: true, status: 'entregue', total: finalTotal }, nfCols, (COLS.delivered && firstDelivery) ? { delivered_at: deliveredNow } : {})).eq('id', order.id), 'Atualizar pedido');
-      if(COLS.nf){   // the XML file itself is kept apart (the orders list is read often and must stay light)
+      if(COLS.nf && nf.xml){   // the XML file itself is kept apart (the orders list is read often and must stay light)
         try{ await db.from('order_nf_files').delete().eq('order_id', order.id); await db.from('order_nf_files').insert({ order_id: order.id, xml: nf.xml }); } catch(e3){ console.error('Não consegui guardar o arquivo XML', e3); }
       }
       if(COLS.delivered && firstDelivery) order.delivered_at = deliveredNow;
@@ -7025,12 +7234,14 @@ var QRCode;
           '<div style="display:flex; justify-content:space-between;"><span style="color:' + SOFT + '; font-size:13px;">Valor do pedido</span><span id="pub-valor-pedido" style="font-weight:700;">' + money(items.reduce(function(s, i){ return s + lineValue(i.qty, i.price); }, 0)) + '</span></div>' +
         '</div>' +
         '<div id="pub-nf-card" style="background:#fff; border:1px solid ' + LINE + '; border-radius:14px; padding:14px; margin-bottom:16px;">' +
-          '<div style="font-weight:600; font-size:14px;">Conferir pela nota fiscal (XML)</div>' +
-          '<div style="font-size:12px; color:' + SOFT + '; margin:4px 0 10px 0; line-height:1.45;">Escolha o arquivo XML da nota e o app confere os itens por você. Você só corrige o que chegou diferente. <b>Só o XML:</b> o app ainda não lê foto nem PDF da nota.</div>' +
-          '<input type="file" id="pub-nf-file" style="display:none;"><button type="button" id="pub-nf-btn" style="width:100%; min-height:48px; border:1.5px solid ' + GREEN + '; border-radius:10px; background:#fff; color:' + GREEN + '; font-size:14px; font-weight:600;">Escolher o XML da nota</button>' +
-          '<div style="font-size:11px; color:#8B9A92; margin-top:8px; line-height:1.4;">iPhone: salve o XML em “Arquivos” e escolha ali. Android: escolha em “Downloads”.</div>' +
+          '<div style="font-weight:600; font-size:14px;">Conferir pela nota fiscal</div>' +
+          '<div style="font-size:12px; color:' + SOFT + '; margin:4px 0 12px 0; line-height:1.45;">Tire uma foto da nota (lida por IA: você confere antes de confirmar) ou use o arquivo XML. Você só corrige o que chegou diferente.</div>' +
+          '<div id="pub-foto-stage"></div>' +
+          '<div style="font-size:11px; color:#8B9A92; margin:8px 0 12px 0; line-height:1.4;">Dica: nota inteira na foto, bem de frente, com boa luz. Se tiver mais de uma página, uma foto de cada.</div>' +
+          '<div style="border-top:1px solid ' + LINE + '; padding-top:12px;"><input type="file" id="pub-nf-file" style="display:none;"><button type="button" id="pub-nf-btn" style="width:100%; min-height:48px; border:1.5px solid ' + GREEN + '; border-radius:10px; background:#fff; color:' + GREEN + '; font-size:14px; font-weight:600;">Ou escolher o arquivo XML da nota</button>' +
+          '<div style="font-size:11px; color:#8B9A92; margin-top:8px; line-height:1.4;">iPhone: salve o XML em “Arquivos” e escolha ali. Android: escolha em “Downloads”.</div></div>' +
         '</div>' +
-        '<div id="pub-nf-panel" style="display:none;"></div>' +
+                '<div id="pub-nf-panel" style="display:none;"></div>' +
         '<div id="pub-items-list" style="display:flex; flex-direction:column; gap:10px; margin-bottom:16px;"></div>' +
         '<label style="font-size:12px; color:' + SOFT + '; display:block; margin-bottom:6px;">Observação de quem recebeu (opcional)</label>' +
         '<textarea id="pub-nota" rows="3" placeholder="Ex.: chegou 1 caixa amassada, avisar o fornecedor." style="width:100%; box-sizing:border-box; border:1px solid ' + LINE + '; border-radius:8px; padding:10px; font-size:16px; margin-bottom:16px; font-family:inherit;"></textarea>' +
@@ -7089,11 +7300,17 @@ var QRCode;
     return (d > 0 ? 'Chegou ' + fmtQ(d) + ' a mais' : 'Chegou ' + fmtQ(-d) + ' a menos') + ' (' + (d > 0 ? '+' : '−') + (Math.round(Number((Math.abs(d / it.qty) * 1000).toPrecision(12))) / 10).toLocaleString('pt-BR') + '%)';
   }
   async function nfPubStart(text, fileName){
-    var NF = window.PaulusNF, parsed = NF.parse(text);
+    var parsed = window.PaulusNF.parse(text);
     if(!parsed.ok){ alert(parsed.error); return; }
-    if(parsed.nota.chave){   // already launched in another order? say so now, not after the whole conference
+    return nfPubFromParsed(parsed, { fonte: 'xml', xml: text, fileName: fileName });
+  }
+  // ctx: { fonte: 'xml' | 'foto', xml, fileName, issues }
+  async function nfPubFromParsed(parsed, ctx){
+    var NF = window.PaulusNF;
+    var chaveChecar = ctx.fonte === 'foto' ? (ctx.issues && ctx.issues.chaveOk ? parsed.nota.chave : '') : parsed.nota.chave;
+    if(chaveChecar){   // already launched in another order? say so now, not after the whole conference
       try{
-        var chk = await db.rpc('check_nf_chave', { p_order: order.id, p_chave: parsed.nota.chave });
+        var chk = await db.rpc('check_nf_chave', { p_order: order.id, p_chave: chaveChecar });
         if(!chk.error && chk.data && chk.data.used){ alert('Esta nota fiscal (nº ' + (parsed.nota.numero || '?') + ') já foi lançada' + (chk.data.code ? ' no pedido ' + chk.data.code : ' em outro pedido') + '. A mesma nota não pode ser usada duas vezes.'); return; }
       } catch(e){ /* if the check is not available, the database still refuses a repeated note when saving */ }
     }
@@ -7111,7 +7328,7 @@ var QRCode;
       if(best && bs >= 0.8){ r.itemId = best.itemId; r.auto = 'sugerido'; used[best.itemId] = true; }
     });
     rows.forEach(function(r){ if(r.itemId) r.qty = fmtQ(r.line.qty); });
-    nfx = { nota: parsed.nota, xml: text, rows: rows, missing: {}, file: fileName };
+    nfx = { nota: parsed.nota, xml: ctx.xml || '', fonte: ctx.fonte, issues: ctx.issues || null, ack: {}, rows: rows, missing: {}, file: ctx.fileName };
     nfRematchPub();
     renderNfPub();
   }
@@ -7130,6 +7347,13 @@ var QRCode;
     ['pub-nf-card', 'pub-items-list', 'pub-progress', 'pub-armazenar'].forEach(function(id){ document.getElementById(id).style.display = 'none'; });
     panel.style.display = 'block';
     var mismatch = n.emitente && window.PaulusNF.score(n.emitente, order.supplier_name) < 0.5;
+    var unacked = nfx.issues ? nfx.issues.needsAck.filter(function(k){ return !nfx.ack[k]; }) : [];
+    var photoBlock = '';
+    if(nfx.fonte === 'foto'){
+      photoBlock = '<div style="background:#fff; border:2px solid ' + GREEN + '; border-radius:12px; padding:12px 14px; margin-bottom:12px; font-size:13px; line-height:1.45;"><b>Nota lida por IA a partir da foto.</b> A leitura pode errar: <b>confira com a nota na mão</b>. O que não fecha está em amarelo e precisa ser conferido antes de confirmar.' +
+        ((nfx.issues && nfx.issues.nota.length) ? nfx.issues.nota.map(function(x){ return '<div style="margin-top:8px; background:#FBF1E3; border-radius:8px; padding:10px; font-size:12px; color:#7A4A10;">' + esc(x.text) + (x.key ? '<label style="display:flex; gap:10px; align-items:center; margin-top:8px; min-height:44px; font-weight:600; font-size:13px;"><input type="checkbox" data-pf-ack="' + x.key + '" ' + (nfx.ack[x.key] ? 'checked' : '') + ' style="width:22px; height:22px;"> Conferi e está certo</label>' : '') + '</div>'; }).join('') : '') +
+        (n.destinatario ? '<div style="font-size:12px; color:' + SOFT + '; margin-top:8px;">Destinatário lido: ' + esc(n.destinatario) + '</div>' : '') + '</div>';
+    }
     var rowsHtml = nfx.rows.map(function(r){
       var it = r.itemId ? itemById(r.itemId) : null, ln = r.line;
       var opts = '<option value="">Fora do pedido</option>' + items.map(function(i){ return '<option value="' + esc(i.itemId) + '"' + (r.itemId === i.itemId ? ' selected' : '') + '>' + esc(i.name) + ' · pedido ' + fmtQ(i.qty) + '</option>'; }).join('');
@@ -7141,11 +7365,14 @@ var QRCode;
           (Math.abs(ln.unitPrice - it.price) >= 0.005 ? '<div style="margin-top:6px; font-size:12px; color:' + AMBER + ';">Preço na nota: ' + money(ln.unitPrice) + ' (pedido ' + money(it.price) + '). O comprador confere o valor depois.</div>' : '') +
           (nfWarnUnit(r) ? '<div style="margin-top:6px; font-size:12px; color:' + AMBER + ';">' + esc(nfWarnUnit(r)) + '</div>' : '')
         : '<div style="margin-top:8px; font-size:12px; color:' + AMBER + ';">Este item veio na nota, mas não está no pedido. Ele fica anotado para o comprador ligar a um produto depois.</div>';
-      return '<div style="background:#fff; border:1px solid ' + (it ? LINE : AMBER) + '; border-radius:12px; padding:14px;">' +
+      var ackKey = 'n' + ln.n, probs = nfx.issues && nfx.issues.lines[ackKey];
+      var ackHtml = probs ? '<div style="margin-top:10px; background:#FBF1E3; border-radius:8px; padding:10px; font-size:12px; color:#7A4A10; line-height:1.45;">' + probs.map(esc).join('<br>') +
+        '<label style="display:flex; gap:10px; align-items:center; margin-top:8px; min-height:44px; font-weight:600; font-size:13px;"><input type="checkbox" data-pf-ack="' + ackKey + '" ' + (nfx.ack[ackKey] ? 'checked' : '') + ' style="width:22px; height:22px;"> Conferi esta linha com a nota</label></div>' : '';
+      return '<div style="background:#fff; border:1px solid ' + (it && !probs ? LINE : AMBER) + '; border-radius:12px; padding:14px;">' +
         '<div style="font-weight:600; font-size:14px;">' + esc(ln.desc) + '</div>' +
         '<div style="font-size:12px; color:' + SOFT + '; margin:2px 0 10px 0;">na nota: ' + fmtQ(ln.qty) + ' ' + esc(ln.unit.toLowerCase()) + ' × ' + money(ln.unitPrice) + ' = ' + money(ln.total) + (r.auto === 'sugerido' ? ' · <b>ligação sugerida: confira</b>' : '') + '</div>' +
         '<label for="ps-' + r.id + '" style="font-size:12px; color:' + SOFT + '; display:block; margin-bottom:4px;">Este item é qual do pedido?</label>' +
-        '<select id="ps-' + r.id + '" data-pf="item" data-row="' + r.id + '" style="width:100%; box-sizing:border-box; border:1px solid ' + LINE + '; border-radius:8px; padding:12px; font-size:16px; background:#fff; font-family:inherit;">' + opts + '</select>' + body + '</div>';
+        '<select id="ps-' + r.id + '" data-pf="item" data-row="' + r.id + '" style="width:100%; box-sizing:border-box; border:1px solid ' + LINE + '; border-radius:8px; padding:12px; font-size:16px; background:#fff; font-family:inherit;">' + opts + '</select>' + body + ackHtml + '</div>';
     }).join('');
     var missHtml = Object.keys(nfx.missing).map(function(k){
       var it = itemById(k); if(!it) return '';
@@ -7160,10 +7387,12 @@ var QRCode;
         '<div style="font-size:12px; color:' + SOFT + '; margin-top:4px;">' + (n.emissao ? 'emitida em ' + fmtDateStr(n.emissao) + ' · ' : '') + esc(n.emitente || '') + ' · valor da nota <b>' + money(n.total) + '</b></div>' +
         (mismatch ? '<div style="margin-top:8px; font-size:12px; color:' + AMBER + ';">O emitente da nota não parece ser o fornecedor deste pedido (' + esc(order.supplier_name) + '). Confira se é a nota certa.</div>' : '') +
         '<button type="button" id="pf-cancel" style="margin-top:10px; min-height:44px; padding:0; border:none; background:none; color:' + GREEN + '; font-size:13px; text-decoration:underline;">Cancelar e voltar à conferência manual</button></div>' +
+      photoBlock +
       '<div style="background:#EFDECE; border-radius:10px; padding:10px 12px; font-size:13px; line-height:1.45; margin-bottom:12px;">Confira o que <b>realmente chegou</b> (a carne costuma variar no peso). Os preços ficam como no pedido: se a nota tiver outro preço, o comprador confere depois.</div>' +
       '<div style="display:flex; flex-direction:column; gap:10px; margin-bottom:12px;">' + rowsHtml + missHtml + '</div>' +
       '<div id="pf-totals" style="margin-bottom:12px;">' + nfPubTotalsHtml() + '</div>' +
-      '<button type="button" id="pf-confirm" style="width:100%; min-height:52px; background:' + GREEN + '; color:#fff; border:none; border-radius:12px; padding:15px; font-size:15px; font-weight:600;">Confirmar entrega pela nota</button>';
+      (unacked.length ? '<div style="margin-bottom:10px; background:#FBF1E3; border-radius:8px; padding:10px; font-size:12px; color:#7A4A10;">Falta conferir ' + unacked.length + (unacked.length === 1 ? ' ponto' : ' pontos') + ' marcado(s) em amarelo.</div>' : '') +
+      '<button type="button" id="pf-confirm"' + (unacked.length ? ' disabled' : '') + ' style="width:100%; min-height:52px; background:' + GREEN + '; color:#fff; border:none; border-radius:12px; padding:15px; font-size:15px; font-weight:600;' + (unacked.length ? ' opacity:.5;' : '') + '">Confirmar entrega pela nota</button>';
   }
   function nfPubTotalsHtml(){
     var t = nfPubTotals(), cell = function(l, v, strong){ return '<div style="flex:1 1 90px; background:' + (strong ? '#E3F0E9' : '#fff') + '; border:1px solid ' + LINE + '; border-radius:10px; padding:10px;"><div style="font-size:11px; color:' + SOFT + ';">' + l + '</div><div style="font-weight:700; font-size:14px;">' + money(v) + '</div></div>'; };
@@ -7172,6 +7401,7 @@ var QRCode;
   }
   async function nfPubSave(){
     var btn = document.getElementById('pf-confirm');
+    if(nfx.issues && nfx.issues.needsAck.some(function(k){ return !nfx.ack[k]; })){ alert('Confira primeiro os pontos marcados em amarelo e marque “Conferi”.'); return; }
     var payload = [];
     nfx.rows.forEach(function(r){ if(r.itemId) payload.push({ id: r.itemId, received_qty: nfLine(r) }); });
     Object.keys(nfx.missing).forEach(function(k){ var it = itemById(k); payload.push({ id: k, received_qty: nfx.missing[k] === 'chegou' && it ? it.qty : 0 }); });
@@ -7183,7 +7413,7 @@ var QRCode;
     try{
       var n = nfx.nota;
       var res = await db.rpc('save_order_receiving_nf', { p_order: order.id, p_items: payload, p_note: document.getElementById('pub-nota').value.trim(),
-        p_nf: { numero: n.numero, serie: n.serie, chave: n.chave, emissao: n.emissao, total: n.total, emitente: n.emitente, xml: nfx.xml }, p_links: learn });
+        p_nf: { numero: n.numero, serie: n.serie, chave: (nfx.fonte === 'foto' ? (nfx.issues && nfx.issues.chaveOk ? n.chave : '') : n.chave), emissao: n.emissao, total: n.total, emitente: n.emitente, xml: nfx.xml, fonte: nfx.fonte || 'xml' }, p_links: learn });
       if(res.error) throw new Error(res.error.message);
       var out = res.data || {};
       if(!out.ok){
@@ -7200,12 +7430,27 @@ var QRCode;
       alert('Não foi possível salvar. Verifique sua internet e tente de novo.');
     }
   }
+  // reads the photo on the server (function ler-nota) and opens the same conference as the XML
+  async function pubLerFotos(images){
+    var res;
+    try{ res = await db.functions.invoke('ler-nota', { body: { order_id: order.id, images: images.map(function(i){ return { mime: i.mime, data: i.data }; }) } }); }
+    catch(e){ throw new Error(await window.PaulusNF.readFnError(e)); }
+    if(res.error) throw new Error(await window.PaulusNF.readFnError(res.error));
+    var d = res.data;
+    if(!d || !d.ok) throw new Error((d && d.mensagem) || 'Não consegui ler a nota. Tente de novo.');
+    var parsed = window.PaulusNF.fromAi(d.leitura);
+    if(!parsed.ok) throw new Error(parsed.error);
+    await nfPubFromParsed(parsed, { fonte: 'foto', fileName: 'foto da nota', issues: window.PaulusNF.validate(parsed) });
+  }
+  var stagePub = null;
   function wireNf(){
     var file = document.getElementById('pub-nf-file');
+    stagePub = window.PaulusNF.mountPhotoStage(document.getElementById('pub-foto-stage'), { colors: { accent: GREEN, soft: SOFT, line: LINE, amber: '#9A5B13' }, onRead: pubLerFotos });
     document.getElementById('pub-nf-btn').addEventListener('click', function(){ file.click(); });
     file.addEventListener('change', function(){
       var f = file.files && file.files[0]; file.value = '';
       if(!f) return;
+      if(/^image\//i.test(f.type) || /\.(jpe?g|png|heic|heif|webp)$/i.test(f.name)){ stagePub.addFiles([f]); return; }   // a photo picked here goes to the scanner box
       var problem = window.PaulusNF.fileProblem(f);
       if(problem){ alert(problem); return; }
       var fr = new FileReader();
@@ -7222,6 +7467,8 @@ var QRCode;
     document.getElementById('pf-totals').innerHTML = nfPubTotalsHtml();
   });
   root.addEventListener('change', function(e){
+    var ack = e.target.closest && e.target.closest('[data-pf-ack]');
+    if(ack && nfx){ nfx.ack[ack.dataset.pfAck] = ack.checked; renderNfPub(); return; }
     var el = e.target.closest('[data-pf="item"]'); if(!el || !nfx) return;
     var r = nfx.rows.filter(function(x){ return x.id === el.dataset.row; })[0]; if(!r) return;
     nfx.rows.forEach(function(o){ if(o !== r && el.value && o.itemId === el.value){ o.itemId = null; o.qty = ''; o.auto = 'none'; } });   // an order item belongs to one line only
