@@ -1564,6 +1564,15 @@ html, body {
         <p style="font-size:13px; color:var(--ink-soft); margin:-8px 0 16px 0;">Comparando com a Nota Paulu&#39;s <span id="conferencia-codigo">—</span></p>
         <div class="two-col">
           <div class="primary">
+            <div class="card" id="nf-import-card" style="margin-bottom:16px;">
+              <div style="display:flex; justify-content:space-between; gap:14px; flex-wrap:wrap; align-items:center;">
+                <div style="min-width:0; flex:1 1 280px;"><div style="font-size:15px; font-weight:600;">Conferir pela nota fiscal (XML)</div>
+                  <div class="row-sub" style="margin-top:4px;">Escolha o arquivo XML da nota. O app lê os itens, liga cada um ao seu cadastro de produtos e você corrige o que chegou de verdade.</div>
+                  <div id="nf-linked-info" class="row-sub" style="margin-top:6px; color:var(--green-dark);"></div></div>
+                <div><input type="file" id="nf-file" accept=".xml,text/xml,application/xml" style="display:none;"><button type="button" class="btn btn-primary" id="nf-pick-btn">Escolher o XML da nota</button></div>
+              </div>
+            </div>
+            <div id="nf-panel" style="display:none;"></div>
             <div class="list" id="conferencia-list"></div>
             <div class="field" style="margin-top:16px;">
               <label for="conferencia-nota">Observação de quem recebeu (opcional)</label>
@@ -1665,6 +1674,23 @@ html, body {
         <button class="btn btn-primary" id="gen-confirm">Gerar pedidos</button>
         <button class="btn btn-ghost" id="gen-cancel">Cancelar</button>
       </div>
+    </div>
+  </div>
+
+  <!-- ================= LIGAR ITEM DA NOTA A UM PRODUTO ================= -->
+  <div class="overlay" id="nf-link-overlay">
+    <div class="card" style="width:min(580px,100%); margin:auto; max-height:90vh; display:flex; flex-direction:column; gap:12px;">
+      <div class="row" style="justify-content:space-between; align-items:flex-start;">
+        <div><h2 style="font-size:19px; margin:0;">Ligar a um produto</h2><div class="row-sub" style="margin-top:4px;">Na nota: <span id="nf-link-contexto"></span></div></div>
+        <button type="button" class="modal-x" id="nf-link-close" aria-label="Fechar">&times;</button>
+      </div>
+      <div style="display:flex; gap:10px; flex-wrap:wrap;">
+        <div style="flex:2 1 200px;"><label for="nf-link-busca" class="sr-only">Buscar produto</label><input id="nf-link-busca" type="text" placeholder="Buscar produto" autocomplete="off" style="width:100%; box-sizing:border-box; border:1px solid var(--line); border-radius:10px; padding:11px 12px; font-size:14px;"></div>
+        <div style="flex:1 1 160px;"><label for="nf-link-cat" class="sr-only">Categoria</label><select id="nf-link-cat" style="width:100%; border:1px solid var(--line); border-radius:10px; padding:11px 12px; font-size:14px;"><option value="">Todas as categorias</option></select></div>
+      </div>
+      <div id="nf-link-lista" style="overflow-y:auto; min-height:120px; flex:1;"></div>
+      <div id="nf-link-mais" class="row-sub"></div>
+      <div><button type="button" class="btn btn-ghost" id="nf-link-tirar" style="display:none;">Tirar a ligação</button></div>
     </div>
   </div>
 
@@ -2347,7 +2373,7 @@ var QRCode;
   var SUPABASE_URL = 'https://dqghwfrmodulnevzpgbw.supabase.co';
   var SUPABASE_KEY = 'sb_publishable_nNk6sJNE-7NzraHnjXliLQ_nRfeWtZb';
   var db = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-  var APP_VERSION = '2026-11-25 · versão 15';
+  var APP_VERSION = '2026-11-26 · versão 16';
   var APP_BASE_URL = 'https://compraspaulusrestaurantes-cell.github.io/app_cotacao/';
   var DEFAULT_SUPPLIER_NAME = 'Distribuidora Bom Preço';
   var SUPPLIERS_SEED = [
@@ -2491,16 +2517,16 @@ var QRCode;
   }
 
   var numberReady = true;   // false until quotations.number exists in the database
-  var COLS = { number: false, qBy: false, oBy: false, delivered: false, aBy: false, pack: false, obsQ: false, obsO: false, obsA: false };   // optional columns created by the SQL update
+  var COLS = { number: false, qBy: false, oBy: false, delivered: false, aBy: false, pack: false, obsQ: false, obsO: false, obsA: false, nf: false };   // optional columns created by the SQL update
   async function probeColumn(table, col){ var r = await db.from(table).select(col).limit(1); return !r.error; }
   async function probeColumns(){
     var r = await Promise.all([
       probeColumn('quotations', 'number'), probeColumn('quotations', 'created_by'),
       probeColumn('orders', 'created_by'), probeColumn('orders', 'delivered_at'),
       probeColumn('quotation_allocations', 'created_by'), probeColumn('products', 'pack_qty'),
-      probeColumn('quotation_items', 'obs'), probeColumn('order_items', 'obs'), probeColumn('quotation_allocations', 'obs')
+      probeColumn('quotation_items', 'obs'), probeColumn('order_items', 'obs'), probeColumn('quotation_allocations', 'obs'), probeColumn('orders', 'nf_chave')
     ]);
-    COLS = { number: r[0], qBy: r[1], oBy: r[2], delivered: r[3], aBy: r[4], pack: r[5], obsQ: r[6], obsO: r[7], obsA: r[8] };
+    COLS = { number: r[0], qBy: r[1], oBy: r[2], delivered: r[3], aBy: r[4], pack: r[5], obsQ: r[6], obsO: r[7], obsA: r[8], nf: r[9] };
   }
   // the observation text of the product (brand, type...) is optional; when the database has no column for it yet, it still goes in the message
   function obsLine(text){ return String(text || '').replace(/\s+/g, ' ').trim(); }
@@ -5975,6 +6001,16 @@ var QRCode;
 
   function renderConferencia(){
     document.getElementById('conferencia-codigo').textContent = state.viewingOrder ? state.viewingOrder.code : '—';
+    // conference from the invoice (XML): its own panel replaces the manual list while it is open
+    if(state.nf && (!state.viewingOrder || state.nf.orderId !== state.viewingOrder.id)) state.nf = null;
+    var nfOn = !!state.nf;
+    document.getElementById('nf-import-card').style.display = nfOn ? 'none' : 'block';
+    document.getElementById('nf-panel').style.display = nfOn ? 'block' : 'none';
+    document.getElementById('conferencia-list').style.display = nfOn ? 'none' : '';
+    document.querySelector('#page-conferencia .side').style.display = nfOn ? 'none' : '';
+    var vo = state.viewingOrder;
+    document.getElementById('nf-linked-info').textContent = vo && vo.nf_numero ? 'Este pedido já foi conferido pela nota fiscal nº ' + vo.nf_numero + (vo.nf_emissao ? ' (emitida em ' + fmtDateStr(String(vo.nf_emissao).slice(0, 10)) + ')' : '') + '.' : '';
+    if(nfOn) renderNfPanel();
     var list = document.getElementById('conferencia-list');
     list.innerHTML = '';
     var items = state.currentOrderItems;
@@ -6044,6 +6080,384 @@ var QRCode;
       }
     }
   });
+
+  /* ---------- Conferência pela nota fiscal (XML) ---------- */
+  var NF_STOP = { kg:1, un:1, und:1, unid:1, cx:1, pct:1, pc:1, de:1, da:1, do:1, c:1, com:1, s:1, sem:1, e:1, a:1, o:1, em:1, g:1, gr:1, l:1, lt:1, ml:1 };
+  function nfTokens(text){ return normalizeText(text).split(/[^a-z0-9]+/).filter(function(t){ return t && !NF_STOP[t] && !/^\d+$/.test(t); }); }
+  function nfScore(a, b){   // 1 = every word of the shorter text is in the other one
+    var ta = nfTokens(a), tb = nfTokens(b);
+    if(!ta.length || !tb.length) return 0;
+    var common = ta.filter(function(t){ return tb.indexOf(t) > -1; }).length;
+    return common / Math.min(ta.length, tb.length);
+  }
+  var NF_UNITS = { KG:'Kg', KGS:'Kg', UN:'Unidade', UND:'Unidade', UNID:'Unidade', UNIDADE:'Unidade', PC:'Unidade', PCA:'Unidade', CX:'Caixa', CXA:'Caixa', CAIXA:'Caixa', PCT:'Pacote', PT:'Pacote', PAC:'Pacote', FD:'Fardo', FARDO:'Fardo', SC:'Saco', SACO:'Saco', LT:'Litro', L:'Litro', LTS:'Litro', LITRO:'Litro' };
+  function nfeText(el, tag){
+    if(!el) return '';
+    var n = el.getElementsByTagNameNS('*', tag)[0];
+    return n ? String(n.textContent || '').trim() : '';
+  }
+  // reads an NF-e XML (any namespace): the note's data and its lines
+  function parseNfe(xmlText){
+    var doc;
+    try{ doc = new DOMParser().parseFromString(String(xmlText || ''), 'text/xml'); } catch(e){ return { ok: false, error: 'Não consegui ler este arquivo como XML.' }; }
+    if(!doc || doc.getElementsByTagName('parsererror').length) return { ok: false, error: 'Este arquivo não é um XML válido.' };
+    var inf = doc.getElementsByTagNameNS('*', 'infNFe')[0];
+    if(!inf) return { ok: false, error: 'Este XML não parece ser de uma NF-e: não achei os dados da nota.' };
+    var id = String(inf.getAttribute('Id') || '').replace(/^NFe/i, '');
+    var chave = /^\d{44}$/.test(id) ? id : nfeText(doc, 'chNFe');
+    var ide = inf.getElementsByTagNameNS('*', 'ide')[0], emit = inf.getElementsByTagNameNS('*', 'emit')[0], tot = inf.getElementsByTagNameNS('*', 'ICMSTot')[0];
+    var emi = nfeText(ide, 'dhEmi') || nfeText(ide, 'dEmi');
+    var itens = [];
+    Array.prototype.forEach.call(inf.getElementsByTagNameNS('*', 'det'), function(det, i){
+      var prod = det.getElementsByTagNameNS('*', 'prod')[0]; if(!prod) return;
+      var qty = Number(nfeText(prod, 'qCom')), vUn = Number(nfeText(prod, 'vUnCom')), vProd = Number(nfeText(prod, 'vProd')), vDesc = Number(nfeText(prod, 'vDesc')) || 0;
+      if(!(qty > 0)) return;
+      var eff = vProd > 0 ? (vProd - vDesc) / qty : vUn;   // unit price already without the discount of the line
+      itens.push({ n: Number(det.getAttribute('nItem')) || (i + 1), code: nfeText(prod, 'cProd'), desc: nfeText(prod, 'xProd'), unit: nfeText(prod, 'uCom').toUpperCase(),
+        qty: qty, unitPrice: Math.round(eff * 10000) / 10000, total: round2(vProd - vDesc) });
+    });
+    if(!itens.length) return { ok: false, error: 'A nota não tem itens.' };
+    return { ok: true, nota: { chave: chave, numero: nfeText(ide, 'nNF'), serie: nfeText(ide, 'serie'), emissao: emi ? emi.slice(0, 10) : '', emitente: nfeText(emit, 'xNome'), cnpj: nfeText(emit, 'CNPJ'),
+      total: Number(nfeText(tot, 'vNF')) || round2(itens.reduce(function(s, x){ return s + x.total; }, 0)) }, itens: itens };
+  }
+  function readFileText(file){
+    return new Promise(function(resolve, reject){
+      var fr = new FileReader();
+      fr.onload = function(){ resolve(String(fr.result || '')); };
+      fr.onerror = function(){ reject(fr.error || new Error('Falha ao ler o arquivo')); };
+      fr.readAsText(file);
+    });
+  }
+
+  /* what each supplier calls each product on the note: remembered (in the database when the table exists, and always on this device) */
+  var nfAliasDb = false;
+  async function loadNfAliases(supplierId){
+    var map = { byCode: {}, byDesc: {} };
+    nfAliasDb = false;
+    try{
+      var r = await db.from('supplier_product_links').select('*').eq('supplier_id', supplierId);
+      if(!r.error){
+        nfAliasDb = true;
+        (r.data || []).forEach(function(a){ if(a.nota_code) map.byCode[a.nota_code] = a.product_id; if(a.nota_desc) map.byDesc[a.nota_desc] = a.product_id; });
+      }
+    } catch(e){ /* table not created yet */ }
+    try{
+      var raw = JSON.parse(localStorage.getItem('paulus_nflinks_' + supplierId) || '{}');
+      Object.keys(raw.byCode || {}).forEach(function(k){ if(!(k in map.byCode)) map.byCode[k] = raw.byCode[k]; });
+      Object.keys(raw.byDesc || {}).forEach(function(k){ if(!(k in map.byDesc)) map.byDesc[k] = raw.byDesc[k]; });
+    } catch(e2){ /* ignore */ }
+    return map;
+  }
+  async function saveNfAliases(supplierId, rows){
+    var recs = rows.filter(function(r){ return r.productId; }).map(function(r){ return { supplier_id: supplierId, nota_code: r.line.code || null, nota_desc: normalizeText(r.line.desc), product_id: r.productId }; });
+    if(!recs.length) return;
+    try{
+      var raw = JSON.parse(localStorage.getItem('paulus_nflinks_' + supplierId) || '{}'); raw.byCode = raw.byCode || {}; raw.byDesc = raw.byDesc || {};
+      recs.forEach(function(x){ if(x.nota_code) raw.byCode[x.nota_code] = x.product_id; raw.byDesc[x.nota_desc] = x.product_id; });
+      localStorage.setItem('paulus_nflinks_' + supplierId, JSON.stringify(raw));
+    } catch(e){ /* ignore */ }
+    if(!nfAliasDb) return;
+    try{
+      await db.from('supplier_product_links').delete().eq('supplier_id', supplierId).in('nota_desc', recs.map(function(x){ return x.nota_desc; }));
+      check(await db.from('supplier_product_links').insert(recs), 'Guardar ligações da nota');
+    } catch(err){ console.error('Não foi possível guardar as ligações no banco (ficam neste aparelho)', err); }
+  }
+
+  /* ----- building the conference from the note ----- */
+  function nfProduct(id){ return PRODUCTS.filter(function(p){ return p.dbId === id; })[0] || null; }
+  function nfItem(itemId){ return state.currentOrderItems.filter(function(i){ return String(i.itemId) === String(itemId); })[0] || null; }
+  function nfRematch(){
+    var nf = state.nf, items = state.currentOrderItems, used = {};
+    nf.rows.forEach(function(r){ r.orderItemId = null; });
+    nf.rows.forEach(function(r){
+      if(!r.productId) return;
+      var it = items.filter(function(i){ return i.productId === r.productId && !used[i.itemId]; })[0];
+      if(it){ r.orderItemId = it.itemId; used[it.itemId] = true; }
+    });
+    var old = nf.missing || [];
+    nf.missing = items.filter(function(i){ return !used[i.itemId]; }).map(function(i){
+      var o = old.filter(function(m){ return String(m.itemId) === String(i.itemId); })[0];
+      return { itemId: i.itemId, choice: o ? o.choice : 'nao-chegou' };
+    });
+    nf.rows.forEach(function(r){ if(!r.orderItemId && !r.touched) r.action = r.productId ? 'add' : 'pending'; });
+  }
+  async function nfStart(file){
+    var order = state.viewingOrder; if(!order || !file) return;
+    if(file.size > 3 * 1024 * 1024){ alert('Este arquivo é grande demais para ser uma nota (máximo 3 MB).'); return; }
+    var text;
+    try{ text = await readFileText(file); } catch(e){ alert('Não consegui abrir o arquivo.'); return; }
+    var parsed = parseNfe(text);
+    if(!parsed.ok){ alert(parsed.error); return; }
+    if(COLS.nf && parsed.nota.chave){
+      try{
+        var r = await db.from('orders').select('id,code').eq('nf_chave', parsed.nota.chave);
+        var dup = !r.error ? (r.data || []).filter(function(o){ return o.id !== order.id; })[0] : null;
+        if(dup){ alert('Esta nota fiscal (nº ' + (parsed.nota.numero || '?') + ') já foi lançada no pedido ' + dup.code + '.\n\nA mesma nota não pode ser usada em dois pedidos.'); return; }
+      } catch(e2){ /* if the check fails, the database refuses a repeated note when saving */ }
+    }
+    var aliases = await loadNfAliases(order.supplier_id);
+    var items = state.currentOrderItems;
+    var rows = parsed.itens.map(function(line){
+      var pid = (line.code && aliases.byCode[line.code]) || aliases.byDesc[normalizeText(line.desc)] || null;
+      var link = pid && nfProduct(pid) ? 'alias' : 'none';
+      if(link === 'none') pid = null;
+      if(!pid){   // not remembered: suggest the order item whose name looks the most like the note's text
+        var best = null, bestScore = 0;
+        items.forEach(function(it){ var sc = nfScore(line.desc, it.name); if(it.productId && sc > bestScore){ best = it; bestScore = sc; } });
+        if(best && bestScore >= 0.8){ pid = best.productId; link = 'sugerido'; }
+      }
+      return { id: 'n' + line.n, line: line, productId: pid, link: link, orderItemId: null, qty: fmtQtyInput(line.qty), price: fmtPriceInput(line.unitPrice), action: 'pending', touched: false };
+    });
+    state.nf = { orderId: order.id, file: file.name, xml: text, nota: parsed.nota, rows: rows, missing: [], aliases: aliases, remember: true };
+    nfRematch();
+    renderConferencia();
+  }
+  function nfUnitWarn(row){
+    var it = row.orderItemId ? nfItem(row.orderItemId) : null, app = NF_UNITS[row.line.unit];
+    if(it && app && it.unit && app !== it.unit) return 'A nota vende em ' + row.line.unit + ' e o pedido é em ' + (UNIT_LABELS[it.unit] || it.unit) + ': confira a quantidade.';
+    return '';
+  }
+  function nfLineNumbers(row){
+    var q = parseQtyInput(row.qty), p = parseMoneyFlexible(row.price);
+    return { q: q === null ? 0 : q, p: p === null ? 0 : p };
+  }
+  function nfTotals(){
+    var nf = state.nf, items = state.currentOrderItems, t = { pedido: 0, nota: nf.nota.total, recebido: 0 };
+    items.forEach(function(i){ t.pedido += i.qty * i.price; });
+    nf.rows.forEach(function(r){
+      var n = nfLineNumbers(r);
+      if(r.orderItemId || r.action === 'add') t.recebido += n.q * n.p;
+    });
+    nf.missing.forEach(function(m){ var it = nfItem(m.itemId); if(it && m.choice === 'chegou') t.recebido += it.qty * it.price; });
+    t.pedido = round2(t.pedido); t.recebido = round2(t.recebido);
+    return t;
+  }
+  function nfDiffText(row){
+    var it = row.orderItemId ? nfItem(row.orderItemId) : null; if(!it) return { text: '', cls: '' };
+    var n = nfLineNumbers(row), dq = round3(n.q - it.qty), dv = round2(n.q * n.p - it.qty * it.price), unit = UNIT_LABELS[it.unit] || 'un';
+    if(dq === 0 && dv === 0) return { text: 'Igual ao pedido.', cls: 'ok' };
+    var parts = [];
+    if(dq !== 0) parts.push((dq > 0 ? 'Chegou ' + fmtQty(dq) + ' ' + unit + ' a mais' : 'Chegou ' + fmtQty(-dq) + ' ' + unit + ' a menos') + ' (' + (dq > 0 ? '+' : '−') + Math.abs(Math.round(dq / it.qty * 1000) / 10).toLocaleString('pt-BR') + '%)');
+    if(Math.abs(Math.round((n.p - it.price) * 100)) > 0) parts.push('preço ' + money(n.p) + ' (pedido ' + money(it.price) + ')');
+    parts.push((dv > 0 ? '+' : '−') + money(Math.abs(dv)));
+    return { text: parts.join(' · '), cls: 'diff' };
+  }
+  function nfTotalsHtml(){
+    var t = nfTotals(), d = round2(t.recebido - t.pedido);
+    return '<div style="display:flex; gap:10px; flex-wrap:wrap;">' +
+      [['Pedido', money(t.pedido)], ['Nota fiscal', money(t.nota)], ['Recebido', money(t.recebido)]].map(function(x){
+        return '<div style="flex:1 1 120px; border:1px solid var(--line); border-radius:12px; padding:10px 12px; background:' + (x[0] === 'Recebido' ? 'var(--green-tint)' : '#fff') + ';"><div class="row-sub">' + x[0] + '</div><div style="font-weight:700; font-size:16px;">' + x[1] + '</div></div>';
+      }).join('') + '</div>' +
+      (d !== 0 ? '<div class="banner" style="margin-top:10px; background:var(--amber-tint); color:var(--amber-dark);">' + (d < 0 ? money(-d) + ' a menos' : money(d) + ' a mais') + ' que o pedido (' + (t.pedido ? (d < 0 ? '−' : '+') + Math.abs(Math.round(d / t.pedido * 1000) / 10).toLocaleString('pt-BR') + '%' : '') + ').</div>' : '') +
+      (Math.abs(round2(t.nota - t.recebido)) > 0.009 ? '<div class="row-sub" style="margin-top:8px;">O recebido difere do valor da nota em ' + money(Math.abs(round2(t.nota - t.recebido))) + ' (por exemplo, itens que você ignorou ou corrigiu).</div>' : '');
+  }
+  function renderNfPanel(){
+    var nf = state.nf, box = document.getElementById('nf-panel'), order = state.viewingOrder;
+    var n = nf.nota, sup = supplierName(order.supplier_id);
+    var emitMismatch = n.emitente && nfScore(n.emitente, sup) < 0.5;
+    var undecided = nf.rows.filter(function(r){ return !r.orderItemId && r.action === 'pending'; }).length;
+    var rowsHtml = nf.rows.map(function(r){
+      var p = r.productId ? nfProduct(r.productId) : null, it = r.orderItemId ? nfItem(r.orderItemId) : null, ln = r.line;
+      var badge = !p ? '<span class="badge badge-amber">Sem ligação</span>' : (r.link === 'sugerido' ? '<span class="badge badge-amber">Ligação sugerida: confira</span>' : '<span class="badge badge-green">Ligado</span>');
+      var linkLine = p
+        ? '<div class="row-sub">Produto: <b>' + escHtml(p.name) + '</b> · ' + escHtml(p.category || 'Sem categoria') + ' <button type="button" class="link-btn" data-action="nf-link" data-row="' + r.id + '">Trocar</button></div>'
+        : '<div style="margin:6px 0;"><button type="button" class="btn btn-primary" data-action="nf-link" data-row="' + r.id + '" style="padding:8px 14px;">Ligar a um produto</button></div>';
+      var inputs = (it || r.action === 'add')
+        ? '<div style="display:flex; gap:12px; flex-wrap:wrap; align-items:flex-end; margin-top:8px;">' +
+            '<div><label class="row-sub" for="nfq-' + r.id + '">Recebido' + (it ? ' (pedido: ' + fmtQty(it.qty) + ' ' + (UNIT_LABELS[it.unit] || 'un') + ')' : '') + '</label><input id="nfq-' + r.id + '" type="text" inputmode="decimal" data-nf="qty" data-row="' + r.id + '" value="' + escHtml(r.qty) + '" style="width:110px; border:1px solid var(--line); border-radius:8px; padding:9px 10px; font-weight:600; text-align:right; display:block;"></div>' +
+            '<div><label class="row-sub" for="nfp-' + r.id + '">Preço' + (it ? ' (pedido: ' + money(it.price) + ')' : '') + '</label><input id="nfp-' + r.id + '" type="text" inputmode="decimal" data-nf="price" data-row="' + r.id + '" value="' + escHtml(r.price) + '" style="width:110px; border:1px solid var(--line); border-radius:8px; padding:9px 10px; font-weight:600; text-align:right; display:block;"></div>' +
+          '</div>' +
+          '<div id="nfd-' + r.id + '" style="margin-top:8px; font-size:13px; font-weight:600;"></div>'
+        : '';
+      var extra = '';
+      if(!it){
+        extra = '<div class="banner banner-amber" style="margin-top:8px;">Este item veio na nota, mas <b>não estava no pedido</b>.</div>' +
+          '<div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:8px;">' +
+            (p ? '<button type="button" class="btn ' + (r.action === 'add' ? 'btn-primary' : 'btn-ghost') + '" data-action="nf-extra" data-row="' + r.id + '" data-choice="add" style="padding:8px 14px;">Adicionar ao pedido</button>' : '') +
+            '<button type="button" class="btn ' + (r.action === 'ignore' ? 'btn-primary' : 'btn-ghost') + '" data-action="nf-extra" data-row="' + r.id + '" data-choice="ignore" style="padding:8px 14px;">Ignorar este item</button>' +
+          '</div>';
+      }
+      var warn = nfUnitWarn(r);
+      return '<div class="card" data-nf-row="' + r.id + '" style="' + (!p ? 'border:2px solid #E0A84F;' : '') + '">' +
+        '<div style="display:flex; justify-content:space-between; gap:10px; align-items:flex-start;"><div style="min-width:0;"><div class="row-title">' + escHtml(ln.desc) + '</div>' +
+          '<div class="row-sub">na nota' + (ln.code ? ' · cód. ' + escHtml(ln.code) : '') + ': ' + fmtQty(ln.qty) + ' ' + escHtml(ln.unit.toLowerCase()) + ' × ' + money(ln.unitPrice) + ' = ' + money(ln.total) + '</div></div>' + badge + '</div>' +
+        linkLine + inputs + (warn ? '<div class="row-sub" style="color:var(--amber-dark); margin-top:6px;">' + escHtml(warn) + '</div>' : '') + extra + '</div>';
+    }).join('');
+    var missHtml = nf.missing.map(function(m){
+      var it = nfItem(m.itemId); if(!it) return '';
+      return '<div class="card" style="background:#F6F6F6;"><div style="display:flex; justify-content:space-between; gap:10px; flex-wrap:wrap;"><div><div class="row-title">' + escHtml(it.name) + '</div><div class="row-sub">Pedido: ' + fmtQty(it.qty) + ' ' + (UNIT_LABELS[it.unit] || 'un') + ' × ' + money(it.price) + ' · <b>não veio na nota</b></div></div></div>' +
+        '<div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:10px;">' +
+          '<button type="button" class="btn ' + (m.choice === 'nao-chegou' ? 'btn-primary' : 'btn-ghost') + '" data-action="nf-missing" data-item="' + m.itemId + '" data-choice="nao-chegou" style="padding:8px 14px;">Não chegou</button>' +
+          '<button type="button" class="btn ' + (m.choice === 'chegou' ? 'btn-primary' : 'btn-ghost') + '" data-action="nf-missing" data-item="' + m.itemId + '" data-choice="chegou" style="padding:8px 14px;">Chegou, fora da nota</button></div></div>';
+    }).join('');
+    box.innerHTML =
+      '<div class="card" style="margin-bottom:14px;"><div style="display:flex; justify-content:space-between; gap:12px; flex-wrap:wrap; align-items:flex-start;"><div style="min-width:0;">' +
+        '<h3 style="margin:0 0 4px 0; font-size:17px;">Nota fiscal nº ' + escHtml(n.numero || '?') + (n.serie ? ' · série ' + escHtml(n.serie) : '') + '</h3>' +
+        '<div class="row-sub">' + (n.emissao ? 'emitida em ' + fmtDateStr(n.emissao) + ' · ' : '') + escHtml(n.emitente || 'emitente não informado') + ' · valor da nota <b>' + money(n.total) + '</b></div>' +
+        (n.chave ? '<div class="row-sub" style="word-break:break-all;">chave: ' + escHtml(n.chave.replace(/(\d{4})(?=\d)/g, '$1 ')) + '</div>' : '') +
+        '<div class="row-sub">arquivo: ' + escHtml(nf.file) + '</div></div>' +
+        '<button type="button" class="btn btn-ghost" data-action="nf-cancel">Cancelar e voltar à conferência manual</button></div>' +
+        (emitMismatch ? '<div class="banner banner-amber" style="margin-top:10px;">O emitente da nota (' + escHtml(n.emitente) + ') não parece ser o fornecedor deste pedido (' + escHtml(sup) + '). Confira se é a nota certa.</div>' : '') + '</div>' +
+      '<div class="banner" style="margin-bottom:14px; background:var(--beige, #EFDECE);">Mexa no que <b>realmente chegou</b>: quantidade e preço podem ser corrigidos item por item (a carne costuma variar no peso).</div>' +
+      '<div class="list">' + rowsHtml + missHtml + '</div>' +
+      '<div class="card" style="margin-top:14px;" id="nf-footer"><div id="nf-totals">' + nfTotalsHtml() + '</div>' +
+        '<label style="display:flex; gap:8px; align-items:flex-start; font-size:13px; margin:14px 0;"><input type="checkbox" id="nf-remember" ' + (nf.remember ? 'checked' : '') + ' style="margin-top:2px;"><span>Lembrar as ligações dos produtos nas próximas notas de ' + escHtml(sup) + '</span></label>' +
+        (undecided ? '<div class="banner banner-amber" style="margin-bottom:10px;">' + undecided + (undecided === 1 ? ' item da nota ainda precisa' : ' itens da nota ainda precisam') + ' de uma decisão: ligar a um produto ou ignorar.</div>' : '') +
+        '<button type="button" class="btn btn-primary btn-block" id="nf-confirm" ' + (undecided ? 'disabled' : '') + '>' + (order.confirmed ? 'Salvar a conferência pela nota' : 'Confirmar a entrega pela nota') + '</button>' +
+        '<div class="row-sub" style="margin-top:8px;">Ao confirmar, o pedido passa para <b>Entregue</b> com as quantidades e os valores recebidos, e o arquivo da nota fica guardado junto do pedido.</div></div>';
+    nf.rows.forEach(function(r){ nfRefreshRow(r); });
+  }
+  function nfRefreshRow(r){
+    var el = document.getElementById('nfd-' + r.id); if(!el) return;
+    var d = nfDiffText(r);
+    el.textContent = d.text; el.style.color = d.cls === 'ok' ? 'var(--green-dark)' : 'var(--amber-dark)';
+  }
+
+  /* ----- linking a note line to a product of the catalog ----- */
+  var nfLinkRow = null;
+  function renderNfLinkList(){
+    var term = normalizeText(document.getElementById('nf-link-busca').value).trim(), cat = document.getElementById('nf-link-cat').value;
+    var list = PRODUCTS.filter(function(p){ return p.dbId && (!term || normalizeText(p.name).indexOf(term) > -1) && (!cat || catKey(p.category) === cat); });
+    var groups = {};
+    list.slice(0, 150).forEach(function(p){ var c = p.category || 'Sem categoria'; (groups[c] = groups[c] || []).push(p); });
+    var html = Object.keys(groups).sort(function(a, b){ return a.localeCompare(b, 'pt-BR'); }).map(function(c){
+      return '<div style="font-size:12px; font-weight:600; letter-spacing:.03em; color:var(--ink-soft); margin:12px 0 6px 0;">' + escHtml(c.toUpperCase()) + ' · ' + groups[c].length + '</div>' +
+        groups[c].map(function(p){
+          return '<button type="button" data-nf-pick="' + escHtml(p.dbId) + '" style="display:flex; justify-content:space-between; gap:10px; width:100%; text-align:left; padding:10px 12px; border:1px solid var(--line); border-radius:10px; background:#fff; margin-bottom:6px; cursor:pointer; font-family:inherit; font-size:14px;"><span style="font-weight:600;">' + escHtml(p.name) + '</span><span class="row-sub">' + escHtml(UNIT_LABELS[p.unit] || 'un') + '</span></button>';
+        }).join('');
+    }).join('');
+    document.getElementById('nf-link-lista').innerHTML = html || '<div class="tbl-empty">Nenhum produto encontrado.</div>';
+    document.getElementById('nf-link-mais').textContent = list.length > 150 ? 'Mostrando 150 de ' + list.length + ': refine a busca.' : '';
+  }
+  function openNfLink(rowId){
+    var r = state.nf.rows.filter(function(x){ return x.id === rowId; })[0]; if(!r) return;
+    nfLinkRow = r;
+    document.getElementById('nf-link-contexto').textContent = r.line.desc + ' · ' + fmtQty(r.line.qty) + ' ' + r.line.unit.toLowerCase() + ' × ' + money(r.line.unitPrice);
+    var spell = {}; PRODUCTS.forEach(function(p){ var raw = p.category || 'Sem categoria'; (spell[catKey(raw)] = spell[catKey(raw)] || raw); });
+    var sel = document.getElementById('nf-link-cat');
+    sel.innerHTML = '<option value="">Todas as categorias</option>' + Object.keys(spell).sort(function(a, b){ return spell[a].localeCompare(spell[b], 'pt-BR'); }).map(function(k){ return '<option value="' + escHtml(k) + '">' + escHtml(spell[k]) + '</option>'; }).join('');
+    document.getElementById('nf-link-busca').value = '';
+    document.getElementById('nf-link-tirar').style.display = r.productId ? 'inline-flex' : 'none';
+    renderNfLinkList();
+    document.getElementById('nf-link-overlay').style.display = 'flex';
+    document.getElementById('nf-link-busca').focus();
+  }
+  function closeNfLink(){ nfLinkRow = null; document.getElementById('nf-link-overlay').style.display = 'none'; }
+  function applyNfLink(productId){
+    var r = nfLinkRow; if(!r) return;
+    r.productId = productId; r.link = productId ? 'manual' : 'none';
+    if(!productId){ r.touched = false; }
+    nfRematch();
+    closeNfLink(); renderNfPanel();
+  }
+  document.getElementById('nf-link-busca').addEventListener('input', renderNfLinkList);
+  document.getElementById('nf-link-cat').addEventListener('change', renderNfLinkList);
+  document.getElementById('nf-link-close').addEventListener('click', closeNfLink);
+  document.getElementById('nf-link-overlay').addEventListener('click', function(e){
+    if(e.target === this){ closeNfLink(); return; }
+    var pick = e.target.closest('[data-nf-pick]'); if(pick) applyNfLink(pick.dataset.nfPick);
+  });
+  document.getElementById('nf-link-tirar').addEventListener('click', function(){ applyNfLink(null); });
+
+  /* ----- events of the panel ----- */
+  document.getElementById('nf-pick-btn').addEventListener('click', function(){ document.getElementById('nf-file').click(); });
+  document.getElementById('nf-file').addEventListener('change', async function(){
+    var f = this.files && this.files[0]; this.value = '';
+    if(!f) return;
+    if(!(await confirmDeliveredEdit(state.viewingOrder))) return;
+    nfStart(f);
+  });
+  document.getElementById('nf-panel').addEventListener('input', function(e){
+    var el = e.target.closest('[data-nf]'); if(!el || !state.nf) return;
+    var r = state.nf.rows.filter(function(x){ return x.id === el.dataset.row; })[0]; if(!r) return;
+    r[el.dataset.nf] = el.value;
+    nfRefreshRow(r);
+    document.getElementById('nf-totals').innerHTML = nfTotalsHtml();
+  });
+  document.getElementById('nf-panel').addEventListener('change', function(e){
+    if(e.target.id === 'nf-remember' && state.nf) state.nf.remember = e.target.checked;
+  });
+  document.getElementById('nf-panel').addEventListener('click', function(e){
+    var b = e.target.closest('[data-action]'); if(!b || !state.nf) return;
+    var a = b.dataset.action;
+    if(a === 'nf-link'){ openNfLink(b.dataset.row); }
+    else if(a === 'nf-extra'){
+      var r = state.nf.rows.filter(function(x){ return x.id === b.dataset.row; })[0];
+      if(r){ r.action = b.dataset.choice; r.touched = true; renderNfPanel(); }
+    }
+    else if(a === 'nf-missing'){
+      var m = state.nf.missing.filter(function(x){ return String(x.itemId) === b.dataset.item; })[0];
+      if(m){ m.choice = b.dataset.choice; renderNfPanel(); }
+    }
+    else if(a === 'nf-cancel'){ state.nf = null; renderConferencia(); }
+  });
+  document.getElementById('nf-panel').addEventListener('click', function(e){ if(e.target.id === 'nf-confirm') nfConfirm(); });
+
+  async function nfConfirm(){
+    var nf = state.nf, order = state.viewingOrder; if(!nf || !order) return;
+    await refreshDelivered(order);
+    if(!(await confirmDeliveredEdit(order))) return;
+    if(!dbReady){ alert('Sem conexão com o banco de dados agora. A conferência não foi salva: verifique sua internet e tente de novo.'); return; }
+    // what will be saved
+    var upd = [], add = [], problems = [];
+    nf.rows.forEach(function(r){
+      var n = nfLineNumbers(r);
+      if(r.orderItemId){
+        var it = nfItem(r.orderItemId);
+        if(!(n.q > 0)) problems.push(r.line.desc + ': informe a quantidade recebida.');
+        else if(!(n.p > 0)) problems.push(r.line.desc + ': informe o preço.');
+        else upd.push({ item: it, qty: n.q, price: n.p });
+      } else if(r.action === 'add'){
+        if(!(n.q > 0) || !(n.p > 0)) problems.push(r.line.desc + ': informe a quantidade e o preço para adicionar ao pedido.');
+        else add.push({ row: r, qty: n.q, price: n.p });
+      }
+    });
+    if(problems.length){ alert('Confira antes de confirmar:\n\n' + problems.join('\n')); return; }
+    var btn = document.getElementById('nf-confirm'), label = btn.textContent;
+    btn.disabled = true; btn.textContent = 'Salvando...';
+    var note = document.getElementById('conferencia-nota').value.trim();
+    var finalTotal = 0;
+    try{
+      for(var i = 0; i < upd.length; i++){
+        var u = upd[i], it = u.item, patch;
+        if(u.qty < it.qty) patch = { receive_status: 'parcial', received_qty: u.qty, price: u.price };
+        else patch = { receive_status: 'recebido', received_qty: u.qty, price: u.price, qty: u.qty };   // arrived the same or more: the order now says what really came
+        check(await db.from('order_items').update(patch).eq('id', it.itemId), 'Salvar item conferido');
+        finalTotal += u.qty * u.price;
+      }
+      for(var k = 0; k < nf.missing.length; k++){
+        var m = nf.missing[k], mi = nfItem(m.itemId); if(!mi) continue;
+        if(m.choice === 'chegou'){ check(await db.from('order_items').update({ receive_status: 'recebido', received_qty: mi.qty }).eq('id', mi.itemId), 'Salvar item conferido'); finalTotal += mi.qty * mi.price; }
+        else check(await db.from('order_items').update({ receive_status: 'parcial', received_qty: 0 }).eq('id', mi.itemId), 'Salvar item que não veio');
+      }
+      for(var j = 0; j < add.length; j++){
+        var x = add[j];
+        check(await db.from('order_items').insert(Object.assign({ order_id: order.id, product_id: x.row.productId, qty: x.qty, price: x.price, receive_status: 'recebido', received_qty: x.qty },
+          COLS.obsO ? { obs: 'Veio na nota fiscal, fora do pedido' } : {})), 'Adicionar item da nota ao pedido');
+        finalTotal += x.qty * x.price;
+      }
+      finalTotal = round2(finalTotal);
+      var firstDelivery = !order.confirmed && order.status !== 'entregue', deliveredNow = new Date().toISOString();
+      var nfCols = COLS.nf ? { nf_numero: nf.nota.numero || null, nf_serie: nf.nota.serie || null, nf_chave: nf.nota.chave || null, nf_emissao: nf.nota.emissao || null, nf_total: nf.nota.total, nf_emitente: nf.nota.emitente || null, nf_xml: nf.xml } : {};
+      check(await db.from('orders').update(Object.assign({ receiver_note: note, confirmed: true, status: 'entregue', total: finalTotal }, nfCols, (COLS.delivered && firstDelivery) ? { delivered_at: deliveredNow } : {})).eq('id', order.id), 'Atualizar pedido');
+      if(COLS.delivered && firstDelivery) order.delivered_at = deliveredNow;
+      Object.assign(order, nfCols, { status: 'entregue', confirmed: true, receiver_note: note, total: finalTotal });
+    } catch(err){
+      console.error('Erro ao salvar a conferência pela nota', err);
+      btn.disabled = false; btn.textContent = label;
+      var dupNote = err && /duplicate|unique|nf_chave/i.test(String(err.message || ''));
+      alert(dupNote ? 'Esta nota fiscal já foi lançada em outro pedido, então não pode ser usada aqui.' : 'Não foi possível salvar a conferência.\n\nDetalhe técnico: ' + (err && err.message ? err.message : err));
+      return;
+    }
+    if(nf.remember) await saveNfAliases(order.supplier_id, nf.rows);
+    var idx = ORDERS.findIndex(function(o){ return o.id === order.id; });
+    if(idx > -1) ORDERS[idx] = order;
+    state.nf = null;
+    await loadOrderItems(order.id);
+    renderConferencia();
+    renderResumoMes();
+    showBuyerToast('Entrega conferida pela nota fiscal ' + (nf.nota.numero || '') + '.');
+  }
 
   document.getElementById('armazenar-btn').addEventListener('click', async function(){
     var order = state.viewingOrder;
