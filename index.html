@@ -989,6 +989,10 @@ html, body {
 #buyer-root .chips-in { flex:1 1 140px; min-width:120px; border:none !important; outline:none; font-size:13px; padding:4px 2px !important; background:transparent; width:auto !important }
 #buyer-root .modal-form .dd-panel, #buyer-root .overlay .dd-panel { z-index:95 }
 #buyer-root .cot-owner-dd .dd, #buyer-root #cot-owner-wrap .dd { flex:0 0 auto }
+
+/* ---------- Dashboard: filtros ---------- */
+#buyer-root .dash-filter label { display:block; font-size:12px; color:var(--ink-soft); margin-bottom:4px }
+#buyer-root .dash-filter input[type="date"] { border:1px solid var(--line); border-radius:12px; padding:10px 12px; font-size:13px; background:#fff; font-family:inherit; color:var(--ink); min-height:42px; box-sizing:border-box }
 </style>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
@@ -1125,13 +1129,16 @@ html, body {
 
       <!-- ================= DASHBOARD ================= -->
       <section class="page" id="page-dashboard">
-        <div style="display:flex; gap:12px; flex-wrap:wrap; align-items:center; justify-content:space-between; margin-bottom:20px;">
-          <div style="font-size:13px; color:var(--ink-soft);" id="dash-periodo-label">Mostrando: todos os meses</div>
-          <div style="display:flex; align-items:center; gap:8px;">
-            <label for="dash-month" style="font-size:12px; color:var(--ink-soft);">Filtrar por mês</label>
-            <select id="dash-month" style="border:1px solid var(--line); border-radius:8px; padding:10px 12px; font-size:13px; background:#fff; min-width:200px;">
-              <option value="todos">Todos os meses</option>
-            </select>
+        <div style="display:flex; gap:12px; flex-wrap:wrap; align-items:flex-end; justify-content:space-between; margin-bottom:20px;">
+          <div style="font-size:13px; color:var(--ink-soft); line-height:1.5; max-width:420px;" id="dash-periodo-label">Mostrando: todo o período</div>
+          <div style="display:flex; align-items:flex-end; gap:12px; flex-wrap:wrap;">
+            <div class="dash-filter"><label for="dash-month">Período</label><select id="dash-month"><option value="todos">Todo o período</option></select></div>
+            <div id="dash-custom" style="display:none; align-items:flex-end; gap:8px;">
+              <div class="dash-filter"><label for="dash-de">De</label><input id="dash-de" type="date"></div>
+              <div class="dash-filter"><label for="dash-ate">Até</label><input id="dash-ate" type="date"></div>
+            </div>
+            <div class="dash-filter"><label for="dash-cat-filter">Categoria</label><select id="dash-cat-filter"><option value="">Todas as categorias</option></select></div>
+            <div class="dash-filter" id="dash-owner-wrap" style="display:none;"><label for="dash-owner-filter">Comprador</label><select id="dash-owner-filter"><option value="">Todos os compradores</option></select></div>
           </div>
         </div>
 
@@ -2340,7 +2347,7 @@ var QRCode;
   var SUPABASE_URL = 'https://dqghwfrmodulnevzpgbw.supabase.co';
   var SUPABASE_KEY = 'sb_publishable_nNk6sJNE-7NzraHnjXliLQ_nRfeWtZb';
   var db = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-  var APP_VERSION = '2026-11-25 · versão 14';
+  var APP_VERSION = '2026-11-25 · versão 15';
   var APP_BASE_URL = 'https://compraspaulusrestaurantes-cell.github.io/app_cotacao/';
   var DEFAULT_SUPPLIER_NAME = 'Distribuidora Bom Preço';
   var SUPPLIERS_SEED = [
@@ -2836,17 +2843,104 @@ var QRCode;
     return MONTH_NAMES[Number(p[1]) - 1] + ' de ' + p[0];
   }
 
+  // ----- Dashboard filters: period (presets or any from/to), category (everybody) and buyer (administrator) -----
+  var dashFrom = '', dashTo = '', dashCat = '', dashOwner = '';
+  function ymd(d){ return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
+  function fmtBR(d){ return d ? d.slice(8, 10) + '/' + d.slice(5, 7) + '/' + d.slice(0, 4) : ''; }
+  function monthRange(y, m){   // m: 0-11
+    var last = new Date(y, m + 1, 0).getDate(), mm = String(m + 1).padStart(2, '0');
+    return { from: y + '-' + mm + '-01', to: y + '-' + mm + '-' + String(last).padStart(2, '0') };
+  }
+  function dashRange(){
+    var now = new Date(), y = now.getFullYear(), m = now.getMonth(), v = dashMonth;
+    if(v === 'todos') return { from: null, to: null };
+    if(v === 'este-mes') return monthRange(y, m);
+    if(v === 'mes-passado') return monthRange(m === 0 ? y - 1 : y, m === 0 ? 11 : m - 1);
+    if(v === 'ano') return { from: y + '-01-01', to: y + '-12-31' };
+    var days = { '7d': 7, '30d': 30, '90d': 90 }[v];
+    if(days){ var st = new Date(now); st.setDate(st.getDate() - (days - 1)); return { from: ymd(st), to: ymd(now) }; }
+    if(v === 'custom'){
+      var f = dashFrom || null, t = dashTo || null;
+      if(f && t && f > t){ var tmp = f; f = t; t = tmp; }   // typed backwards: swap
+      return { from: f, to: t };
+    }
+    if(/^\d{4}-\d{2}$/.test(v)){ var p = v.split('-'); return monthRange(Number(p[0]), Number(p[1]) - 1); }
+    return { from: null, to: null };
+  }
+  function dashPeriodText(){
+    var r = dashRange(), v = dashMonth;
+    if(v === 'todos') return 'todo o período';
+    if(/^\d{4}-\d{2}$/.test(v)) return monthLabel(v);
+    if(v === 'custom'){
+      if(r.from && r.to) return 'de ' + fmtBR(r.from) + ' a ' + fmtBR(r.to);
+      if(r.from) return 'a partir de ' + fmtBR(r.from);
+      if(r.to) return 'até ' + fmtBR(r.to);
+      return 'período personalizado (escolha as datas)';
+    }
+    var names = { 'este-mes': 'este mês', 'mes-passado': 'mês passado', '7d': 'últimos 7 dias', '30d': 'últimos 30 dias', '90d': 'últimos 90 dias', 'ano': 'este ano' };
+    return (names[v] || v) + ' (' + fmtBR(r.from) + ' a ' + fmtBR(r.to) + ')';
+  }
+  function inDashRange(dateStr){
+    var r = dashRange();
+    if(!r.from && !r.to) return true;
+    if(!dateStr) return false;
+    return (!r.from || dateStr >= r.from) && (!r.to || dateStr <= r.to);
+  }
+  function dashOwnerOk(name){ return !dashOwner || (name || NO_OWNER) === dashOwner; }
+  function quotationDateStr(q){ var d = q.createdAt || q.deadline; return d && !isNaN(d.getTime()) ? ymd(d) : ''; }
+  function categoryOfProduct(id){ var p = PRODUCTS.filter(function(x){ return x.dbId === id; })[0]; return p ? p.category : ''; }
+  function histOk(h){   // a price line counts when it is in the period, from the chosen buyer and in the chosen category
+    if(!inDashRange(h.createdAt ? ymd(h.createdAt) : '')) return false;
+    if(!dashOwnerOk(h.createdBy)) return false;
+    if(dashCat && catKey(categoryOfProduct(h.productId)) !== dashCat) return false;
+    return true;
+  }
   function renderDashMonthSelect(){
     var sel = document.getElementById('dash-month');
     var keys = {};
     ORDERS.forEach(function(o){ var k = monthKeyFromDateStr(o.order_date); if(k) keys[k] = true; });
     QUOTATIONS.forEach(function(q){ var k = quotationMonthKey(q); if(k) keys[k] = true; });
     keys[monthKeyFromDate(new Date())] = true;
-    var sorted = Object.keys(keys).sort().reverse();
-    sel.innerHTML = '<option value="todos">Todos os meses</option>' +
-      sorted.map(function(k){ return '<option value="' + k + '">' + monthLabel(k).replace(/^./, function(c){ return c.toUpperCase(); }) + '</option>'; }).join('');
-    sel.value = (dashMonth === 'todos' || keys[dashMonth]) ? dashMonth : 'todos';
-    dashMonth = sel.value;
+    var presets = [['todos', 'Todo o período'], ['este-mes', 'Este mês'], ['mes-passado', 'Mês passado'], ['7d', 'Últimos 7 dias'], ['30d', 'Últimos 30 dias'], ['90d', 'Últimos 90 dias'], ['ano', 'Este ano'], ['custom', 'Período personalizado…']];
+    sel.innerHTML = presets.map(function(x){ return '<option value="' + x[0] + '">' + x[1] + '</option>'; }).join('') +
+      Object.keys(keys).sort().reverse().map(function(k){ return '<option value="' + k + '">' + monthLabel(k).replace(/^./, function(c){ return c.toUpperCase(); }) + '</option>'; }).join('');
+    if(!sel.querySelector('[value="' + dashMonth + '"]')) dashMonth = 'todos';
+    sel.value = dashMonth;
+    document.getElementById('dash-custom').style.display = dashMonth === 'custom' ? 'flex' : 'none';
+    document.getElementById('dash-de').value = dashFrom; document.getElementById('dash-ate').value = dashTo;
+  }
+  function renderDashCategorySelect(){
+    var spellings = {};
+    PRODUCTS.forEach(function(p){ var raw = p.category || 'Sem categoria', k = catKey(raw); (spellings[k] = spellings[k] || {})[raw] = ((spellings[k][raw]) || 0) + 1; });
+    function label(k){ var sp = spellings[k]; return sp ? Object.keys(sp).sort(function(x, y){ return (sp[y] - sp[x]) || x.localeCompare(y, 'pt-BR'); })[0] : k; }
+    var keys = Object.keys(spellings);
+    if(dashCat && keys.indexOf(dashCat) === -1) keys.push(dashCat);
+    keys.sort(function(x, y){ return label(x).localeCompare(label(y), 'pt-BR'); });
+    var sel = document.getElementById('dash-cat-filter');
+    sel.innerHTML = '<option value="">Todas as categorias</option>' + keys.map(function(k){ return '<option value="' + escHtml(k) + '">' + escHtml(label(k)) + '</option>'; }).join('');
+    sel.value = dashCat;
+  }
+  function renderDashOwnerSelect(){
+    var wrap = document.getElementById('dash-owner-wrap');
+    if(!isAdmin()){ dashOwner = ''; wrap.style.display = 'none'; return; }
+    var owners = [];
+    ORDERS.forEach(function(o){ owners.push(o.created_by || NO_OWNER); });
+    QUOTATIONS.forEach(function(q){ owners.push(q.createdBy || NO_OWNER); });
+    HISTORY.forEach(function(h){ owners.push(h.createdBy || NO_OWNER); });
+    owners = owners.filter(function(n, i){ return owners.indexOf(n) === i; }).sort(function(a, b){ return a.localeCompare(b, 'pt-BR'); });
+    if(dashOwner && owners.indexOf(dashOwner) === -1) owners.push(dashOwner);
+    var sel = document.getElementById('dash-owner-filter');
+    sel.innerHTML = '<option value="">Todos os compradores</option>' + owners.map(function(n){ return '<option value="' + escHtml(n) + '">' + escHtml(n) + '</option>'; }).join('');
+    sel.value = dashOwner;
+    wrap.style.display = 'block';
+  }
+  function fillDashCards(realOrders, valueByOrder){
+    var total = realOrders.reduce(function(sum, o){ return sum + (valueByOrder ? (valueByOrder[o.id] || 0) : (Number(o.total) || 0)); }, 0);
+    document.getElementById('dash-total-comprado').textContent = money(round2(total));
+    document.getElementById('dash-pedidos-fechados').textContent = realOrders.filter(function(o){ return o.status === 'entregue'; }).length;
+    var suppliersUsed = {};
+    realOrders.forEach(function(o){ if(o.supplier_id) suppliersUsed[o.supplier_id] = true; });
+    document.getElementById('dash-fornecedores-usados').textContent = Object.keys(suppliersUsed).length;
   }
 
   function fillPartialStats(values){
@@ -2891,7 +2985,9 @@ var QRCode;
       fillPartialStats({ pedidos:0, pedidosSub:'de ' + delivered.length + ' entregue(s) no período', pct:'0%', pctSub:'nenhum pedido parcial', unidades:0, valor:money(0) });
       renderMaisComprados([]);
       renderCategoryPie([]);
-      renderSupplierPerformance(orders, []);
+      renderSupplierPerformance(orders, [], null);
+      renderFornecedoresRank([], null);
+      if(dashCat) fillDashCards([], {});
       return;
     }
     fillPartialStats({ pedidos:'…', pedidosSub:'carregando', pct:'…', pctSub:'carregando', unidades:'…', valor:'…' });
@@ -2903,10 +2999,22 @@ var QRCode;
       console.error('Erro ao carregar números do dashboard', err);
       if(token === dashStatsToken){
         fillPartialStats({ pedidos:'—', pedidosSub:'não foi possível carregar', pct:'—', pctSub:'', unidades:'—', valor:'—' });
+        if(!dashCat) renderFornecedoresRank(orders, null);
       }
       return;
     }
     if(token !== dashStatsToken) return; // a newer render replaced this one
+
+    // category filter: only the items of that category count, and so do only the orders that have them
+    var scoped = orders, valueByOrder = null;
+    if(dashCat){
+      items = items.filter(function(it){ return catKey(it.products && it.products.category) === dashCat; });
+      valueByOrder = {};
+      items.forEach(function(it){ valueByOrder[it.order_id] = (valueByOrder[it.order_id] || 0) + (Number(it.qty) || 0) * (Number(it.price) || 0); });
+      scoped = orders.filter(function(o){ return valueByOrder[o.id] !== undefined; });
+      delivered = scoped.filter(function(o){ return o.status === 'entregue' || o.confirmed; });
+      fillDashCards(scoped, valueByOrder);
+    }
 
     var partialOrders = {}, partialItems = 0, missingUnits = 0, missingValue = 0;
     items.forEach(function(it){
@@ -2928,7 +3036,8 @@ var QRCode;
     });
     renderMaisComprados(items);
     renderCategoryPie(items);
-    renderSupplierPerformance(orders, items);
+    renderSupplierPerformance(scoped, items, valueByOrder);
+    renderFornecedoresRank(scoped, valueByOrder);
   }
 
   /* ---------- Dashboard: gráficos (SVG desenhado à mão, sem bibliotecas) ---------- */
@@ -2977,7 +3086,7 @@ var QRCode;
 
   // ----- ranking: fornecedores onde mais compramos -----
   var PERF_COLS = 'minmax(190px,2.2fr) 80px 120px minmax(150px,1.5fr) minmax(150px,1.5fr) 120px';
-  function renderSupplierPerformance(orders, items){
+  function renderSupplierPerformance(orders, items, valueByOrder){
     var box = document.getElementById('dash-desempenho');
     var itemsByOrder = {};
     items.forEach(function(it){ (itemsByOrder[it.order_id] = itemsByOrder[it.order_id] || []).push(it); });
@@ -2986,7 +3095,7 @@ var QRCode;
     orders.forEach(function(o){
       var key = o.supplier_id || ('n:' + o.supplier_name);
       var g = by[key] || (by[key] = { id: o.supplier_id, name: o.supplier_name || supplierName(o.supplier_id), orders: 0, total: 0, delivered: 0, problem: 0, late: 0, overdue: 0 });
-      g.orders++; g.total += Number(o.total) || 0;
+      g.orders++; g.total += valueByOrder ? (valueByOrder[o.id] || 0) : (Number(o.total) || 0);
       var due = o.delivery_date ? String(o.delivery_date).slice(0, 10) : '';
       if(isOrderDelivered(o)){
         g.delivered++;
@@ -3022,13 +3131,13 @@ var QRCode;
     box.innerHTML = '<div class="tbl-head" style="--cols:' + PERF_COLS + ';"><div>Fornecedor</div><div>Pedidos</div><div>Comprado</div><div>Entregas com problema</div><div>Atrasos</div><div>Variação de preço</div></div>' + rowsHtml;
   }
 
-  function renderFornecedoresRank(orders){
+  function renderFornecedoresRank(orders, valueByOrder){
     var box = document.getElementById('dash-fornecedores-rank');
     var by = {};
     orders.forEach(function(o){
       var id = o.supplier_id || ('n:' + o.supplier_name);
       var g = by[id] || (by[id] = { name: o.supplier_name || supplierName(o.supplier_id), total: 0, count: 0 });
-      g.total += Number(o.total) || 0; g.count++;
+      g.total += valueByOrder ? (valueByOrder[o.id] || 0) : (Number(o.total) || 0); g.count++;
     });
     var rows = Object.keys(by).map(function(k){ by[k].total = round2(by[k].total); return by[k]; })
       .filter(function(r){ return r.total > 0; }).sort(function(a, b){ return b.total - a.total; }).slice(0, 8);
@@ -3048,7 +3157,7 @@ var QRCode;
   function productsWithHistory(){
     var map = {};
     HISTORY.forEach(function(h){
-      if(!h.productId) return;
+      if(!h.productId || !histOk(h)) return;
       var m = map[h.productId] || (map[h.productId] = { id: h.productId, name: histProductName(h), n: 0, groups: {} });
       m.n++; m.groups[h.quotationId || ('d' + (h.createdAt ? dateInputValue(h.createdAt) : '?'))] = true;
     });
@@ -3056,7 +3165,7 @@ var QRCode;
       .sort(function(a, b){ return a.name.localeCompare(b.name, 'pt-BR'); });
   }
   function priceSeries(productId){
-    var rows = HISTORY.filter(function(h){ return h.productId === productId; })
+    var rows = HISTORY.filter(function(h){ return h.productId === productId && histOk(h); })
       .sort(function(a, b){ return (a.createdAt ? a.createdAt.getTime() : 0) - (b.createdAt ? b.createdAt.getTime() : 0); });
     var groups = [], index = {};
     rows.forEach(function(h){
@@ -3180,30 +3289,30 @@ var QRCode;
   });
 
   function renderDashboard(){
-    renderDashMonthSelect();
-    var inMonth = function(key){ return dashMonth === 'todos' || key === dashMonth; };
-    var orders = ORDERS.filter(function(o){ return inMonth(monthKeyFromDateStr(o.order_date)); });
+    renderDashMonthSelect(); renderDashCategorySelect(); renderDashOwnerSelect();
+    var orders = ORDERS.filter(function(o){ return inDashRange(String(o.order_date || '').slice(0, 10)) && dashOwnerOk(o.created_by); });
     var realOrders = orders.filter(function(o){ return o.status !== 'rascunho'; });
-    var quots = QUOTATIONS.filter(function(q){ return inMonth(quotationMonthKey(q)); });
+    var quots = QUOTATIONS.filter(function(q){ return inDashRange(quotationDateStr(q)) && dashOwnerOk(q.createdBy); });
 
-    var periodo = dashMonth === 'todos' ? 'todos os meses' : monthLabel(dashMonth);
-    document.getElementById('dash-periodo-label').textContent = 'Mostrando: ' + periodo;
-    document.getElementById('dash-total-label').textContent = dashMonth === 'todos' ? 'Total comprado (todos os meses)' : 'Total comprado em ' + periodo;
-    document.getElementById('dash-total-comprado').textContent = money(realOrders.reduce(function(sum, o){ return sum + (Number(o.total) || 0); }, 0));
-    document.getElementById('dash-pedidos-fechados').textContent = realOrders.filter(function(o){ return o.status === 'entregue'; }).length;
+    var catSel = document.getElementById('dash-cat-filter'), catName = dashCat ? (catSel.options[catSel.selectedIndex] ? catSel.options[catSel.selectedIndex].textContent : dashCat) : '';
+    document.getElementById('dash-periodo-label').textContent = 'Mostrando: ' + dashPeriodText() + (dashCat ? ' · categoria ' + catName : '') + (dashOwner ? ' · comprador ' + dashOwner : '');
+    document.getElementById('dash-total-label').textContent = dashMonth === 'todos' ? 'Total comprado' : 'Total comprado (' + dashPeriodText() + ')';
     document.getElementById('dash-cotacoes-abertas').textContent = quots.filter(isQuotationOpen).length;
-    var suppliersUsed = {};
-    realOrders.forEach(function(o){ if(o.supplier_id) suppliersUsed[o.supplier_id] = true; });
-    document.getElementById('dash-fornecedores-usados').textContent = Object.keys(suppliersUsed).length;
+    if(!dashCat) fillDashCards(realOrders, null);                   // with a category the cards need the order items: filled when they arrive
+    else { ['dash-total-comprado', 'dash-pedidos-fechados', 'dash-fornecedores-usados'].forEach(function(id){ document.getElementById(id).textContent = '…'; }); }
 
-    renderDashboardOrderStats(realOrders);   // partial deliveries, "mais comprados" and the category pie (need the order items)
-    renderFornecedoresRank(realOrders);
+    renderDashboardOrderStats(realOrders);   // partial deliveries, ranking, "mais comprados", the category pie... (they need the order items)
     renderPriceSection();
   }
   document.getElementById('dash-month').addEventListener('change', function(e){
     dashMonth = e.target.value;
+    if(dashMonth === 'custom' && !dashFrom && !dashTo){ var n = new Date(); dashFrom = ymd(new Date(n.getFullYear(), n.getMonth(), 1)); dashTo = ymd(n); }
     renderDashboard();
   });
+  document.getElementById('dash-de').addEventListener('change', function(){ dashFrom = this.value; renderDashboard(); });
+  document.getElementById('dash-ate').addEventListener('change', function(){ dashTo = this.value; renderDashboard(); });
+  document.getElementById('dash-cat-filter').addEventListener('change', function(){ dashCat = this.value; renderDashboard(); });
+  document.getElementById('dash-owner-filter').addEventListener('change', function(){ dashOwner = this.value; renderDashboard(); });
 
   var listaCategory = '';   // '' = all categories; otherwise the normalized name (so "Mercearia" and "MERCEARIA" are the same group)
   function catKey(c){ return normalizeText(c || 'Sem categoria').trim(); }
@@ -3456,7 +3565,7 @@ var QRCode;
   function allCategoryNames(){
     return uniqueSorted([].concat.apply([], SUPPLIERS.map(function(s){ return s.categories || []; })).concat(PRODUCTS.map(function(p){ return p.category; }).filter(Boolean)));
   }
-  ['fornecedor-cat-filter', 'produto-cat-filter', 'hist-fornecedor', 'cot-owner-filter', 'dash-month', 'lista-cat-filter', 'ped-owner-filter'].forEach(function(id){ enhanceSelect(document.getElementById(id)); });
+  ['fornecedor-cat-filter', 'produto-cat-filter', 'hist-fornecedor', 'cot-owner-filter', 'dash-month', 'lista-cat-filter', 'ped-owner-filter', 'dash-cat-filter', 'dash-owner-filter'].forEach(function(id){ enhanceSelect(document.getElementById(id)); });
   enhanceSuggestInput(document.getElementById('pf-categoria'), function(){ return uniqueSorted(PRODUCTS.map(function(p){ return p.category; }).filter(Boolean)); });
   var ffCats = enhanceChipInput(document.getElementById('ff-categorias'), allCategoryNames, 'Escolha na lista ou digite e aperte Enter');
 
