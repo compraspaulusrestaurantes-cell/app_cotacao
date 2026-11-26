@@ -1037,7 +1037,17 @@ window.PaulusNF = (function(){
     return { ok: true, nota: { chave: chave, numero: txt(ide, 'nNF'), serie: txt(ide, 'serie'), emissao: emi ? emi.slice(0, 10) : '', emitente: txt(emit, 'xNome'), cnpj: txt(emit, 'CNPJ'),
       total: Number(txt(tot, 'vNF')) || r2(itens.reduce(function(s, x){ return s + x.total; }, 0)) }, itens: itens };
   }
-  return { parse: parse, score: score, tokens: tokens, norm: norm, units: UNITS };
+  // a photo or a PDF is not the note's XML: say so clearly (a photo is also big, and "too big" would hide the real reason)
+  function fileProblem(f){
+    var n = String((f && f.name) || '').toLowerCase(), t = String((f && f.type) || '').toLowerCase();
+    if(/^image\//.test(t) || /\.(jpe?g|png|heic|heif|webp|gif|bmp|tiff?)$/.test(n))
+      return 'Isto é uma foto. O app ainda não lê fotos de nota fiscal: ele lê o arquivo XML da nota (peça ao fornecedor ou ao financeiro). Sem o XML, use a conferência manual.';
+    if(t === 'application/pdf' || /\.pdf$/.test(n))
+      return 'Isto é um PDF (a nota impressa). O app lê o arquivo XML da nota, não o PDF. Peça o XML ao fornecedor ou ao financeiro. Sem o XML, use a conferência manual.';
+    if(f && f.size > 3 * 1024 * 1024) return 'Este arquivo é grande demais para ser o XML de uma nota (máximo 3 MB). Confira se você escolheu o arquivo certo.';
+    return '';
+  }
+  return { parse: parse, score: score, tokens: tokens, norm: norm, units: UNITS, fileProblem: fileProblem };
 })();
 </script>
 </head>
@@ -1612,7 +1622,7 @@ window.PaulusNF = (function(){
             <div class="card" id="nf-import-card" style="margin-bottom:16px;">
               <div style="display:flex; justify-content:space-between; gap:14px; flex-wrap:wrap; align-items:center;">
                 <div style="min-width:0; flex:1 1 280px;"><div style="font-size:15px; font-weight:600;">Conferir pela nota fiscal (XML)</div>
-                  <div class="row-sub" style="margin-top:4px;">Escolha o arquivo XML da nota. O app lê os itens, liga cada um ao seu cadastro de produtos e você corrige o que chegou de verdade.</div>
+                  <div class="row-sub" style="margin-top:4px;">Escolha o arquivo XML da nota. O app lê os itens, liga cada um ao seu cadastro de produtos e você corrige o que chegou de verdade. <b>Só o XML:</b> o app ainda não lê foto nem PDF da nota.</div>
                   <div class="row-sub" style="margin-top:4px;">No celular: no iPhone, salve o XML em “Arquivos” e escolha ali; no Android, ele costuma estar em “Downloads”.</div>
                   <div id="nf-linked-info" class="row-sub" style="margin-top:6px; color:var(--green-dark);"></div></div>
                 <div><input type="file" id="nf-file" style="display:none;"><button type="button" class="btn btn-primary" id="nf-pick-btn">Escolher o XML da nota</button>
@@ -2421,7 +2431,7 @@ var QRCode;
   var SUPABASE_URL = 'https://dqghwfrmodulnevzpgbw.supabase.co';
   var SUPABASE_KEY = 'sb_publishable_nNk6sJNE-7NzraHnjXliLQ_nRfeWtZb';
   var db = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-  var APP_VERSION = '2026-11-26 · versão 18';
+  var APP_VERSION = '2026-11-26 · versão 19';
   var APP_BASE_URL = 'https://compraspaulusrestaurantes-cell.github.io/app_cotacao/';
   var DEFAULT_SUPPLIER_NAME = 'Distribuidora Bom Preço';
   var SUPPLIERS_SEED = [
@@ -6205,7 +6215,8 @@ var QRCode;
   }
   async function nfStart(file){
     if(!state.viewingOrder || !file) return;
-    if(file.size > 3 * 1024 * 1024){ alert('Este arquivo é grande demais para ser uma nota (máximo 3 MB).'); return; }
+    var problem = window.PaulusNF.fileProblem(file);
+    if(problem){ alert(problem); return; }
     var text;
     try{ text = await readFileText(file); } catch(e){ alert('Não consegui abrir o arquivo.'); return; }
     return nfStartFromText(text, file.name);
@@ -6976,7 +6987,7 @@ var QRCode;
         '</div>' +
         '<div id="pub-nf-card" style="background:#fff; border:1px solid ' + LINE + '; border-radius:14px; padding:14px; margin-bottom:16px;">' +
           '<div style="font-weight:600; font-size:14px;">Conferir pela nota fiscal (XML)</div>' +
-          '<div style="font-size:12px; color:' + SOFT + '; margin:4px 0 10px 0; line-height:1.45;">Escolha o arquivo XML da nota e o app confere os itens por você. Você só corrige o que chegou diferente.</div>' +
+          '<div style="font-size:12px; color:' + SOFT + '; margin:4px 0 10px 0; line-height:1.45;">Escolha o arquivo XML da nota e o app confere os itens por você. Você só corrige o que chegou diferente. <b>Só o XML:</b> o app ainda não lê foto nem PDF da nota.</div>' +
           '<input type="file" id="pub-nf-file" style="display:none;"><button type="button" id="pub-nf-btn" style="width:100%; min-height:48px; border:1.5px solid ' + GREEN + '; border-radius:10px; background:#fff; color:' + GREEN + '; font-size:14px; font-weight:600;">Escolher o XML da nota</button>' +
           '<div style="font-size:11px; color:#8B9A92; margin-top:8px; line-height:1.4;">iPhone: salve o XML em “Arquivos” e escolha ali. Android: escolha em “Downloads”.</div>' +
         '</div>' +
@@ -7150,7 +7161,8 @@ var QRCode;
     file.addEventListener('change', function(){
       var f = file.files && file.files[0]; file.value = '';
       if(!f) return;
-      if(f.size > 3 * 1024 * 1024){ alert('Este arquivo é grande demais para ser uma nota (máximo 3 MB).'); return; }
+      var problem = window.PaulusNF.fileProblem(f);
+      if(problem){ alert(problem); return; }
       var fr = new FileReader();
       fr.onload = function(){ nfPubStart(String(fr.result || ''), f.name); };
       fr.onerror = function(){ alert('Não consegui abrir o arquivo.'); };
