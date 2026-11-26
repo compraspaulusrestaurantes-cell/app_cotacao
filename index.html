@@ -2431,7 +2431,7 @@ var QRCode;
   var SUPABASE_URL = 'https://dqghwfrmodulnevzpgbw.supabase.co';
   var SUPABASE_KEY = 'sb_publishable_nNk6sJNE-7NzraHnjXliLQ_nRfeWtZb';
   var db = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-  var APP_VERSION = '2026-11-26 · versão 19';
+  var APP_VERSION = '2026-11-27 · versão 20';
   var APP_BASE_URL = 'https://compraspaulusrestaurantes-cell.github.io/app_cotacao/';
   var DEFAULT_SUPPLIER_NAME = 'Distribuidora Bom Preço';
   var SUPPLIERS_SEED = [
@@ -2657,7 +2657,7 @@ var QRCode;
   }
 
   // ---- allocation maths: what was asked, what already has a supplier, what is left ----
-  function round3(n){ return Math.round(n * 1000) / 1000; }
+  function round3(n){ return Math.round(Number((n * 1000).toPrecision(12))) / 1000; }
   function allocatedQty(item){ return round3((item.allocations || []).reduce(function(sum, a){ return sum + a.qty; }, 0)); }
   function remainingQty(item){ return Math.max(0, round3(item.qty - allocatedQty(item))); }
   function itemIsComplete(item){ return item.qty > 0 ? remainingQty(item) <= 0 : (item.allocations || []).length > 0; }
@@ -2761,7 +2761,7 @@ var QRCode;
   };
 
   function money(v){
-    return 'R$ ' + v.toLocaleString('pt-BR', {minimumFractionDigits:2, maximumFractionDigits:2});
+    return 'R$ ' + round2(Number(v) || 0).toLocaleString('pt-BR', {minimumFractionDigits:2, maximumFractionDigits:2});
   }
 
   // Prices typed by hand: "45,85", "45.85", "R$ 1.234,56" and "1.234" all give the number the person meant
@@ -2788,7 +2788,8 @@ var QRCode;
   function fmtQty(n){ return Number(n).toLocaleString('pt-BR', { maximumFractionDigits: 3 }); }
   function fmtQtyInput(n){ return String(Math.round(Number(n) * 1000) / 1000).replace('.', ','); }
   function fmtPriceInput(n){ return Number(n).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 4 }); }
-  function round2(n){ return Math.round(n * 100) / 100; }
+  function round2(n){ return Math.round(Number((n * 100).toPrecision(12))) / 100; }   // the same result as the database (not the 1-cent surprises of plain floating point)
+  function lineValue(qty, price){ return round2((Number(qty) || 0) * (Number(price) || 0)); }   // every line is rounded to cents on its own, then summed
   function escHtml(v){ return String(v == null ? '' : v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
   function normalizeText(v){ return String(v || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, ''); }
 
@@ -6028,21 +6029,31 @@ var QRCode;
     return '<button type="button" class="chip' + (isActive ? ' ' + activeClass : '') + '" data-id="' + item.itemId + '" data-action="set-status" data-status="' + status + '">' + label + '</button>';
   }
 
+  // weight/volume with the 3 decimals of the scale (71,350); other units without trailing zeros
+  function fmtRecv(n, unit){
+    n = Number(n) || 0;
+    return (unit === 'Kg' || unit === 'Litro') ? n.toLocaleString('pt-BR', { minimumFractionDigits: 3, maximumFractionDigits: 3 }) : fmtQty(n);
+  }
+  function recvValueHtml(item, qty){
+    var u = UNIT_LABELS[item.unit] || 'un';
+    return 'Valor desta entrega: ' + fmtRecv(qty, item.unit) + ' ' + u + ' × ' + money(item.price) + ' = <b>' + money(lineValue(qty, item.price)) + '</b>';
+  }
   function conferenciaRow(item){
     var row = document.createElement('div');
     row.className = 'card';
     var extra = '';
     if(item.receiveStatus === 'parcial'){
       extra =
-        '<div class="row" style="justify-content:space-between; margin-top:12px; padding-top:12px; border-top:1px solid var(--line);">' +
-          '<span style="font-size:12px; color:var(--ink-soft);">Quantidade recebida</span>' +
-          '<div class="stepper">' +
-            '<button type="button" data-id="' + item.itemId + '" data-action="recv-dec" aria-label="Diminuir"'+ '>–</button>' +
-            '<span>' + fmtQty(item.receivedQty) + ' / ' + fmtQty(item.qty) + '</span>' +
-            '<button type="button" data-id="' + item.itemId + '" data-action="recv-inc" aria-label="Aumentar"'+ '>+</button>' +
+        '<div class="row" style="justify-content:space-between; margin-top:12px; padding-top:12px; border-top:1px solid var(--line); flex-wrap:wrap; gap:8px;">' +
+          '<span style="font-size:12px; color:var(--ink-soft);">Quantidade que chegou<span style="display:block;">pode digitar as gramas (ex.: 71,350)</span></span>' +
+          '<div style="display:flex; align-items:center; gap:6px;">' +
+            '<button type="button" class="tbl-btn" data-id="' + item.itemId + '" data-action="recv-dec" aria-label="Diminuir 1">–</button>' +
+            '<input type="text" inputmode="decimal" data-action="recv-input" data-id="' + item.itemId + '" value="' + escHtml(fmtRecv(item.receivedQty, item.unit)) + '" aria-label="Quantidade que chegou de ' + escHtml(item.name) + '" style="width:104px; border:1px solid var(--line); border-radius:8px; padding:9px 10px; font-size:15px; font-weight:600; text-align:center;">' +
+            '<span class="row-sub">de ' + fmtQty(item.qty) + ' ' + (UNIT_LABELS[item.unit] || 'un') + '</span>' +
+            '<button type="button" class="tbl-btn" data-id="' + item.itemId + '" data-action="recv-inc" aria-label="Aumentar 1">+</button>' +
           '</div>' +
         '</div>' +
-        '<div class="row-sub" style="text-align:right; margin-top:6px;">Valor desta entrega parcial: <b>' + money(round2(item.receivedQty * item.price)) + '</b></div>';
+        '<div id="recv-val-' + item.itemId + '" class="row-sub" style="text-align:right; margin-top:6px;">' + recvValueHtml(item, item.receivedQty) + '</div>';
     }
     row.innerHTML =
       '<div class="row" style="justify-content:space-between; margin-bottom:10px;">' +
@@ -6082,8 +6093,8 @@ var QRCode;
     var pct = total ? Math.round((decided/total)*100) : 0;
     document.getElementById('conferencia-bar').style.width = pct + '%';
     document.getElementById('conferencia-count').textContent = decided + ' de ' + total + ' itens conferidos';
-    var vPedido = items.reduce(function(sum, i){ return sum + i.qty * i.price; }, 0);
-    var vGot = items.reduce(function(sum, i){ return sum + (i.receiveStatus === 'recebido' ? i.qty : i.receiveStatus === 'parcial' ? (i.receivedQty || 0) : 0) * i.price; }, 0);
+    var vPedido = items.reduce(function(sum, i){ return sum + lineValue(i.qty, i.price); }, 0);
+    var vGot = items.reduce(function(sum, i){ return sum + lineValue(i.receiveStatus === 'recebido' ? i.qty : i.receiveStatus === 'parcial' ? (i.receivedQty || 0) : 0, i.price); }, 0);
     var vDiff = round2(vGot - vPedido);
     document.getElementById('conferencia-valores').innerHTML = 'Valor do pedido <b style="float:right;">' + money(round2(vPedido)) + '</b><br>Recebido até agora <b style="float:right; color:var(--green);">' + money(round2(vGot)) + '</b>' +
       (decided === total && total > 0 && vDiff !== 0 ? '<br><span style="color:var(--amber-dark); font-weight:600;">' + (vDiff < 0 ? money(-vDiff) + ' a menos' : money(vDiff) + ' a mais') + ' que o pedido.</span>' : '');
@@ -6130,7 +6141,7 @@ var QRCode;
         item.receiveStatus = statusBtn.dataset.status;
         if(item.receiveStatus === 'recebido') item.receivedQty = item.qty;
         if(item.receiveStatus === 'devolvido') item.receivedQty = 0;
-        if(item.receiveStatus === 'parcial' && (item.receivedQty === null || item.receivedQty === item.qty)) item.receivedQty = Math.max(0, item.qty - 1);
+        if(item.receiveStatus === 'parcial' && (item.receivedQty == null || item.receivedQty === item.qty)) item.receivedQty = Math.max(0, item.qty - 1);
         renderConferencia();
       }
       return;
@@ -6141,10 +6152,31 @@ var QRCode;
       var item2 = state.currentOrderItems.filter(function(x){ return String(x.itemId) === recvBtn.dataset.id; })[0];
       if(item2){
         var delta = recvBtn.dataset.action === 'recv-inc' ? 1 : -1;
-        item2.receivedQty = Math.min(item2.qty, Math.max(0, item2.receivedQty + delta));
+        item2.receivedQty = round3(Math.min(item2.qty, Math.max(0, item2.receivedQty + delta)));
         renderConferencia();
       }
     }
+  });
+
+  // exact quantity of a partial delivery: a preview while typing, saved when the field is left (so the value never diverges later)
+  buyerRoot.addEventListener('input', function(e){
+    var el = e.target.closest('[data-action="recv-input"]'); if(!el) return;
+    var it = state.currentOrderItems.filter(function(x){ return String(x.itemId) === el.dataset.id; })[0]; if(!it) return;
+    var box = document.getElementById('recv-val-' + it.itemId); if(!box) return;
+    var n = parseQtyInput(el.value);
+    box.innerHTML = n === null ? 'Digite a quantidade que chegou (ex.: 71,350).' : recvValueHtml(it, Math.min(n, it.qty));
+  });
+  buyerRoot.addEventListener('change', async function(e){
+    var el = e.target.closest('[data-action="recv-input"]'); if(!el) return;
+    var it = state.currentOrderItems.filter(function(x){ return String(x.itemId) === el.dataset.id; })[0]; if(!it) return;
+    if(!(await confirmDeliveredEdit(state.viewingOrder))){ renderConferencia(); return; }
+    var n = parseQtyInput(el.value);
+    if(n === null){ renderConferencia(); return; }
+    if(n >= it.qty){
+      it.receiveStatus = 'recebido'; it.receivedQty = it.qty;
+      showBuyerToast(n > it.qty ? 'Chegou mais que o pedido (' + fmtQty(it.qty) + '): registrei o total pedido. Para registrar a mais, use a conferência pela nota (XML).' : 'Chegou tudo: marquei como Recebido.');
+    } else { it.receivedQty = n; }
+    renderConferencia();
   });
 
   /* ---------- Conferência pela nota fiscal (XML) ---------- */
@@ -6260,21 +6292,21 @@ var QRCode;
   }
   function nfTotals(){
     var nf = state.nf, items = state.currentOrderItems, t = { pedido: 0, nota: nf.nota.total, recebido: 0 };
-    items.forEach(function(i){ t.pedido += i.qty * i.price; });
+    items.forEach(function(i){ t.pedido += lineValue(i.qty, i.price); });
     nf.rows.forEach(function(r){
       var n = nfLineNumbers(r);
-      if(r.orderItemId || r.action === 'add') t.recebido += n.q * n.p;
+      if(r.orderItemId || r.action === 'add') t.recebido += lineValue(n.q, n.p);
     });
-    nf.missing.forEach(function(m){ var it = nfItem(m.itemId); if(it && m.choice === 'chegou') t.recebido += it.qty * it.price; });
+    nf.missing.forEach(function(m){ var it = nfItem(m.itemId); if(it && m.choice === 'chegou') t.recebido += lineValue(it.qty, it.price); });
     t.pedido = round2(t.pedido); t.recebido = round2(t.recebido);
     return t;
   }
   function nfDiffText(row){
     var it = row.orderItemId ? nfItem(row.orderItemId) : null; if(!it) return { text: '', cls: '' };
-    var n = nfLineNumbers(row), dq = round3(n.q - it.qty), dv = round2(n.q * n.p - it.qty * it.price), unit = UNIT_LABELS[it.unit] || 'un';
+    var n = nfLineNumbers(row), dq = round3(n.q - it.qty), dv = round2(lineValue(n.q, n.p) - lineValue(it.qty, it.price)), unit = UNIT_LABELS[it.unit] || 'un';
     if(dq === 0 && dv === 0) return { text: 'Igual ao pedido.', cls: 'ok' };
     var parts = [];
-    if(dq !== 0) parts.push((dq > 0 ? 'Chegou ' + fmtQty(dq) + ' ' + unit + ' a mais' : 'Chegou ' + fmtQty(-dq) + ' ' + unit + ' a menos') + ' (' + (dq > 0 ? '+' : '−') + Math.abs(Math.round(dq / it.qty * 1000) / 10).toLocaleString('pt-BR') + '%)');
+    if(dq !== 0) parts.push((dq > 0 ? 'Chegou ' + fmtQty(dq) + ' ' + unit + ' a mais' : 'Chegou ' + fmtQty(-dq) + ' ' + unit + ' a menos') + ' (' + (dq > 0 ? '+' : '−') + (Math.round(Number((Math.abs(dq / it.qty) * 1000).toPrecision(12))) / 10).toLocaleString('pt-BR') + '%)');
     if(Math.abs(Math.round((n.p - it.price) * 100)) > 0) parts.push('preço ' + money(n.p) + ' (pedido ' + money(it.price) + ')');
     parts.push((dv > 0 ? '+' : '−') + money(Math.abs(dv)));
     return { text: parts.join(' · '), cls: 'diff' };
@@ -6467,18 +6499,18 @@ var QRCode;
         if(u.qty < it.qty) patch = { receive_status: 'parcial', received_qty: u.qty, price: u.price };
         else patch = { receive_status: 'recebido', received_qty: u.qty, price: u.price, qty: u.qty };   // arrived the same or more: the order now says what really came
         check(await db.from('order_items').update(patch).eq('id', it.itemId), 'Salvar item conferido');
-        finalTotal += u.qty * u.price;
+        finalTotal += lineValue(u.qty, u.price);
       }
       for(var k = 0; k < nf.missing.length; k++){
         var m = nf.missing[k], mi = nfItem(m.itemId); if(!mi) continue;
-        if(m.choice === 'chegou'){ check(await db.from('order_items').update({ receive_status: 'recebido', received_qty: mi.qty }).eq('id', mi.itemId), 'Salvar item conferido'); finalTotal += mi.qty * mi.price; }
+        if(m.choice === 'chegou'){ check(await db.from('order_items').update({ receive_status: 'recebido', received_qty: mi.qty }).eq('id', mi.itemId), 'Salvar item conferido'); finalTotal += lineValue(mi.qty, mi.price); }
         else check(await db.from('order_items').update({ receive_status: 'parcial', received_qty: 0 }).eq('id', mi.itemId), 'Salvar item que não veio');
       }
       for(var j = 0; j < add.length; j++){
         var x = add[j];
         check(await db.from('order_items').insert(Object.assign({ order_id: order.id, product_id: x.row.productId, qty: x.qty, price: x.price, receive_status: 'recebido', received_qty: x.qty },
           COLS.obsO ? { obs: 'Veio na nota fiscal, fora do pedido' } : {})), 'Adicionar item da nota ao pedido');
-        finalTotal += x.qty * x.price;
+        finalTotal += lineValue(x.qty, x.price);
       }
       finalTotal = round2(finalTotal);
       var firstDelivery = !order.confirmed && order.status !== 'entregue', deliveredNow = new Date().toISOString();
@@ -6528,7 +6560,8 @@ var QRCode;
       }
       var firstDelivery = !order.confirmed && order.status !== 'entregue';
       var deliveredNow = new Date().toISOString();
-      check(await db.from('orders').update(Object.assign({ receiver_note:note, confirmed:true, status:'entregue' }, (COLS.delivered && firstDelivery) ? { delivered_at: deliveredNow } : {})).eq('id', order.id), 'Atualizar pedido');
+      var manualTotal = round2(state.currentOrderItems.reduce(function(sum, it){ return sum + lineValue(it.receiveStatus === 'devolvido' ? 0 : (it.receiveStatus === 'parcial' ? (it.receivedQty || 0) : it.qty), it.price); }, 0));
+      check(await db.from('orders').update(Object.assign({ receiver_note:note, confirmed:true, status:'entregue', total: manualTotal }, (COLS.delivered && firstDelivery) ? { delivered_at: deliveredNow } : {})).eq('id', order.id), 'Atualizar pedido');
       if(COLS.delivered && firstDelivery) order.delivered_at = deliveredNow;
     } catch(err){
       console.error('Erro ao salvar conferência no Supabase', err);
@@ -6540,6 +6573,8 @@ var QRCode;
     order.status = 'entregue';
     order.confirmed = true;
     order.receiver_note = note;
+    order.total = state.currentOrderItems.reduce(function(sum, it){ return sum + lineValue(it.receiveStatus === 'devolvido' ? 0 : (it.receiveStatus === 'parcial' ? (it.receivedQty || 0) : it.qty), it.price); }, 0);
+    order.total = round2(order.total);
     var idx = ORDERS.findIndex(function(o){ return o.id === order.id; });
     if(idx > -1) ORDERS[idx] = order;
     renderConferencia();
@@ -6855,7 +6890,9 @@ var QRCode;
   var links = [];   // what this supplier already calls each product on its notes
   function isLocked(){ return !!(order && (order.confirmed || order.status === 'entregue')); }
 
-  function money(v){ return 'R$ ' + Number(v || 0).toLocaleString('pt-BR', {minimumFractionDigits:2, maximumFractionDigits:2}); }
+  function r2(n){ return Math.round(Number((n * 100).toPrecision(12))) / 100; }   // the same rounding as the database
+  function lineValue(q, p){ return r2((Number(q) || 0) * (Number(p) || 0)); }
+  function money(v){ return 'R$ ' + r2(Number(v) || 0).toLocaleString('pt-BR', {minimumFractionDigits:2, maximumFractionDigits:2}); }
   function fmtDateStr(s){
     if(!s) return '—';
     var p = String(s).slice(0,10).split('-');
@@ -6901,14 +6938,16 @@ var QRCode;
   function itemRow(item){
     var extra = '';
     if(item.receiveStatus === 'parcial'){
-      extra = '<div style="display:flex; justify-content:space-between; align-items:center; margin-top:10px; padding-top:10px; border-top:1px solid ' + LINE + ';">' +
-        '<span style="font-size:12px; color:' + SOFT + ';">Quantidade recebida</span>' +
-        '<div style="display:flex; align-items:center; gap:10px;">' +
-          '<button type="button" data-item="' + item.itemId + '" data-delta="-1"' + (isLocked() ? ' disabled' : '') + ' style="width:26px; height:26px; border-radius:6px; border:1px solid ' + LINE + '; background:#fff; font-size:15px;">–</button>' +
-          '<span style="font-weight:600; min-width:44px; text-align:center;">' + fmtQ(item.receivedQty) + ' / ' + fmtQ(item.qty) + ' ' + unitLabel(item.unit) + '</span>' +
-          '<button type="button" data-item="' + item.itemId + '" data-delta="1"' + (isLocked() ? ' disabled' : '') + ' style="width:26px; height:26px; border-radius:6px; border:1px solid ' + LINE + '; background:#fff; font-size:15px;">+</button>' +
-        '</div></div>' +
-        '<div style="font-size:12px; color:' + SOFT + '; margin-top:8px; text-align:right;">Valor desta entrega: <b style="color:#1B2420;">' + money((item.receivedQty || 0) * item.price) + '</b></div>';
+      extra = '<div style="margin-top:10px; padding-top:10px; border-top:1px solid ' + LINE + ';">' +
+        '<div style="font-size:12px; color:' + SOFT + '; margin-bottom:8px;">Quanto chegou? Pode digitar as gramas (ex.: 71,350)</div>' +
+        '<div style="display:flex; align-items:center; gap:8px;">' +
+          '<button type="button" data-item="' + item.itemId + '" data-delta="-1"' + (isLocked() ? ' disabled' : '') + ' aria-label="Diminuir 1" style="width:44px; height:44px; border-radius:8px; border:1px solid ' + LINE + '; background:#fff; font-size:18px;">–</button>' +
+          '<input type="text" inputmode="decimal" data-recv="' + item.itemId + '" value="' + esc(fmtRecv(item.receivedQty, item.unit)) + '"' + (isLocked() ? ' disabled' : '') + ' aria-label="Quantidade que chegou de ' + esc(item.name) + '" style="flex:1; min-width:0; height:44px; box-sizing:border-box; border:1px solid ' + LINE + '; border-radius:8px; padding:0 10px; font-size:16px; font-weight:600; text-align:center; font-family:inherit;">' +
+          '<button type="button" data-item="' + item.itemId + '" data-delta="1"' + (isLocked() ? ' disabled' : '') + ' aria-label="Aumentar 1" style="width:44px; height:44px; border-radius:8px; border:1px solid ' + LINE + '; background:#fff; font-size:18px;">+</button>' +
+        '</div>' +
+        '<div style="font-size:12px; color:' + SOFT + '; margin-top:6px;">de ' + fmtQ(item.qty) + ' ' + unitLabel(item.unit) + '</div>' +
+        '<div id="pub-val-' + item.itemId + '" style="font-size:12px; color:' + SOFT + '; margin-top:6px; text-align:right;">' + recvValue(item, item.receivedQty) + '</div>' +
+      '</div>';
     }
     return '<div style="background:#fff; border:1px solid ' + LINE + '; border-radius:12px; padding:14px;">' +
       '<div style="display:flex; justify-content:space-between; margin-bottom:10px;"><span style="font-weight:600; font-size:14px;">' + item.name + (item.obs ? '<span style="display:block; font-weight:400; font-size:12px; color:' + SOFT + '; margin-top:2px;">📝 ' + String(item.obs).replace(/&/g,'&amp;').replace(/</g,'&lt;') + '</span>' : '') + '</span><span style="font-size:12px; color:' + SOFT + '; text-align:right; white-space:nowrap;">esperado: ' + fmtQ(item.qty) + ' ' + unitLabel(item.unit) +
@@ -6927,8 +6966,8 @@ var QRCode;
     var total = items.length;
     var decided = items.filter(function(i){ return i.receiveStatus && i.receiveStatus !== 'pendente'; }).length;
     document.getElementById('pub-progress').textContent = decided + ' de ' + total + ' itens conferidos';
-    var pedido = items.reduce(function(s, i){ return s + i.qty * i.price; }, 0);
-    var got = items.reduce(function(s, i){ return s + (i.receiveStatus === 'recebido' ? i.qty : i.receiveStatus === 'parcial' ? (i.receivedQty || 0) : 0) * i.price; }, 0);
+    var pedido = items.reduce(function(s, i){ return s + lineValue(i.qty, i.price); }, 0);
+    var got = items.reduce(function(s, i){ return s + lineValue(i.receiveStatus === 'recebido' ? i.qty : i.receiveStatus === 'parcial' ? (i.receivedQty || 0) : 0, i.price); }, 0);
     var done = items.filter(function(i){ return i.receiveStatus === 'recebido' || i.receiveStatus === 'parcial' || i.receiveStatus === 'devolvido'; });
     var box = document.getElementById('pub-recebido');
     if(box){
@@ -6983,7 +7022,7 @@ var QRCode;
           '<div style="display:flex; justify-content:space-between; margin-bottom:8px;"><span style="color:' + SOFT + '; font-size:13px;">Fornecedor</span><span style="font-weight:600;">' + order.supplier_name + '</span></div>' +
           '<div style="display:flex; justify-content:space-between; margin-bottom:8px;"><span style="color:' + SOFT + '; font-size:13px;">Entrega prevista</span><span style="font-weight:600;">' + fmtDateStr(order.delivery_date) + '</span></div>' +
           '<div style="display:flex; justify-content:space-between; margin-bottom:8px;"><span style="color:' + SOFT + '; font-size:13px;">Itens do pedido</span><span style="font-weight:600;">' + items.length + '</span></div>' +
-          '<div style="display:flex; justify-content:space-between;"><span style="color:' + SOFT + '; font-size:13px;">Valor do pedido</span><span id="pub-valor-pedido" style="font-weight:700;">' + money(items.reduce(function(s, i){ return s + i.qty * i.price; }, 0)) + '</span></div>' +
+          '<div style="display:flex; justify-content:space-between;"><span style="color:' + SOFT + '; font-size:13px;">Valor do pedido</span><span id="pub-valor-pedido" style="font-weight:700;">' + money(items.reduce(function(s, i){ return s + lineValue(i.qty, i.price); }, 0)) + '</span></div>' +
         '</div>' +
         '<div id="pub-nf-card" style="background:#fff; border:1px solid ' + LINE + '; border-radius:14px; padding:14px; margin-bottom:16px;">' +
           '<div style="font-weight:600; font-size:14px;">Conferir pela nota fiscal (XML)</div>' +
@@ -7018,13 +7057,19 @@ var QRCode;
   /* ---------- conferência pelo XML da nota (no celular de quem recebe) ---------- */
   var nfx = null, justDone = '';
   function esc(t){ return String(t == null ? '' : t).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
-  function parseQ(t){   // "96,4", "96.4", "1.234,5"; a dot followed by exactly 3 digits is a thousands separator
-    var s = String(t == null ? '' : t).replace(/[^\d.,]/g, ''); if(!s) return null;
-    var lc = s.lastIndexOf(','), ld = s.lastIndexOf('.');
-    if(lc > -1 && ld > -1) s = lc > ld ? s.replace(/\./g, '').replace(',', '.') : s.replace(/,/g, '');
-    else if(lc > -1) s = s.replace(/\./g, '').replace(',', '.');
-    else if(ld > -1 && /^\d{1,3}(\.\d{3})+$/.test(s)) s = s.replace(/\./g, '');
-    var n = Number(s); return isFinite(n) ? n : null;
+  function parseQ(t){   // "71,350" or "71.350" is 71 kilos and 350 grams (a comma means decimal; a dot alone is decimal too)
+    var s = String(t == null ? '' : t).replace(/\s/g, ''); if(!s) return null;
+    if(s.indexOf(',') > -1) s = s.replace(/\./g, '').replace(',', '.');
+    var n = parseFloat(s);
+    return isNaN(n) || n < 0 ? null : Math.round(Number((n * 1000).toPrecision(12))) / 1000;
+  }
+  function fmtRecv(n, unit){ n = Number(n) || 0; return (unit === 'Kg' || unit === 'Litro') ? n.toLocaleString('pt-BR', { minimumFractionDigits: 3, maximumFractionDigits: 3 }) : fmtQ(n); }
+  function recvValue(item, q){ return 'Valor desta entrega: ' + fmtRecv(q, item.unit) + ' ' + unitLabel(item.unit) + ' × ' + money(item.price) + ' = <b style="color:#1B2420;">' + money(lineValue(q, item.price)) + '</b>'; }
+  function pubToast(msg){
+    var t = document.getElementById('pub-toast');
+    if(!t){ t = document.createElement('div'); t.id = 'pub-toast'; t.setAttribute('role', 'status'); t.style.cssText = 'position:fixed; left:16px; right:16px; bottom:16px; max-width:448px; margin:0 auto; background:#1B2420; color:#fff; border-radius:10px; padding:12px 14px; font-size:13px; line-height:1.4; z-index:50;'; document.body.appendChild(t); }
+    t.textContent = msg; t.style.display = 'block';
+    clearTimeout(pubToast.timer); pubToast.timer = setTimeout(function(){ t.style.display = 'none'; }, 5000);
   }
   function fmtQ(n){ return (Math.round((Number(n) || 0) * 1000) / 1000).toLocaleString('pt-BR', { maximumFractionDigits: 3 }); }
   function unitLabel(u){ return { Unidade: 'un', Caixa: 'cx', Pacote: 'pct', Fardo: 'fardo', Kg: 'kg', Litro: 'L', Saco: 'saco' }[u] || (u ? String(u).toLowerCase() : 'un'); }
@@ -7032,16 +7077,16 @@ var QRCode;
   function nfLine(r){ var q = parseQ(r.qty); return q === null ? 0 : q; }
   function nfPubTotals(){
     var t = { pedido: 0, nota: nfx.nota.total, recebido: 0 };
-    items.forEach(function(i){ t.pedido += i.qty * i.price; });
-    nfx.rows.forEach(function(r){ var it = r.itemId ? itemById(r.itemId) : null; if(it) t.recebido += nfLine(r) * it.price; });
-    Object.keys(nfx.missing).forEach(function(k){ var it = itemById(k); if(it && nfx.missing[k] === 'chegou') t.recebido += it.qty * it.price; });
+    items.forEach(function(i){ t.pedido += lineValue(i.qty, i.price); });
+    nfx.rows.forEach(function(r){ var it = r.itemId ? itemById(r.itemId) : null; if(it) t.recebido += lineValue(nfLine(r), it.price); });
+    Object.keys(nfx.missing).forEach(function(k){ var it = itemById(k); if(it && nfx.missing[k] === 'chegou') t.recebido += lineValue(it.qty, it.price); });
     return t;
   }
   function nfDiff(r){
     var it = r.itemId ? itemById(r.itemId) : null; if(!it) return '';
     var q = nfLine(r), d = Math.round((q - it.qty) * 1000) / 1000;
     if(d === 0) return 'Igual ao pedido.';
-    return (d > 0 ? 'Chegou ' + fmtQ(d) + ' a mais' : 'Chegou ' + fmtQ(-d) + ' a menos') + ' (' + (d > 0 ? '+' : '−') + (Math.abs(Math.round(d / it.qty * 1000) / 10)).toLocaleString('pt-BR') + '%)';
+    return (d > 0 ? 'Chegou ' + fmtQ(d) + ' a mais' : 'Chegou ' + fmtQ(-d) + ' a menos') + ' (' + (d > 0 ? '+' : '−') + (Math.round(Number((Math.abs(d / it.qty) * 1000).toPrecision(12))) / 10).toLocaleString('pt-BR') + '%)';
   }
   async function nfPubStart(text, fileName){
     var NF = window.PaulusNF, parsed = NF.parse(text);
@@ -7191,6 +7236,24 @@ var QRCode;
     if(e.target.id === 'pf-confirm') nfPubSave();
   });
 
+  // exact quantity of a partial delivery: preview while typing, kept when the field is left
+  root.addEventListener('input', function(e){
+    var el = e.target.closest('[data-recv]'); if(!el || isLocked()) return;
+    var it = itemById(el.dataset.recv), box = it ? document.getElementById('pub-val-' + it.itemId) : null; if(!box) return;
+    var n = parseQ(el.value);
+    box.innerHTML = n === null ? 'Digite a quantidade que chegou (ex.: 71,350).' : recvValue(it, Math.min(n, it.qty));
+  });
+  root.addEventListener('change', function(e){
+    var el = e.target.closest('[data-recv]'); if(!el || isLocked()) return;
+    var it = itemById(el.dataset.recv); if(!it) return;
+    var n = parseQ(el.value);
+    if(n === null){ renderItems(); return; }
+    if(n >= it.qty){
+      it.receiveStatus = 'recebido'; it.receivedQty = it.qty;
+      pubToast(n > it.qty ? 'Chegou mais que o pedido (' + fmtQ(it.qty) + '): registrei o total pedido. Para registrar a mais, use o XML da nota.' : 'Chegou tudo: marquei como Recebido.');
+    } else { it.receivedQty = n; }
+    renderItems();
+  });
   root.addEventListener('click', function(e){
     var chipBtn = e.target.closest('[data-status]');
     if(chipBtn){
@@ -7200,7 +7263,7 @@ var QRCode;
         item.receiveStatus = chipBtn.dataset.status;
         if(item.receiveStatus === 'recebido') item.receivedQty = item.qty;
         if(item.receiveStatus === 'devolvido') item.receivedQty = 0;
-        if(item.receiveStatus === 'parcial' && (item.receivedQty === null || item.receivedQty === item.qty)) item.receivedQty = Math.max(0, item.qty - 1);
+        if(item.receiveStatus === 'parcial' && (item.receivedQty == null || item.receivedQty === item.qty)) item.receivedQty = Math.max(0, item.qty - 1);
         renderItems();
       }
       return;
@@ -7211,7 +7274,7 @@ var QRCode;
       var item2 = items.filter(function(i){ return String(i.itemId) === deltaBtn.dataset.item; })[0];
       if(item2){
         var d = parseInt(deltaBtn.dataset.delta, 10);
-        item2.receivedQty = Math.min(item2.qty, Math.max(0, item2.receivedQty + d));
+        item2.receivedQty = Math.round(Number((Math.min(item2.qty, Math.max(0, item2.receivedQty + d)) * 1000).toPrecision(12))) / 1000;
         renderItems();
       }
     }
@@ -7328,7 +7391,7 @@ var QRCode;
   var UNITS = { Unidade:'un', Caixa:'cx', Pacote:'pct', Fardo:'fardo', Kg:'kg', Litro:'L', Saco:'saco' };
   function unitOf(it){ return UNITS[it.unit] || 'un'; }
   function fmtQty(n){ n = Number(n) || 0; return (Math.round(n * 1000) / 1000).toLocaleString('pt-BR', { maximumFractionDigits: 3 }); }
-  function money(n){ return 'R$ ' + (Math.round((Number(n) || 0) * 100) / 100).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+  function money(n){ return 'R$ ' + (Math.round(Number(((Number(n) || 0) * 100).toPrecision(12))) / 100).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
   function parsePrice(t){   // "39,90", "39.90", "1.234,50"; a dot followed by exactly 3 digits is a thousands separator ("1.500")
     var s = String(t == null ? '' : t).replace(/[^\d.,]/g, '');
     if(!s) return null;
